@@ -1,9 +1,18 @@
 import requests
 from pprint import pprint
+import os
+from dotenv import load_dotenv
+import json
 
-# TheOddsAPI configuration
-# TODO: OBSCURE API_KEY
-API_KEY = ''  # Replace with your TheOddsAPI key
+# Load environment variables from the .env file
+load_dotenv()
+
+# Fetch the API key from environment variables
+API_KEY = os.getenv('API_KEY')
+
+if not API_KEY:
+    raise ValueError("API_KEY is not set. Please ensure it is set in the environment or the .env file.")
+
 BASE_URL = 'https://api.the-odds-api.com/v4'
 EVENTS_URL = f'{BASE_URL}/sports/americanfootball_nfl/events'
 DATA_DIR = "./data"
@@ -46,8 +55,6 @@ def get_event_player_odds(event_id, api_key=API_KEY, regions='us', markets='play
     response.raise_for_status()  # Check for a successful response
     event_odds = response.json()  # Parse the response as JSON
     return event_odds
-    
-
 
 
 def get_all_event_odds(events, api_key=API_KEY):
@@ -118,7 +125,6 @@ def get_all_player_odds(all_event_odds):
 
     return player_odds_dict
 
-import json
 
 def save_player_odds(player_odds, filename=f'{DATA_DIR}/all_player_odds.json'):
     """
@@ -170,10 +176,7 @@ def refresh_odds():
             pprint(e.response.json())
 
 
-
-
-
-# refresh_odds() # WILL COST AT LEAST 120 API QUOTA - BE CAREFUL
+# Example usage of loading saved odds:
 all_player_odds = load_player_odds()
 player_names = ["Joe Burrow", "Drake London", "Zach Charbonnet", "Sam LaPorta"]
 for player_name in player_names:
