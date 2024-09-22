@@ -38,13 +38,28 @@ def predict_stat_for_market_across_bookmakers(bookmaker_data):
     Returns:
         float: The predicted stat based on the average of all bookmakers' odds.
     """
+    
+
+
+def predict_stats_for_player(player_odds):
+    """
+    Predict stats for a player across all markets (e.g., passing yards, rushing yards) by averaging odds from all bookmakers.
+    
+    Args:
+        player_odds (dict): Dictionary of a player's odds data across multiple bookmakers and markets.
+    
+    Returns:
+        dict: Predicted stats for the player in each market, averaged across bookmakers.
+    """
+    predicted_stats = {}
     total_over_prob = 0
     total_under_prob = 0
     total_threshold = 0
     bookmaker_count = 0
 
     # Iterate over all bookmakers for the market
-    for bookmaker, markets in bookmaker_data.items():
+    stats = {}
+    for bookmaker, markets in player_odds.items():
         for market_key, market_data in markets.items():
             over_data = market_data['over']
             under_data = market_data['under']
@@ -65,48 +80,24 @@ def predict_stat_for_market_across_bookmakers(bookmaker_data):
             over_prob = implied_probability(over_odds)
             under_prob = implied_probability(under_odds)
 
-            # Accumulate probabilities and thresholds
-            total_over_prob += over_prob
-            total_under_prob += under_prob
-            total_threshold += threshold
-            bookmaker_count += 1
-
-    if bookmaker_count == 0:
-        return None  # No valid bookmakers' data
-
-    # Average probabilities and threshold across bookmakers
-    avg_over_prob = total_over_prob / bookmaker_count
-    avg_under_prob = total_under_prob / bookmaker_count
-    avg_threshold = total_threshold / bookmaker_count
-
-    # Calculate the predicted stat using averaged data
-    return calculate_weighted_stat(avg_over_prob, avg_under_prob, avg_threshold)
-
-
-def predict_stats_for_player(player_odds):
-    """
-    Predict stats for a player across all markets (e.g., passing yards, rushing yards) by averaging odds from all bookmakers.
-    
-    Args:
-        player_odds (dict): Dictionary of a player's odds data across multiple bookmakers and markets.
-    
-    Returns:
-        dict: Predicted stats for the player in each market, averaged across bookmakers.
-    """
-    predicted_stats = {}
-
-    for bookmaker, markets in player_odds.items():
-        for market_key, market_data in markets.items():
-            predicted_stat = predict_stat_for_market_across_bookmakers({bookmaker: {market_key: market_data}})
-            if predicted_stat is not None:
-                if market_key not in predicted_stats:
-                    predicted_stats[market_key] = []
-                predicted_stats[market_key].append(predicted_stat)
-
-    # Average the predictions across all bookmakers for each market
+            if market_key not in stats.keys():
+                stats[market_key] = {"total_over_prob": over_prob,
+                                     "total_under_prob": under_prob,
+                                     "total_threshold": threshold,
+                                     "count": 1}
+            else:
+                stats[market_key]["total_over_prob"] += over_prob
+                stats[market_key]["total_under_prob"] += under_prob
+                stats[market_key]["total_threshold"] += threshold
+                stats[market_key]["count"] += 1
+                
     final_predicted_stats = {}
-    for market_key, predictions in predicted_stats.items():
-        final_predicted_stats[market_key] = sum(predictions) / len(predictions)
+    # Average probabilities and threshold across bookmakers
+    for market_key, totals in stats.items():
+        avg_over_prob = totals["total_over_prob"] / totals["count"]
+        avg_under_prob = totals["total_under_prob"] / totals["count"]
+        avg_threshold = totals["total_threshold"] / totals["count"]
+        final_predicted_stats[market_key] = calculate_weighted_stat(avg_over_prob, avg_under_prob, avg_threshold)
 
     return final_predicted_stats
 

@@ -7,8 +7,9 @@ from predicted_stats import predict_stats_for_player
 # Example usage of loading saved odds
 all_player_odds = load_player_odds()
 player_names = ["Joe Burrow", "Drake London", "Zach Charbonnet", "Sam LaPorta"]
-
+player_stats = {}
 for player_name in player_names:
     if player_name in all_player_odds.keys():
-        print(player_name + " Projected Stats:")
-        pprint(predict_stats_for_player(all_player_odds[player_name]))
+        player_stats[player_name] = predict_stats_for_player(all_player_odds[player_name])
+
+pprint(player_stats)
