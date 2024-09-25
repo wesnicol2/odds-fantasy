@@ -126,6 +126,7 @@ def get_users_lineups():
                     player_name = player["name"]["full"]
                     players.append(player_name)
                 roster_info.append({
+                    "team_key": team_key,
                     "team_name": team_name,
                     "players": players
                 })
@@ -134,3 +135,27 @@ def get_users_lineups():
             pprint(e)
 
     return roster_info
+
+def get_league_scoring_settings(team_key):
+    """
+    Fetches the league scoring settings for a given team.
+
+    Args:
+        team_key (str): The key of the team for which to fetch the scoring settings.
+
+    Returns:
+        dict: A dictionary containing the league scoring settings.
+    """
+    try:
+        # Make the API request for the league's scoring settings
+        league_key = team_key.split(".t.")[0]  # Extract the league key from the team key
+        response = make_api_request(f"league/{league_key}/settings")
+
+        # Extract relevant scoring settings
+        scoring_settings = response["fantasy_content"]["league"]["settings"]["stat_modifiers"]
+        return scoring_settings
+
+    except Exception as e:
+        print(f"Could not retrieve scoring settings for team: [{team_key}]")
+        pprint(e)
+        return None
