@@ -105,23 +105,33 @@ def make_api_request(uri):
 
 
 def get_user_info():
-    return make_api_request(f"users;use_login=1/teams")
+    return make_api_request(f"users;use_login=1/teams;is_available=1")
 
 def get_users_lineups():
     user_info = get_user_info()
     team_keys = []
     team_info = []
+    roster_info = []
     teams = user_info['fantasy_content']['users']['user']['teams']['team']
     for team in teams:
         team_keys.append(team['team_key'])
     
     for team_key in team_keys:
         try:
-            team_info.append(make_api_request(f"team/{team_key}/roster"))
-        except:
+            info = make_api_request(f"team/{team_key}/roster")
+            is_editable = info["fantasy_content"]["team"]["roster"]["is_editable"]
+            if is_editable == '1': # TODO: replace this with better logic to determin if this team is for the current year or not
+                team_name = info["fantasy_content"]["team"]["name"]
+                players = []
+                for player in info["fantasy_content"]["team"]["roster"]["players"]["player"]:
+                    player_name = player["name"]["full"]
+                    players.append(player_name)
+                roster_info.append({
+                    "team_name": team_name,
+                    "players": players
+                })
+        except Exception as e:
             print(f"Could not get roster for team: [{team_key}]")
+            pprint(e)
 
-    pprint(team_info)
-
-    roster_info = {}
     return roster_info

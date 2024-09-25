@@ -17,8 +17,8 @@ import requests
 # pprint(player_stats)
 
 try: 
-    data = yahoo_api.get_users_lineups()
-    pprint(data)
+    rosters = yahoo_api.get_users_lineups()
+          
 except requests.exceptions.RequestException as e:
         print(f"ERROR when making API request: {e}")
         print(f"Response:")
