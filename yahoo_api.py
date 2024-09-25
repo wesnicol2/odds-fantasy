@@ -110,7 +110,6 @@ def get_user_info():
 def get_users_lineups():
     user_info = get_user_info()
     team_keys = []
-    team_info = []
     roster_info = []
     teams = user_info['fantasy_content']['users']['user']['teams']['team']
     for team in teams:
