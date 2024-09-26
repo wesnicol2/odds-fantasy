@@ -1,9 +1,8 @@
-# main.py
 from pprint import pprint
-from odds_api import load_player_odds
 from predicted_stats import predict_stats_for_player, STAT_ID_MAPPING
 import yahoo_api
 import requests
+import odds_api
 
 
 def calculate_fantasy_points(projected_stats, scoring_settings):
@@ -37,18 +36,18 @@ def calculate_fantasy_points(projected_stats, scoring_settings):
     return fantasy_points
 
 
-def print_rosters_with_projected_stats():
+def print_rosters_with_projected_stats(use_saved_data=True):
     """
     Fetch and print the players along with their projected fantasy points.
     Players are sorted by their predicted fantasy points in descending order.
     The output is simplified to just show player names and their projected points.
     """
     try:
-        # Load the player odds data
-        all_player_odds = load_player_odds()
-        
-        # Get all rosters
+        # Get all rosters from Yahoo
         rosters = yahoo_api.get_users_lineups()
+
+        # Fetch odds for all games, either using saved data or fresh API data
+        all_player_odds = odds_api.fetch_odds_for_all_games(rosters, use_saved_data=use_saved_data)
         
         # List to store player data for sorting later
         player_data_list = []
@@ -102,4 +101,5 @@ def print_rosters_with_projected_stats():
 
 
 if __name__ == "__main__":
-    print_rosters_with_projected_stats()
+    # Set `use_saved_data=False` to force fetching fresh odds data
+    print_rosters_with_projected_stats(use_saved_data=False)

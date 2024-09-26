@@ -121,14 +121,10 @@ def get_users_lineups():
             is_editable = info["fantasy_content"]["team"]["roster"]["is_editable"]
             if is_editable == '1': # TODO: replace this with better logic to determin if this team is for the current year or not
                 team_name = info["fantasy_content"]["team"]["name"]
-                players = []
-                for player in info["fantasy_content"]["team"]["roster"]["players"]["player"]:
-                    player_name = player["name"]["full"]
-                    players.append(player_name)
                 roster_info.append({
                     "team_key": team_key,
                     "team_name": team_name,
-                    "players": players
+                    "players": info["fantasy_content"]["team"]["roster"]["players"]
                 })
         except Exception as e:
             print(f"Could not get roster for team: [{team_key}]")
