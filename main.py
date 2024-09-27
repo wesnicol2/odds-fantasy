@@ -3,7 +3,7 @@ from predicted_stats import predict_stats_for_player, STAT_ID_MAPPING
 import yahoo_api
 import requests
 import odds_api
-
+import json
 
 def calculate_fantasy_points(projected_stats, scoring_settings):
     """
@@ -62,15 +62,37 @@ def print_rosters_with_projected_stats(use_saved_data=True):
                 continue
 
             # Loop through each player in the roster
-            for player_name in roster["players"]:
-                # Check if the player has odds data
-                if player_name in all_player_odds.keys():
-                    player_odds = all_player_odds[player_name]
-                    
-                    # Get the predicted stats for the player
-                    projected_stats = predict_stats_for_player(player_odds)
+            for player in roster["players"]["player"]:
+                player_name = player["name"]["full"]
+                aggregated_player_odds = {}
 
-                    # Calculate projected fantasy points
+                # Loop through all games' odds to find the player
+                for game_id, game_odds in all_player_odds.items():
+                    # Go through each bookmaker for the game
+                    for bookmaker in game_odds["bookmakers"]:
+                        bookmaker_key = bookmaker["key"]
+                        # Check all markets for player odds
+                        for market in bookmaker["markets"]:
+                            for outcome in market["outcomes"]:
+                                if "description" in outcome.keys() and outcome["description"] == player_name:
+                                    if bookmaker_key not in aggregated_player_odds:
+                                        aggregated_player_odds[bookmaker_key] = {}
+                                    if market["key"] not in aggregated_player_odds[bookmaker_key]:
+                                        aggregated_player_odds[bookmaker_key][market["key"]] = {
+                                            "over": None,
+                                            "under": None
+                                        }
+
+                                    # For simplicity, assume all odds are "Yes" (e.g., for anytime TD)
+                                    # You can modify this logic to support "Over/Under" more explicitly
+                                    aggregated_player_odds[bookmaker_key][market["key"]]["over"] = {
+                                        "odds": outcome["price"],
+                                        "point": outcome.get("point", 0)  # Use threshold if available, else 0
+                                    }
+
+                # If we found odds for the player, calculate projected stats and fantasy points
+                if aggregated_player_odds:
+                    projected_stats = predict_stats_for_player(aggregated_player_odds)
                     projected_fantasy_points = calculate_fantasy_points(projected_stats, league_settings)
 
                     # Store player data in a list for sorting
