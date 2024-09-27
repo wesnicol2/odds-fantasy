@@ -1,7 +1,77 @@
 import requests
-from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG
+import os
 import json
-from config import DATA_DIR
+from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR
+
+# Path for the cache file
+CACHE_FILE = os.path.join(DATA_DIR, "odds_api_cache.json")
+
+# Helper: Load cached data
+def load_cached_data():
+    """
+    Loads the cached API responses from a JSON file.
+
+    Returns:
+        dict: Cached data where keys are URLs and values are responses.
+    """
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r') as f:
+                return json.load(f)
+        except (IOError, json.JSONDecodeError) as e:
+            print(f"Error loading cached data: {e}")
+            return {}
+    return {}
+
+# Helper: Save data to cache
+def save_cached_data(cache):
+    """
+    Saves the given cache dictionary to a JSON file.
+
+    Args:
+        cache (dict): The cache dictionary to save.
+    """
+    try:
+        with open(CACHE_FILE, 'w') as f:
+            json.dump(cache, f, indent=4)
+        print(f"Cached data successfully saved to {CACHE_FILE}.")
+    except IOError as e:
+        print(f"Error saving cached data: {e}")
+
+# Fetch player odds for a specific event
+def get_event_player_odds(event_id, regions='us', markets='player_rush_yds,player_reception_yds,player_pass_tds,player_pass_yds', use_saved_data=True):
+    """
+    Fetches player-specific odds for a given NFL event using the event-odds endpoint.
+    Caches the request URL and response, and uses saved data if available.
+
+    Args:
+        event_id (str): The event ID of the NFL game.
+        regions (str): The region for odds (default is 'us').
+        markets (str): The player prop markets to fetch (e.g., rushing yards, passing touchdowns).
+        use_saved_data (bool): Whether to use saved data or fetch fresh data.
+
+    Returns:
+        dict: Odds data for players in the specific NFL event.
+    """
+    event_odds_url = f"{EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
+
+    # Load the cached data
+    cache = load_cached_data()
+
+    # Check if we should use saved data
+    if use_saved_data:
+        print(f"Using cached data for URL: {event_odds_url}")
+        return cache[event_odds_url]
+
+    # Make the API request if not cached or if fresh data is required
+    response = requests.get(event_odds_url)
+    response.raise_for_status()
+
+    # Cache the new response
+    cache[event_odds_url] = response.json()
+    save_cached_data(cache)
+
+    return response.json()
 
 # Helper: Get required markets for a player based on their position
 def get_required_markets_for_position(position):
@@ -14,8 +84,8 @@ def get_required_markets_for_position(position):
     Returns:
         list: A list of markets relevant for the position (e.g., 'player_pass_yds').
     """
-    return POSITION_STAT_CONFIG.get(position, [])
-
+    yahoo_stats = POSITION_STAT_CONFIG.get(position, [])
+    return [STAT_MARKET_MAPPING[stat] for stat in yahoo_stats if stat in STAT_MARKET_MAPPING]
 
 def get_game_id_from_team_name(team_name):
     """
@@ -35,7 +105,6 @@ def get_game_id_from_team_name(team_name):
     
     print(f"Team '{team_name}' not found in any upcoming games.")
     return None
-
 
 # Group players by NFL game to minimize API requests
 def group_players_by_game(rosters):
@@ -62,7 +131,8 @@ def group_players_by_game(rosters):
 def fetch_odds_for_all_games(rosters, use_saved_data=True):
     """
     Fetches odds for all games based on the players in the roster and their positions.
-    
+    Uses saved data if available, otherwise fetches fresh data.
+
     Args:
         rosters (list): The user lineups/rosters from Yahoo.
         use_saved_data (bool): Whether to use saved data or fetch fresh data.
@@ -70,89 +140,27 @@ def fetch_odds_for_all_games(rosters, use_saved_data=True):
     Returns:
         dict: Odds data for players across all games.
     """
-    if use_saved_data:
-        print("Loading saved player odds...")
-        return load_player_odds()  # Return saved data if available
-
     all_event_odds = {}
     grouped_games = group_players_by_game(rosters)
 
     for game_id, game_info in grouped_games.items():
         print(f"Fetching odds for game_id: {game_id}")
-        
+
         # For each game, get the necessary markets based on the players' positions
         markets_to_fetch = set()
         for player in game_info["players"]:
-            position = player["primary_position"] # TODO: expand this to use all possible positions (TAYSOM HILL BABY) 
+            position = player["primary_position"]
             markets = get_required_markets_for_position(position)
             markets_to_fetch.update(markets)
         
+        markets_to_fetch = sorted(markets_to_fetch)
         markets_str = ",".join(markets_to_fetch)
-        event_odds = get_event_player_odds(event_id=game_id, markets=markets_str)
+        event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
 
         if event_odds:
             all_event_odds[game_id] = event_odds  # Store odds by event ID
 
     return all_event_odds
-
-
-# Quota Cost Calculator
-def calculate_quota_cost(markets, regions):
-    """
-    Calculates the expected quota cost for a request based on the number of unique markets and regions.
-    
-    Args:
-        markets (str): Comma-separated string of markets (e.g., 'player_rush_yds,player_pass_tds').
-        regions (str): Comma-separated string of regions (e.g., 'us').
-    
-    Returns:
-        int: The calculated quota cost.
-    """
-    num_markets = len(markets.split(","))
-    num_regions = len(regions.split(","))
-    return num_markets * num_regions
-
-
-# Fetch player odds for a specific event
-def get_event_player_odds(event_id, regions='us', markets='player_rush_yds,player_reception_yds,player_pass_tds,player_pass_yds'):
-    """
-    Fetches player-specific odds for a given NFL event using the event-odds endpoint.
-    Calculates the quota cost and asks for user confirmation before making the request.
-
-    Args:
-        event_id (str): The event ID of the NFL game.
-        regions (str): The region for odds (default is 'us').
-        markets (str): The player prop markets to fetch (e.g., rushing yards, passing touchdowns).
-
-    Returns:
-        dict: Odds data for players in the specific NFL event.
-    """
-    event_odds_url = f"{EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
-
-    # Calculate the quota cost before making the request
-    estimated_cost = calculate_quota_cost(markets, regions)
-    
-    # Prompt the user to confirm if they want to proceed
-    confirmation = input(f"The estimated quota cost for this request is {estimated_cost}. Do you want to proceed? (yes/no): ")
-    if confirmation.lower() != 'yes':
-        print("Request canceled.")
-        return None
-
-    # Make the API request
-    response = requests.get(event_odds_url)
-    response.raise_for_status()
-    
-    # Get quota-related headers
-    quota_cost = int(response.headers.get('x-requests-last', 0))
-    requests_remaining = response.headers.get('x-requests-remaining', 'unknown')
-    requests_used = response.headers.get('x-requests-used', 'unknown')
-
-    # Display quota usage details to the user
-    print(f"Quota cost of this request: {quota_cost}")
-    print(f"Requests remaining: {requests_remaining}")
-    print(f"Total requests used: {requests_used}")
-    
-    return response.json()
 
 
 # Load player odds from file
@@ -192,73 +200,6 @@ def get_nfl_events(regions='us'):
     response.raise_for_status()
     return response.json()
 
-
-# Fetch odds for all events
-def get_all_event_odds(events):
-    """
-    Fetches player-specific odds for all upcoming NFL events (games).
-    
-    Args:
-        events (list): List of events (games) with event IDs.
-    
-    Returns:
-        dict: A dictionary containing player-specific odds for all games.
-    """
-    all_event_odds = {}
-    
-    for event in events:
-        event_id = event['id']
-        print(f"Fetching odds for event: {event['home_team']} vs {event['away_team']} (ID: {event_id})")
-        event_odds = get_event_player_odds(event_id=event_id)
-        
-        if event_odds:
-            all_event_odds[event_id] = event_odds  # Store odds by event ID
-
-    return all_event_odds
-
-
-# Process and organize player odds
-def get_all_player_odds(all_event_odds):
-    """
-    Processes all event odds and returns a dictionary with player names as keys and their odds across markets.
-    
-    Args:
-        all_event_odds (dict): A dictionary containing event-specific odds.
-    
-    Returns:
-        dict: A dictionary where player names are the primary keys, and all known odds for all known markets are stored under their names.
-    """
-    player_odds_dict = {}
-
-    for event_id, event_odds in all_event_odds.items():
-        for bookmaker in event_odds['bookmakers']:
-            bookmaker_name = bookmaker['key']
-            for market in bookmaker['markets']:
-                market_key = market['key']  # e.g., player_pass_yds, player_rush_yds
-                
-                for outcome in market['outcomes']:
-                    player_name = outcome['description']  # The player's name from the "description" field
-                    point_value = outcome.get('point', None)  # Point (over/under threshold)
-                    price = outcome['price']  # Odds value
-                    outcome_type = outcome['name'].lower()  # "Over" or "Under"
-
-                    if player_name not in player_odds_dict:
-                        player_odds_dict[player_name] = {}
-
-                    if bookmaker_name not in player_odds_dict[player_name]:
-                        player_odds_dict[player_name][bookmaker_name] = {}
-
-                    if market_key not in player_odds_dict[player_name][bookmaker_name]:
-                        player_odds_dict[player_name][bookmaker_name][market_key] = {"over": None, "under": None}
-
-                    player_odds_dict[player_name][bookmaker_name][market_key][outcome_type] = {
-                        "odds": price,
-                        "point": point_value
-                    }
-
-    return player_odds_dict
-
-
 # Save player odds to file
 def save_player_odds(player_odds, filename=f'{DATA_DIR}/all_player_odds.json'):
     """
@@ -274,19 +215,3 @@ def save_player_odds(player_odds, filename=f'{DATA_DIR}/all_player_odds.json'):
         print(f"Player odds data successfully saved to {filename}.")
     except IOError as e:
         print(f"Error saving player odds to file: {e}")
-
-
-
-def refresh_odds():
-    """
-    Fetches and saves the latest NFL odds for all upcoming games and players.
-    """
-    try:
-        events = get_nfl_events()
-        all_event_odds = get_all_event_odds(events)
-        all_player_odds = get_all_player_odds(all_event_odds)
-        save_player_odds(all_player_odds)
-        print("Saved Player Odds")
-    except requests.exceptions.RequestException as e:
-        print(f"ERROR when making API request: {e}")
-        print(f"URL Requested: {e.request.url}")

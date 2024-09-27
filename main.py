@@ -102,4 +102,4 @@ def print_rosters_with_projected_stats(use_saved_data=True):
 
 if __name__ == "__main__":
     # Set `use_saved_data=False` to force fetching fresh odds data
-    print_rosters_with_projected_stats(use_saved_data=False)
+    print_rosters_with_projected_stats(use_saved_data=True)

@@ -31,3 +31,15 @@ POSITION_STAT_CONFIG = {
     "K": [],  # Placeholder if needed later
     "DEF": [],  # Placeholder for defense stats
 }
+
+# This mapping holds a key = yahoo Stat name and value = corresponding odds api market
+STAT_MARKET_MAPPING = {
+    "player_pass_yds": "player_pass_yds",
+    "player_pass_tds": "player_pass_tds",
+    "player_interceptions": "player_pass_interceptions",
+    "player_rush_yds": "player_rush_yds",
+    # Combine rushing and receiving touchdowns into "player_anytime_td"
+    "player_rush_tds": "player_anytime_td",
+    "player_reception_tds": "player_anytime_td",
+    "player_reception_yds": "player_reception_yds",
+}
