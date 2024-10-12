@@ -38,9 +38,8 @@ def calculate_fantasy_points(projected_stats, scoring_settings):
 
 def print_rosters_with_projected_stats(use_saved_data=True):
     """
-    Fetch and print the players along with their projected fantasy points.
+    Fetch and print the players along with their projected fantasy points and individual predicted stats in table format.
     Players are sorted by their predicted fantasy points in descending order.
-    The output is simplified to just show player names and their projected points.
     """
     try:
         # Get all rosters from Yahoo
@@ -51,6 +50,7 @@ def print_rosters_with_projected_stats(use_saved_data=True):
         
         # List to store player data for sorting later
         player_data_list = []
+        all_stat_keys = set()  # To track all different stat keys
 
         # Loop through each roster
         for roster in rosters:
@@ -74,7 +74,7 @@ def print_rosters_with_projected_stats(use_saved_data=True):
                         # Check all markets for player odds
                         for market in bookmaker["markets"]:
                             for outcome in market["outcomes"]:
-                                if "description" in outcome.keys() and outcome["description"] == player_name:
+                                if "description" in outcome and outcome["description"] == player_name:
                                     if bookmaker_key not in aggregated_player_odds:
                                         aggregated_player_odds[bookmaker_key] = {}
                                     if market["key"] not in aggregated_player_odds[bookmaker_key]:
@@ -95,26 +95,44 @@ def print_rosters_with_projected_stats(use_saved_data=True):
                     projected_stats = predict_stats_for_player(aggregated_player_odds)
                     projected_fantasy_points = calculate_fantasy_points(projected_stats, league_settings)
 
+                    # Track all unique stat keys for table columns
+                    all_stat_keys.update(projected_stats.keys())
+
                     # Store player data in a list for sorting
                     player_data_list.append({
                         "player_name": player_name,
-                        "projected_points": projected_fantasy_points
+                        "projected_points": projected_fantasy_points,
+                        "projected_stats": projected_stats  # Add predicted stats to player data
                     })
                 else:
                     # If no odds data, treat player as 0 projected points
                     player_data_list.append({
                         "player_name": player_name,
-                        "projected_points": 0.0
+                        "projected_points": 0.0,
+                        "projected_stats": {}  # No stats available
                     })
 
         # Sort the players by projected fantasy points (descending order)
         sorted_player_data = sorted(player_data_list, key=lambda x: x["projected_points"], reverse=True)
 
-        # Print the simplified output with just headers and values
-        print(f"{'Player Name':<20} | {'Projected Points':>17}")
-        print("-" * 40)
+        # Convert all_stat_keys to a sorted list for table columns
+        all_stat_keys = sorted(all_stat_keys)
+
+        # Print the table header with dynamic columns for each stat
+        header = f"{'Player Name':<20} | {'Fantasy Points':>15} | " + " | ".join([f"{stat:<20}" for stat in all_stat_keys])
+        print(header)
+        print("-" * len(header))
+
+        # Print each player's data in table format
         for player_data in sorted_player_data:
-            print(f"{player_data['player_name']:<20} | {player_data['projected_points']:>17.2f}")
+            player_name = player_data['player_name']
+            projected_points = player_data['projected_points']
+            predicted_stats = player_data['projected_stats']
+
+            # Prepare the row with player name, fantasy points, and predicted stats
+            row = f"{player_name:<20} | {projected_points:>15.2f} | "
+            row += " | ".join([f"{predicted_stats.get(stat, 0):<20.2f}" for stat in all_stat_keys])
+            print(row)
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR when making API request: {e}")

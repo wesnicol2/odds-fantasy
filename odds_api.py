@@ -144,21 +144,23 @@ def fetch_odds_for_all_games(rosters, use_saved_data=True):
     grouped_games = group_players_by_game(rosters)
 
     for game_id, game_info in grouped_games.items():
-        print(f"Fetching odds for game_id: {game_id}")
+        if game_id is not None:
 
-        # For each game, get the necessary markets based on the players' positions
-        markets_to_fetch = set()
-        for player in game_info["players"]:
-            position = player["primary_position"]
-            markets = get_required_markets_for_position(position)
-            markets_to_fetch.update(markets)
-        
-        markets_to_fetch = sorted(markets_to_fetch)
-        markets_str = ",".join(markets_to_fetch)
-        event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
+            print(f"Fetching odds for game_id: {game_id}")
 
-        if event_odds:
-            all_event_odds[game_id] = event_odds  # Store odds by event ID
+            # For each game, get the necessary markets based on the players' positions
+            markets_to_fetch = set()
+            for player in game_info["players"]:
+                position = player["primary_position"]
+                markets = get_required_markets_for_position(position)
+                markets_to_fetch.update(markets)
+            
+            markets_to_fetch = sorted(markets_to_fetch)
+            markets_str = ",".join(markets_to_fetch)
+            event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
+
+            if event_odds:
+                all_event_odds[game_id] = event_odds  # Store odds by event ID
 
     return all_event_odds
 
