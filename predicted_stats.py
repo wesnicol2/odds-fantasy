@@ -3,14 +3,15 @@ import json
 
 # Mapping of stat_key (from odds data) to Yahoo stat_id
 STAT_ID_MAPPING = {
-    "player_pass_yds": 4,      # Passing Yards
-    "player_pass_tds": 5,      # Passing Touchdowns
-    "player_interceptions": 6, # Interceptions
-    "player_rush_yds": 9,      # Rushing Yards
-    "player_rush_tds": 10,     # Rushing Touchdowns
-    "player_reception_yds": 12,# Receiving Yards
-    "player_reception_tds": 13,# Receiving Touchdowns
-    "player_fumbles": 18       # Fumbles Lost
+    "player_pass_yds": 4,       # Passing Yards
+    "player_pass_tds": 5,       # Passing Touchdowns
+    "player_interceptions": 6,  # Interceptions
+    "player_rush_yds": 9,       # Rushing Yards
+    "player_rush_tds": 10,      # Rushing Touchdowns
+    "player_reception_yds": 12, # Receiving Yards
+    "player_reception_tds": 13, # Receiving Touchdowns
+    "player_fumbles": 18,       # Fumbles Lost
+    "player_anytime_td": 10     # 10 = rushing TDs, 13 = receiving TDs
 }
 
 
