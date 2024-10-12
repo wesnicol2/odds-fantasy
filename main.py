@@ -3,7 +3,7 @@ from predicted_stats import predict_stats_for_player, STAT_ID_MAPPING
 import yahoo_api
 import requests
 import odds_api
-import json
+from config import YAHOO_ODDS_API_PLAYER_NAME_MAPPING
 
 def calculate_fantasy_points(projected_stats, scoring_settings):
     """
@@ -63,7 +63,11 @@ def print_rosters_with_projected_stats(use_saved_data=True):
 
             # Loop through each player in the roster
             for player in roster["players"]["player"]:
-                player_name = player["name"]["full"]
+                # Use Odds API version of name from the beginning
+                player_yahoo_name = player["name"]["full"]
+                player_name = YAHOO_ODDS_API_PLAYER_NAME_MAPPING.get(player_yahoo_name)
+                if not player_name:
+                    player_name = player_yahoo_name
                 aggregated_player_odds = {}
 
                 # Loop through all games' odds to find the player

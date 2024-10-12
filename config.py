@@ -43,3 +43,10 @@ STAT_MARKET_MAPPING = {
     "player_reception_tds": "player_anytime_td",
     "player_reception_yds": "player_reception_yds",
 }
+
+
+# Mapping between player names on yahoo and odds api. 
+# Left side is Yahoo, right side is Odds API
+YAHOO_ODDS_API_PLAYER_NAME_MAPPING ={
+    "A.J. Brown": "AJ Brown"
+}
