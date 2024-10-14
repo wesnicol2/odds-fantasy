@@ -1,4 +1,5 @@
 import requests
+import datetime
 import os
 import json
 from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR
@@ -128,41 +129,78 @@ def group_players_by_game(rosters):
     return games
 
 # Fetch odds for all games and filter markets based on player positions
-def fetch_odds_for_all_games(rosters, use_saved_data=True):
+def fetch_odds_for_all_games(rosters=None, use_saved_data=True):
     """
-    Fetches odds for all games based on the players in the roster and their positions.
-    Uses saved data if available, otherwise fetches fresh data.
-
+    Fetches odds for all NFL games based on either the players in the roster (if provided) or all upcoming games.
+    If 'rosters' is None, fetch odds for all games that haven't commenced yet.
+    
     Args:
-        rosters (list): The user lineups/rosters from Yahoo.
+        rosters (list or None): The user lineups/rosters from Yahoo or None to fetch all games.
         use_saved_data (bool): Whether to use saved data or fetch fresh data.
 
     Returns:
         dict: Odds data for players across all games.
     """
     all_event_odds = {}
-    grouped_games = group_players_by_game(rosters)
+    
+    if rosters:
+        # If rosters are provided, group players by NFL game
+        grouped_games = group_players_by_game(rosters)
+    else:
+        # If no rosters are provided, fetch all NFL games that have not started yet
+        grouped_games = fetch_upcoming_nfl_games()
 
     for game_id, game_info in grouped_games.items():
-        if game_id is not None:
+        print(f"Fetching odds for game_id: {game_id}")
 
-            print(f"Fetching odds for game_id: {game_id}")
+        # For each game, get the necessary markets based on the players' positions
+        markets_to_fetch = set()
 
-            # For each game, get the necessary markets based on the players' positions
-            markets_to_fetch = set()
+        if rosters:
+            # Fetch markets based on players in rosters if provided
             for player in game_info["players"]:
                 position = player["primary_position"]
                 markets = get_required_markets_for_position(position)
                 markets_to_fetch.update(markets)
-            
-            markets_to_fetch = sorted(markets_to_fetch)
-            markets_str = ",".join(markets_to_fetch)
-            event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
+        else:
+            # Fetch all available markets for games when rosters are not provided
+            markets_to_fetch = set(STAT_MARKET_MAPPING.values())
 
-            if event_odds:
-                all_event_odds[game_id] = event_odds  # Store odds by event ID
+        markets_to_fetch = sorted(markets_to_fetch)
+        markets_str = ",".join(markets_to_fetch)
+
+        # Fetch event player odds for the game
+        event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
+
+        if event_odds:
+            all_event_odds[game_id] = event_odds  # Store odds by event ID
 
     return all_event_odds
+
+def fetch_upcoming_nfl_games():
+    """
+    Fetches all NFL games that have not yet commenced from TheOddsAPI.
+    
+    Returns:
+        dict: A dictionary of NFL games with game IDs and team information.
+    """
+    nfl_events = get_nfl_events()
+    upcoming_games = {}
+
+    current_time = datetime.datetime.utcnow()
+
+    for event in nfl_events:
+        commence_time = datetime.datetime.strptime(event['commence_time'], "%Y-%m-%dT%H:%M:%SZ")
+        if commence_time > current_time:
+            game_id = event['id']
+            upcoming_games[game_id] = {
+                "home_team": event["home_team"],
+                "away_team": event["away_team"],
+                "commence_time": event["commence_time"],
+                "players": []  # No player data if we're fetching for all games
+            }
+
+    return upcoming_games
 
 
 # Load player odds from file
@@ -217,3 +255,65 @@ def save_player_odds(player_odds, filename=f'{DATA_DIR}/all_player_odds.json'):
         print(f"Player odds data successfully saved to {filename}.")
     except IOError as e:
         print(f"Error saving player odds to file: {e}")
+
+
+def identify_betting_opportunities_on_fanduel(all_player_odds):
+    """
+    Identify betting opportunities where FanDuel offers significantly better odds than other sportsbooks.
+
+    Args:
+        all_player_odds (dict): Odds data for all players across different sportsbooks.
+    
+    Returns:
+        list: A sorted list of betting opportunities where FanDuel has significantly better odds.
+    """
+    opportunities = []
+
+    # Loop through each game
+    for game_id, game_odds in all_player_odds.items():
+        # Loop through each bookmaker for the game
+        for bookmaker in game_odds["bookmakers"]:
+            bookmaker_key = bookmaker["key"]
+
+            # Check if FanDuel is available in the game
+            if bookmaker_key == "fanduel":
+                fanduel_odds = bookmaker["markets"]
+
+                # Compare FanDuel odds with other sportsbooks
+                for market in fanduel_odds:
+                    market_key = market["key"]
+
+                    for outcome in market["outcomes"]:
+                        player_name = outcome["description"]
+                        fanduel_price = outcome["price"]
+
+                        # Compare FanDuel odds with other sportsbooks
+                        for other_bookmaker in game_odds["bookmakers"]:
+                            other_bookmaker_key = other_bookmaker["key"]
+                            if other_bookmaker_key == "fanduel":
+                                continue  # Skip FanDuel comparison with itself
+
+                            # Find the corresponding market in other sportsbooks
+                            for other_market in other_bookmaker["markets"]:
+                                if other_market["key"] == market_key:
+                                    for other_outcome in other_market["outcomes"]:
+                                        if other_outcome["description"] == player_name:
+                                            other_price = other_outcome["price"]
+
+                                            # Calculate the percentage difference in odds
+                                            percentage_diff = ((other_price - fanduel_price) / fanduel_price) * 100
+
+                                            # If FanDuel's odds are significantly better, add to opportunities
+                                            if percentage_diff > 0:
+                                                opportunities.append({
+                                                    "player_name": player_name,
+                                                    "market": market_key,
+                                                    "fanduel_odds": fanduel_price,
+                                                    "other_odds": other_price,
+                                                    "other_bookmaker": other_bookmaker_key,
+                                                    "difference": percentage_diff
+                                                })
+
+    # Sort the opportunities by the most significant difference
+    sorted_opportunities = sorted(opportunities, key=lambda x: x["difference"], reverse=True)
+    return sorted_opportunities
