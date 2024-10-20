@@ -224,7 +224,7 @@ def find_betting_opportunities_with_fanduel(all_player_odds):
 
                         # Compare FanDuel's odds and threshold with the average
                         if fanduel_price > avg_price:
-                            odds_diff = fanduel_price - avg_price
+                            odds_factor = fanduel_price / avg_price
                             threshold_diff = fanduel_threshold - avg_threshold
                             opportunities.append({
                                 "player": fanduel_player,
@@ -233,13 +233,13 @@ def find_betting_opportunities_with_fanduel(all_player_odds):
                                 "fanduel_threshold": fanduel_threshold,
                                 "average_odds": avg_price,
                                 "average_threshold": avg_threshold,
-                                "odds_diff": odds_diff,
+                                "odds_factor": odds_factor,
                                 "threshold_diff": threshold_diff,
                                 "game_id": game_id
                             })
 
     # Sort the opportunities by the biggest odds difference, then by threshold difference (both descending)
-    sorted_opportunities = sorted(opportunities, key=lambda x: (x["odds_diff"], x["threshold_diff"]), reverse=True)
+    sorted_opportunities = sorted(opportunities, key=lambda x: (x["odds_factor"], x["threshold_diff"]), reverse=True)
 
     return sorted_opportunities
 
@@ -251,11 +251,12 @@ def print_betting_opportunities(opportunities):
     Args:
         opportunities (list): The list of opportunities sorted by odds and threshold advantage for FanDuel.
     """
-    print(f"{'Player':<20} | {'Market':<20} | {'FD Odds':<10} | {'FD Threshold':<15} | {'Avg Odds':<10} | {'Avg Threshold':<15} | {'Odds Diff':<10} | {'Thresh Diff':<12}")
+    print(f"{'Player':<20} | {'Market':<20} | {'FD Odds':<10} | {'FD Threshold':<15} | {'Avg Odds':<10} | {'Avg Threshold':<15} | {'Odds Factor':<10} | {'Thresh Diff':<12}")
     print("-" * 110)
     
     for opp in opportunities:
-        print(f"{opp['player']:<20} | {opp['market']:<20} | {opp['fanduel_odds']:<10} | {opp['fanduel_threshold']:<15} | {opp['average_odds']:<10} | {opp['average_threshold']:<15} | {opp['odds_diff']:<10} | {opp['threshold_diff']:<12}")
+
+        print(f"{opp['player']:<20} | {opp['market']:<20} | {opp['fanduel_odds']:<10} | {opp['fanduel_threshold']:<15} | {round(opp['average_odds'], 2):<10} | {round(opp['average_threshold'], 2):<15} | {round(opp['odds_factor'], 2):<10} | {round(opp['threshold_diff'], 2):<12}")
 
 
 
@@ -266,7 +267,7 @@ if __name__ == "__main__":
     
     
     # Assuming 'all_player_odds' contains the odds data for all games and markets
-    all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=True)
+    all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=False)
     
     # Find the betting opportunities where FanDuel offers better odds and thresholds
     fanduel_opportunities = find_betting_opportunities_with_fanduel(all_player_odds)
