@@ -1,142 +1,91 @@
 from pprint import pprint
-from predicted_stats import predict_stats_for_player, STAT_ID_MAPPING
-import yahoo_api
-import requests
 import odds_api
-from config import YAHOO_ODDS_API_PLAYER_NAME_MAPPING
+import json
+import requests
 
-def calculate_fantasy_points(projected_stats, scoring_settings):
+
+def calculate_ev_for_fanduel(odds_data, fanduel_key="fanduel"):
     """
-    Calculate fantasy points for a player based on their projected stats and the league's scoring settings.
-
+    Identify the best betting opportunities on FanDuel by comparing its odds and thresholds
+    against the average odds and thresholds of other sportsbooks.
+    
     Args:
-        projected_stats (dict): A dictionary of the player's projected stats (e.g., passing yards, touchdowns).
-        scoring_settings (dict): A dictionary of the league's scoring settings for different stat categories.
-
+        odds_data (dict): The odds data for all games.
+        fanduel_key (str): The key used to identify FanDuel in the odds data.
+    
     Returns:
-        float: The player's projected fantasy points.
+        list: A sorted list of betting opportunities on FanDuel with higher expected value (EV).
     """
-    fantasy_points = 0.0
+    betting_opportunities = []
 
-    # Loop over each stat category in the projected stats
-    for stat_key, stat_value in projected_stats.items():
-        # Map the stat_key to the Yahoo stat_id using STAT_ID_MAPPING
-        stat_id = STAT_ID_MAPPING.get(stat_key)
-        if not stat_id:
-            continue  # If the stat_key isn't mapped, skip it
+    for game_id, game_info in odds_data.items():
+        for bookmaker in game_info["bookmakers"]:
+            if bookmaker["key"] == fanduel_key:
+                fanduel_markets = bookmaker["markets"]
 
-        # Find the corresponding stat_id in the league's scoring settings
-        for category in scoring_settings["stats"]["stat"]:
-            if int(category["stat_id"]) == stat_id:
-                # Multiply the projected stat value by the league's scoring modifier
-                modifier = float(category["value"])
-                fantasy_points += stat_value * modifier
-                break  # Found the stat, no need to check further categories
+                for market in fanduel_markets:
+                    fanduel_market_key = market["key"]
+                    fanduel_outcomes = market["outcomes"]
 
-    return fantasy_points
+                    for outcome in fanduel_outcomes:
+                        fanduel_player = outcome["description"]
+                        fanduel_odds = outcome["price"]
+                        fanduel_threshold = outcome.get("point", 0)
+                        fanduel_bet_type = outcome["name"]  # This could be 'Over' or 'Under'
+
+                        # Gather data from other sportsbooks
+                        odds_other_books = []
+                        thresholds_other_books = []
+
+                        for other_bookmaker in game_info["bookmakers"]:
+                            if other_bookmaker["key"] != fanduel_key:
+                                for other_market in other_bookmaker["markets"]:
+                                    if other_market["key"] == fanduel_market_key:
+                                        for other_outcome in other_market["outcomes"]:
+                                            if other_outcome["description"] == fanduel_player and other_outcome["name"] == fanduel_bet_type:
+                                                odds_other_books.append(other_outcome["price"])
+                                                thresholds_other_books.append(other_outcome.get("point", 0))
+
+                        if odds_other_books:
+                            # Calculate the average odds and threshold from other books
+                            avg_odds = sum(odds_other_books) / len(odds_other_books)
+                            avg_threshold = sum(thresholds_other_books) / len(thresholds_other_books)
+
+                            # Calculate the EV of FanDuel based on its odds and average threshold/odds from other books
+                            ev = (1 / avg_odds) * fanduel_odds - 1
+
+                            betting_opportunities.append({
+                                "player": fanduel_player,
+                                "market": fanduel_market_key,
+                                "bet_type": fanduel_bet_type,  # Over/Under
+                                "fanduel_odds": round(fanduel_odds, 3),
+                                "fanduel_threshold": round(fanduel_threshold, 3),
+                                "avg_odds_other_books": round(avg_odds, 3),
+                                "avg_threshold_other_books": round(avg_threshold, 3),
+                                "ev": round(ev, 3)
+                            })
+
+    # Sort betting opportunities by highest EV (positive EV values)
+    sorted_opportunities = sorted(betting_opportunities, key=lambda x: x["ev"], reverse=True)
+    return sorted_opportunities
 
 
-def print_rosters_with_projected_stats(use_saved_data=True):
+def display_betting_opportunities(use_saved_data=True):
     """
-    Fetch and print the players along with their projected fantasy points and individual predicted stats in table format.
-    Players are sorted by their predicted fantasy points in descending order.
+    Fetch and display the best betting opportunities on FanDuel.
     """
     try:
-        # Get all rosters from Yahoo
-        rosters = yahoo_api.get_users_lineups()
-
-        # Fetch odds for all games, either using saved data or fresh API data
-        all_player_odds = odds_api.fetch_odds_for_all_games(rosters, use_saved_data=use_saved_data)
+        # Fetch odds for all NFL games
+        all_player_odds = odds_api.fetch_odds_for_all_games(use_saved_data=use_saved_data)
         
-        # List to store player data for sorting later
-        player_data_list = []
-        all_stat_keys = set()  # To track all different stat keys
+        # Get the best opportunities for FanDuel
+        opportunities = calculate_ev_for_fanduel(all_player_odds)
 
-        # Loop through each roster
-        for roster in rosters:
-            team_key = roster["team_key"]
-
-            # Get the league's scoring settings for the team
-            league_settings = yahoo_api.get_league_scoring_settings(team_key)
-            if not league_settings:
-                continue
-
-            # Loop through each player in the roster
-            for player in roster["players"]["player"]:
-                # Use Odds API version of name from the beginning
-                player_yahoo_name = player["name"]["full"]
-                player_name = YAHOO_ODDS_API_PLAYER_NAME_MAPPING.get(player_yahoo_name)
-                if not player_name:
-                    player_name = player_yahoo_name
-                aggregated_player_odds = {}
-
-                # Loop through all games' odds to find the player
-                for game_id, game_odds in all_player_odds.items():
-                    # Go through each bookmaker for the game
-                    for bookmaker in game_odds["bookmakers"]:
-                        bookmaker_key = bookmaker["key"]
-                        # Check all markets for player odds
-                        for market in bookmaker["markets"]:
-                            for outcome in market["outcomes"]:
-                                if "description" in outcome and outcome["description"] == player_name:
-                                    if bookmaker_key not in aggregated_player_odds:
-                                        aggregated_player_odds[bookmaker_key] = {}
-                                    if market["key"] not in aggregated_player_odds[bookmaker_key]:
-                                        aggregated_player_odds[bookmaker_key][market["key"]] = {
-                                            "over": None,
-                                            "under": None
-                                        }
-
-                                    # For simplicity, assume all odds are "Yes" (e.g., for anytime TD)
-                                    # You can modify this logic to support "Over/Under" more explicitly
-                                    aggregated_player_odds[bookmaker_key][market["key"]]["over"] = {
-                                        "odds": outcome["price"],
-                                        "point": outcome.get("point", 0)  # Use threshold if available, else 0
-                                    }
-
-                # If we found odds for the player, calculate projected stats and fantasy points
-                if aggregated_player_odds:
-                    projected_stats = predict_stats_for_player(aggregated_player_odds)
-                    projected_fantasy_points = calculate_fantasy_points(projected_stats, league_settings)
-
-                    # Track all unique stat keys for table columns
-                    all_stat_keys.update(projected_stats.keys())
-
-                    # Store player data in a list for sorting
-                    player_data_list.append({
-                        "player_name": player_name,
-                        "projected_points": projected_fantasy_points,
-                        "projected_stats": projected_stats  # Add predicted stats to player data
-                    })
-                else:
-                    # If no odds data, treat player as 0 projected points
-                    player_data_list.append({
-                        "player_name": player_name,
-                        "projected_points": 0.0,
-                        "projected_stats": {}  # No stats available
-                    })
-
-        # Sort the players by projected fantasy points (descending order)
-        sorted_player_data = sorted(player_data_list, key=lambda x: x["projected_points"], reverse=True)
-
-        # Convert all_stat_keys to a sorted list for table columns
-        all_stat_keys = sorted(all_stat_keys)
-
-        # Print the table header with dynamic columns for each stat
-        header = f"{'Player Name':<20} | {'Fantasy Points':>15} | " + " | ".join([f"{stat:<20}" for stat in all_stat_keys])
-        print(header)
-        print("-" * len(header))
-
-        # Print each player's data in table format
-        for player_data in sorted_player_data:
-            player_name = player_data['player_name']
-            projected_points = player_data['projected_points']
-            predicted_stats = player_data['projected_stats']
-
-            # Prepare the row with player name, fantasy points, and predicted stats
-            row = f"{player_name:<20} | {projected_points:>15.2f} | "
-            row += " | ".join([f"{predicted_stats.get(stat, 0):<20.2f}" for stat in all_stat_keys])
-            print(row)
+        # Display the results
+        print(f"{'Player':<20} | {'Market':<20} | {'Bet Type':<10} | {'FanDuel Odds':<15} | {'FanDuel Threshold':<20} | {'Avg Odds Other Books':<20} | {'Avg Threshold Other Books':<25} | {'EV':<10}")
+        print("-" * 160)
+        for opp in opportunities:
+            print(f"{opp['player']:<20} | {opp['market']:<20} | {opp['bet_type']:<10} | {opp['fanduel_odds']:<15} | {opp['fanduel_threshold']:<20} | {opp['avg_odds_other_books']:<20} | {opp['avg_threshold_other_books']:<25} | {opp['ev']:<10.3f}")
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR when making API request: {e}")
@@ -144,134 +93,6 @@ def print_rosters_with_projected_stats(use_saved_data=True):
         print(f"URL Requested: {e.request.url}")
 
 
-def find_betting_opportunities_with_fanduel(all_player_odds):
-    """
-    Identifies betting opportunities where FanDuel offers better odds and/or better thresholds 
-    compared to the average odds and thresholds from other bookmakers for the same player and market. 
-    Sorts by the largest advantage for FanDuel.
-    
-    Args:
-        all_player_odds (dict): Dictionary containing odds data for all games and markets.
-    
-    Returns:
-        list: List of betting opportunities where FanDuel has better odds and thresholds compared 
-        to the average odds and thresholds from other sportsbooks.
-    """
-    opportunities = []
-
-    # Iterate over all games and bookmakers
-    for game_id, game_odds in all_player_odds.items():
-        fanduel_odds = None
-
-        # First, find FanDuel's odds for this game
-        for bookmaker in game_odds["bookmakers"]:
-            if bookmaker["key"] == "fanduel":
-                fanduel_odds = bookmaker["markets"]  # Get all markets for FanDuel
-                break
-
-        if not fanduel_odds:
-            continue  # Skip this game if FanDuel is not available
-
-        # Compare FanDuel odds with the average odds and thresholds from other bookmakers
-        for fanduel_market in fanduel_odds:
-            fanduel_market_key = fanduel_market["key"]
-            fanduel_outcomes = fanduel_market["outcomes"]
-
-            # Track total odds, thresholds, and count for each outcome to calculate the average
-            average_data = {}
-
-            # Collect odds from all other bookmakers
-            for bookmaker in game_odds["bookmakers"]:
-                if bookmaker["key"] == "fanduel":
-                    continue  # Skip FanDuel for averaging
-
-                for market in bookmaker["markets"]:
-                    if market["key"] == fanduel_market_key:
-                        for outcome in market["outcomes"]:
-                            player_name = outcome["description"]
-                            price = outcome["price"]
-                            threshold = outcome.get("point", 0)
-
-                            
-
-                            # Initialize if not present
-                            if player_name not in average_data:
-                                average_data[player_name] = {
-                                    "total_price": 0,
-                                    "total_threshold": 0,
-                                    "count": 0
-                                }
-
-                            # Add up odds and thresholds
-                            average_data[player_name]["total_price"] += price
-                            average_data[player_name]["total_threshold"] += threshold
-                            average_data[player_name]["count"] += 1
-                            if player_name == "Trayveon Williams":
-                                print("breakpoint")
-
-            # Now compare FanDuel's odds with the average odds and thresholds
-            for fanduel_outcome in fanduel_outcomes:
-                fanduel_player = fanduel_outcome["description"]
-                fanduel_price = fanduel_outcome["price"]
-                fanduel_threshold = fanduel_outcome.get("point", 0)
-
-                # If we have average data for this player and market
-                if fanduel_player in average_data:
-                    avg_data = average_data[fanduel_player]
-                    if avg_data["count"] > 0:
-                        avg_price = avg_data["total_price"] / avg_data["count"]
-                        avg_threshold = avg_data["total_threshold"] / avg_data["count"]
-
-                        # Compare FanDuel's odds and threshold with the average
-                        if fanduel_price > avg_price:
-                            odds_factor = fanduel_price / avg_price
-                            threshold_diff = fanduel_threshold - avg_threshold
-                            opportunities.append({
-                                "player": fanduel_player,
-                                "market": fanduel_market_key,
-                                "fanduel_odds": fanduel_price,
-                                "fanduel_threshold": fanduel_threshold,
-                                "average_odds": avg_price,
-                                "average_threshold": avg_threshold,
-                                "odds_factor": odds_factor,
-                                "threshold_diff": threshold_diff,
-                                "game_id": game_id
-                            })
-
-    # Sort the opportunities by the biggest odds difference, then by threshold difference (both descending)
-    sorted_opportunities = sorted(opportunities, key=lambda x: (x["odds_factor"], x["threshold_diff"]), reverse=True)
-
-    return sorted_opportunities
-
-
-def print_betting_opportunities(opportunities):
-    """
-    Prints a list of betting opportunities where FanDuel has better odds and thresholds compared to other sportsbooks.
-
-    Args:
-        opportunities (list): The list of opportunities sorted by odds and threshold advantage for FanDuel.
-    """
-    print(f"{'Player':<20} | {'Market':<20} | {'FD Odds':<10} | {'FD Threshold':<15} | {'Avg Odds':<10} | {'Avg Threshold':<15} | {'Odds Factor':<10} | {'Thresh Diff':<12}")
-    print("-" * 110)
-    
-    for opp in opportunities:
-
-        print(f"{opp['player']:<20} | {opp['market']:<20} | {opp['fanduel_odds']:<10} | {opp['fanduel_threshold']:<15} | {round(opp['average_odds'], 2):<10} | {round(opp['average_threshold'], 2):<15} | {round(opp['odds_factor'], 2):<10} | {round(opp['threshold_diff'], 2):<12}")
-
-
-
-
 if __name__ == "__main__":
-    # Set `use_saved_data=False` to force fetching fresh odds data
-    # print_rosters_with_projected_stats(use_saved_data=True)
-    
-    
-    # Assuming 'all_player_odds' contains the odds data for all games and markets
-    all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=False)
-    
-    # Find the betting opportunities where FanDuel offers better odds and thresholds
-    fanduel_opportunities = find_betting_opportunities_with_fanduel(all_player_odds)
-    
-    # Print the betting opportunities
-    print_betting_opportunities(fanduel_opportunities)
-
+    # Set `use_saved_data=True` to use cached odds data; set it to `False` to fetch fresh data
+    display_betting_opportunities(use_saved_data=True)
