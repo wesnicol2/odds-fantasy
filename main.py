@@ -1,13 +1,38 @@
-from pprint import pprint
 import odds_api
-import json
 import requests
+import tkinter as tk
+from tkinter import ttk
 
+def implied_probability(odds):
+    """Converts decimal odds to implied probability."""
+    return 1 / odds
 
-def calculate_ev_for_fanduel(odds_data, fanduel_key="fanduel"):
+def consensus_probability(odds_list):
     """
-    Identify the best betting opportunities on FanDuel by comparing its odds and thresholds
-    against the average odds and thresholds of other sportsbooks.
+    Calculates the consensus probability by averaging the implied probabilities of a list of odds.
+    Args:
+        odds_list (list): List of decimal odds from other sportsbooks.
+    Returns:
+        float: The consensus probability.
+    """
+    total_probability = sum(implied_probability(odds) for odds in odds_list)
+    return total_probability / len(odds_list)
+
+def calculate_ev(fanduel_odds, consensus_prob):
+    """
+    Calculate the expected value (EV) of FanDuel odds based on the consensus probability.
+    Args:
+        fanduel_odds (float): FanDuel's odds for a given bet.
+        consensus_prob (float): The consensus probability derived from other sportsbooks.
+    Returns:
+        float: The expected value (EV) for the bet on FanDuel.
+    """
+    return (consensus_prob * fanduel_odds) - 1
+
+def aggregate_consensus_data(odds_data, fanduel_key="fanduel"):
+    """
+    Aggregate consensus probabilities and thresholds from all sportsbooks (except FanDuel) 
+    and compare them to FanDuel's odds and thresholds.
     
     Args:
         odds_data (dict): The odds data for all games.
@@ -33,7 +58,7 @@ def calculate_ev_for_fanduel(odds_data, fanduel_key="fanduel"):
                         fanduel_threshold = outcome.get("point", 0)
                         fanduel_bet_type = outcome["name"]  # This could be 'Over' or 'Under'
 
-                        # Gather data from other sportsbooks
+                        # Gather odds and thresholds from other sportsbooks
                         odds_other_books = []
                         thresholds_other_books = []
 
@@ -47,12 +72,12 @@ def calculate_ev_for_fanduel(odds_data, fanduel_key="fanduel"):
                                                 thresholds_other_books.append(other_outcome.get("point", 0))
 
                         if odds_other_books:
-                            # Calculate the average odds and threshold from other books
-                            avg_odds = sum(odds_other_books) / len(odds_other_books)
-                            avg_threshold = sum(thresholds_other_books) / len(thresholds_other_books)
+                            # Calculate the consensus probability and threshold from other books
+                            consensus_prob = consensus_probability(odds_other_books)
+                            avg_threshold_other_books = sum(thresholds_other_books) / len(thresholds_other_books)
 
-                            # Calculate the EV of FanDuel based on its odds and average threshold/odds from other books
-                            ev = (1 / avg_odds) * fanduel_odds - 1
+                            # Calculate the EV of FanDuel based on its odds and consensus probability
+                            ev = calculate_ev(fanduel_odds, consensus_prob)
 
                             betting_opportunities.append({
                                 "player": fanduel_player,
@@ -60,8 +85,8 @@ def calculate_ev_for_fanduel(odds_data, fanduel_key="fanduel"):
                                 "bet_type": fanduel_bet_type,  # Over/Under
                                 "fanduel_odds": round(fanduel_odds, 3),
                                 "fanduel_threshold": round(fanduel_threshold, 3),
-                                "avg_odds_other_books": round(avg_odds, 3),
-                                "avg_threshold_other_books": round(avg_threshold, 3),
+                                "avg_odds_other_books": round(1 / consensus_prob, 3),  # Convert consensus probability to odds
+                                "avg_threshold_other_books": round(avg_threshold_other_books, 3),
                                 "ev": round(ev, 3)
                             })
 
@@ -69,30 +94,59 @@ def calculate_ev_for_fanduel(odds_data, fanduel_key="fanduel"):
     sorted_opportunities = sorted(betting_opportunities, key=lambda x: x["ev"], reverse=True)
     return sorted_opportunities
 
-
-def display_betting_opportunities(use_saved_data=True):
+def display_betting_opportunities_gui(use_saved_data=True):
     """
-    Fetch and display the best betting opportunities on FanDuel.
+    Fetch and display the best betting opportunities on FanDuel in a pop-up window using a visually
+    pleasing table.
     """
     try:
         # Fetch odds for all NFL games
         all_player_odds = odds_api.fetch_odds_for_all_games(use_saved_data=use_saved_data)
         
         # Get the best opportunities for FanDuel
-        opportunities = calculate_ev_for_fanduel(all_player_odds)
+        opportunities = aggregate_consensus_data(all_player_odds)
 
-        # Display the results
-        print(f"{'Player':<20} | {'Market':<20} | {'Bet Type':<10} | {'FanDuel Odds':<15} | {'FanDuel Threshold':<20} | {'Avg Odds Other Books':<20} | {'Avg Threshold Other Books':<25} | {'EV':<10}")
-        print("-" * 160)
+        # Create a Tkinter window
+        root = tk.Tk()
+        root.title("Betting Opportunities on FanDuel")
+
+        # Create a frame for the table
+        frame = ttk.Frame(root)
+        frame.pack(fill=tk.BOTH, expand=False)
+
+        # Create a treeview (table) widget
+        tree = ttk.Treeview(frame, columns=(
+            "EV", "Player", "Market", "Bet Type", "FanDuel Odds", "FanDuel Threshold", "Avg Odds Other Books", "Avg Threshold Other Books"
+        ), show="headings")
+
+        # Define headings
+        headings = ["EV", "Player", "Market", "Bet Type", "FanDuel Odds", "FanDuel Threshold", "Avg Odds Other Books", "Avg Threshold Other Books"]
+        for col in headings:
+            tree.heading(col, text=col)
+            tree.column(col, anchor=tk.CENTER)
+
+        # Insert data into the table
         for opp in opportunities:
-            print(f"{opp['player']:<20} | {opp['market']:<20} | {opp['bet_type']:<10} | {opp['fanduel_odds']:<15} | {opp['fanduel_threshold']:<20} | {opp['avg_odds_other_books']:<20} | {opp['avg_threshold_other_books']:<25} | {opp['ev']:<10.3f}")
+            tree.insert("", tk.END, values=(
+                opp['ev'], opp['player'], opp['market'], opp['bet_type'], opp['fanduel_odds'], opp['fanduel_threshold'],
+                opp['avg_odds_other_books'], opp['avg_threshold_other_books']
+            ))
+
+        # Create a vertical scrollbar
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Pack the treeview widget
+        tree.pack(fill=tk.BOTH, expand=True)
+
+        # Run the Tkinter event loop
+        root.mainloop()
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR when making API request: {e}")
         print(f"Response: {e.response.text}")
-        print(f"URL Requested: {e.request.url}")
-
 
 if __name__ == "__main__":
     # Set `use_saved_data=True` to use cached odds data; set it to `False` to fetch fresh data
-    display_betting_opportunities(use_saved_data=True)
+    display_betting_opportunities_gui(use_saved_data=True)
