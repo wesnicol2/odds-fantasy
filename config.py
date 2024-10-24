@@ -7,7 +7,8 @@ load_dotenv()
 # API configuration for The Odds API
 API_KEY = os.getenv('API_KEY')
 BASE_URL = 'https://api.the-odds-api.com/v4'
-EVENTS_URL = f'{BASE_URL}/sports/americanfootball_nfl/events'
+NFL_EVENTS_URL = f'{BASE_URL}/sports/americanfootball_nfl/events'
+NBA_EVENTS_URL = f'{BASE_URL}/sports/basketball_nba/events'
 
 # Data directory for saving various data
 DATA_DIR = './data'

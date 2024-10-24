@@ -1,7 +1,7 @@
 import requests
 import os
 import json
-from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR
+from config import API_KEY, NBA_EVENTS_URL, NFL_EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR
 
 # Path for the cache file
 CACHE_FILE = os.path.join(DATA_DIR, "odds_api_cache.json")
@@ -64,8 +64,7 @@ def get_event_player_odds(event_id, regions='us', markets='player_rush_yds,playe
         dict: Odds data for players in the specific NFL event.
     """
     markets = sort_csv_string(markets)
-    event_odds_url = f"{EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
-
+    event_odds_url = f"{NBA_EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
     # Load the cached data
     cache = load_cached_data()
 
@@ -159,10 +158,12 @@ def fetch_odds_for_all_games(rosters=None, use_saved_data=True):
 
     if rosters is None:
         # Fetch all upcoming games when no roster is provided
-        events = get_nfl_events()
+        # events = get_nfl_events()
+        events = get_nba_events()
         for event in events:
             game_id = event['id']
-            event_odds = get_event_player_odds(event_id=game_id, use_saved_data=use_saved_data)
+            nba_markets = "player_points,player_rebounds,player_assists,player_threes,player_blocks,player_steals"
+            event_odds = get_event_player_odds(event_id=game_id, use_saved_data=use_saved_data, markets=nba_markets)
             if event_odds:
                 all_event_odds[game_id] = event_odds
     else:
@@ -199,7 +200,24 @@ def get_nfl_events(regions='us'):
     Returns:
         list: A list of NFL events with event IDs.
     """
-    url = f"{EVENTS_URL}?apiKey={API_KEY}&regions={regions}"
+    url = f"{NFL_EVENTS_URL}?apiKey={API_KEY}&regions={regions}"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+
+
+# Fetch NFL Events
+def get_nba_events(regions='us'):
+    """
+    Fetches upcoming NFL events (games) with event IDs from TheOddsAPI.
+    
+    Args:
+        regions (str): The region for odds (default is 'us').
+    
+    Returns:
+        list: A list of NFL events with event IDs.
+    """
+    url = f"{NBA_EVENTS_URL}?apiKey={API_KEY}&regions={regions}"
     response = requests.get(url)
     response.raise_for_status()
     return response.json()

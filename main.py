@@ -2,6 +2,7 @@ import odds_api
 import requests
 import tkinter as tk
 from tkinter import ttk
+from datetime import datetime
 
 def implied_probability(odds):
     """Converts decimal odds to implied probability."""
@@ -15,6 +16,18 @@ def consensus_probability(odds_list):
 def calculate_ev(fanduel_odds, consensus_prob):
     """Calculate the expected value (EV) of FanDuel odds based on the consensus probability."""
     return (consensus_prob * fanduel_odds) - 1
+
+
+def is_future_date(date_str):
+    # Parse the input date string with format '%Y-%m-%dT%H:%M:%SZ'
+    given_date = datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%SZ')
+    
+    # Get the current UTC time
+    current_time = datetime.utcnow()
+    
+    # Check if the given date is in the future
+    return given_date > current_time
+
 
 def aggregate_consensus_data(odds_data, fanduel_key="fanduel"):
     """Aggregate consensus probabilities and thresholds from all sportsbooks (except FanDuel) and compare them to FanDuel's odds."""
@@ -34,6 +47,7 @@ def aggregate_consensus_data(odds_data, fanduel_key="fanduel"):
                         fanduel_odds = outcome["price"]
                         fanduel_threshold = outcome.get("point", 0)
                         fanduel_bet_type = outcome["name"]
+                        fanduel_game_time = game_info["commence_time"]
 
                         # Gather odds and thresholds from other sportsbooks
                         odds_other_books = []
@@ -64,7 +78,8 @@ def aggregate_consensus_data(odds_data, fanduel_key="fanduel"):
                                 "fanduel_threshold": round(fanduel_threshold, 3),
                                 "avg_odds_other_books": round(1 / consensus_prob, 3),
                                 "avg_threshold_other_books": round(avg_threshold_other_books, 3),
-                                "ev": round(ev, 3)
+                                "ev": round(ev, 3),
+                                "commence_time": fanduel_game_time
                             })
 
     # Sort betting opportunities by highest EV
@@ -88,7 +103,7 @@ def display_betting_opportunities_gui(use_saved_data=True):
         frame.pack(fill=tk.BOTH, expand=False)
 
         # Define column headers
-        headings = ["EV", "Player", "Market", "Bet Type", "FanDuel Odds", "FanDuel Threshold", "Avg Odds Other Books", "Avg Threshold Other Books"]
+        headings = ["EV", "Player", "Market", "Bet Type", "FanDuel Threshold", "FanDuel Odds", "Avg Threshold Other Books", "Avg Odds Other Books", "Game Commence Time"]
 
         # Create a treeview widget (table)
         tree = ttk.Treeview(frame, columns=headings, show="headings")
@@ -96,8 +111,9 @@ def display_betting_opportunities_gui(use_saved_data=True):
         # Set column widths to fixed values
         column_widths = {
             "EV": 100, "Player": 150, "Market": 120, "Bet Type": 100,
-            "FanDuel Odds": 120, "FanDuel Threshold": 120,
-            "Avg Odds Other Books": 150, "Avg Threshold Other Books": 150
+            "FanDuel Threshold": 120, "FanDuel Odds": 120, 
+            "Avg Threshold Other Books": 150, "Avg Odds Other Books": 150,
+            "Game Commence Time": 100
         }
 
         # Insert data into the table and set fixed column widths
@@ -106,10 +122,12 @@ def display_betting_opportunities_gui(use_saved_data=True):
             tree.column(col, width=column_widths[col], anchor=tk.CENTER)
 
         for opp in opportunities:
-            tree.insert("", tk.END, values=(
-                opp['ev'], opp['player'], opp['market'], opp['bet_type'], opp['fanduel_odds'], opp['fanduel_threshold'],
-                opp['avg_odds_other_books'], opp['avg_threshold_other_books']
-            ))
+            if is_future_date(opp["commence_time"]):
+                tree.insert("", tk.END, values=(
+                    opp['ev'], opp['player'], opp['market'], opp['bet_type'],  opp['fanduel_threshold'], opp['fanduel_odds'],
+                    opp['avg_threshold_other_books'], opp['avg_odds_other_books'],
+                    opp["commence_time"]
+                ))
 
         # Create vertical scrollbar
         scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
