@@ -57,7 +57,7 @@ def get_event_player_odds(event_id, regions='us', markets='player_rush_yds,playe
     # Sort markets so that cache works properly
     markets_list = [item.strip() for item in markets.split(",")]
     sorted_markets = sorted(markets_list)
-    markets = ", ".join(sorted_markets)
+    markets = ",".join(sorted_markets)
 
     event_odds_url = f"{EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
 
