@@ -144,6 +144,134 @@ def print_rosters_with_projected_stats(use_saved_data=True):
         print(f"URL Requested: {e.request.url}")
 
 
+def find_betting_opportunities_with_fanduel(all_player_odds):
+    """
+    Identifies betting opportunities where FanDuel offers better odds and/or better thresholds 
+    compared to the average odds and thresholds from other bookmakers for the same player and market. 
+    Sorts by the largest advantage for FanDuel.
+    
+    Args:
+        all_player_odds (dict): Dictionary containing odds data for all games and markets.
+    
+    Returns:
+        list: List of betting opportunities where FanDuel has better odds and thresholds compared 
+        to the average odds and thresholds from other sportsbooks.
+    """
+    opportunities = []
+
+    # Iterate over all games and bookmakers
+    for game_id, game_odds in all_player_odds.items():
+        fanduel_odds = None
+
+        # First, find FanDuel's odds for this game
+        for bookmaker in game_odds["bookmakers"]:
+            if bookmaker["key"] == "fanduel":
+                fanduel_odds = bookmaker["markets"]  # Get all markets for FanDuel
+                break
+
+        if not fanduel_odds:
+            continue  # Skip this game if FanDuel is not available
+
+        # Compare FanDuel odds with the average odds and thresholds from other bookmakers
+        for fanduel_market in fanduel_odds:
+            fanduel_market_key = fanduel_market["key"]
+            fanduel_outcomes = fanduel_market["outcomes"]
+
+            # Track total odds, thresholds, and count for each outcome to calculate the average
+            average_data = {}
+
+            # Collect odds from all other bookmakers
+            for bookmaker in game_odds["bookmakers"]:
+                if bookmaker["key"] == "fanduel":
+                    continue  # Skip FanDuel for averaging
+
+                for market in bookmaker["markets"]:
+                    if market["key"] == fanduel_market_key:
+                        for outcome in market["outcomes"]:
+                            player_name = outcome["description"]
+                            price = outcome["price"]
+                            threshold = outcome.get("point", 0)
+
+                            
+
+                            # Initialize if not present
+                            if player_name not in average_data:
+                                average_data[player_name] = {
+                                    "total_price": 0,
+                                    "total_threshold": 0,
+                                    "count": 0
+                                }
+
+                            # Add up odds and thresholds
+                            average_data[player_name]["total_price"] += price
+                            average_data[player_name]["total_threshold"] += threshold
+                            average_data[player_name]["count"] += 1
+                            if player_name == "Trayveon Williams":
+                                print("breakpoint")
+
+            # Now compare FanDuel's odds with the average odds and thresholds
+            for fanduel_outcome in fanduel_outcomes:
+                fanduel_player = fanduel_outcome["description"]
+                fanduel_price = fanduel_outcome["price"]
+                fanduel_threshold = fanduel_outcome.get("point", 0)
+
+                # If we have average data for this player and market
+                if fanduel_player in average_data:
+                    avg_data = average_data[fanduel_player]
+                    if avg_data["count"] > 0:
+                        avg_price = avg_data["total_price"] / avg_data["count"]
+                        avg_threshold = avg_data["total_threshold"] / avg_data["count"]
+
+                        # Compare FanDuel's odds and threshold with the average
+                        if fanduel_price > avg_price:
+                            odds_factor = fanduel_price / avg_price
+                            threshold_diff = fanduel_threshold - avg_threshold
+                            opportunities.append({
+                                "player": fanduel_player,
+                                "market": fanduel_market_key,
+                                "fanduel_odds": fanduel_price,
+                                "fanduel_threshold": fanduel_threshold,
+                                "average_odds": avg_price,
+                                "average_threshold": avg_threshold,
+                                "odds_factor": odds_factor,
+                                "threshold_diff": threshold_diff,
+                                "game_id": game_id
+                            })
+
+    # Sort the opportunities by the biggest odds difference, then by threshold difference (both descending)
+    sorted_opportunities = sorted(opportunities, key=lambda x: (x["odds_factor"], x["threshold_diff"]), reverse=True)
+
+    return sorted_opportunities
+
+
+def print_betting_opportunities(opportunities):
+    """
+    Prints a list of betting opportunities where FanDuel has better odds and thresholds compared to other sportsbooks.
+
+    Args:
+        opportunities (list): The list of opportunities sorted by odds and threshold advantage for FanDuel.
+    """
+    print(f"{'Player':<20} | {'Market':<20} | {'FD Odds':<10} | {'FD Threshold':<15} | {'Avg Odds':<10} | {'Avg Threshold':<15} | {'Odds Factor':<10} | {'Thresh Diff':<12}")
+    print("-" * 110)
+    
+    for opp in opportunities:
+
+        print(f"{opp['player']:<20} | {opp['market']:<20} | {opp['fanduel_odds']:<10} | {opp['fanduel_threshold']:<15} | {round(opp['average_odds'], 2):<10} | {round(opp['average_threshold'], 2):<15} | {round(opp['odds_factor'], 2):<10} | {round(opp['threshold_diff'], 2):<12}")
+
+
+
+
 if __name__ == "__main__":
     # Set `use_saved_data=False` to force fetching fresh odds data
-    print_rosters_with_projected_stats(use_saved_data=True)
+    # print_rosters_with_projected_stats(use_saved_data=True)
+    
+    
+    # Assuming 'all_player_odds' contains the odds data for all games and markets
+    all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=False)
+    
+    # Find the betting opportunities where FanDuel offers better odds and thresholds
+    fanduel_opportunities = find_betting_opportunities_with_fanduel(all_player_odds)
+    
+    # Print the betting opportunities
+    print_betting_opportunities(fanduel_opportunities)
+
