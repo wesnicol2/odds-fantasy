@@ -51,15 +51,6 @@ def calculate_fantasy_points(projected_stats, scoring_settings):
     return fantasy_points
 
 
-def fetch_rosters_and_odds(use_saved_data=True):
-    """
-    Fetch rosters from Yahoo and odds data for each player.
-    """
-    rosters = yahoo_api.get_users_lineups()
-    all_player_odds = odds_api.fetch_odds_for_all_games(rosters, use_saved_data=use_saved_data)
-    return rosters, all_player_odds
-
-
 def process_player_stats(player, league_settings, all_player_odds):
     """
     Process the stats for a single player: calculate projected stats and fantasy points.
@@ -103,7 +94,8 @@ def print_rosters_with_projected_stats(use_saved_data=True):
     Fetch rosters and odds, process stats, and print players' projected fantasy points and stats.
     """
     try:
-        rosters, all_player_odds = fetch_rosters_and_odds(use_saved_data=use_saved_data)
+        rosters = yahoo_api.get_users_lineups()
+        all_player_odds = odds_api.fetch_odds_for_all_games(rosters, use_saved_data=use_saved_data)
         player_data_list = []
         all_stat_keys = set()
 
