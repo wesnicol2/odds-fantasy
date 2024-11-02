@@ -4,6 +4,7 @@ import yahoo_api
 import requests
 import odds_api
 from config import YAHOO_ODDS_API_PLAYER_NAME_MAPPING
+import json
 
 def calculate_bonus_points(stat_value, bonus_details):
     # TODO: Improve this so that it uses odds specific to the thresholds rather than statistical analysis
@@ -73,7 +74,7 @@ def aggregate_player_odds(player_name, all_player_odds):
                 # Find outcomes for the specified player in this market
                 outcomes = [outcome for outcome in market["outcomes"] if outcome.get("description") == player_name]
                 
-                # TODO: Does this work with non-over/under odds? No - we'll need to add a new sitation where outcome["name"] = "yes" for anytime touchdown (and maybe more)
+                
                 if outcomes:
                     # Identify Over and Under outcomes, if available
                     over_odds, under_odds, threshold = None, None, None
@@ -84,6 +85,12 @@ def aggregate_player_odds(player_name, all_player_odds):
                         elif outcome["name"].lower() == "under":
                             under_odds = outcome["price"]
                             threshold = outcome["point"]
+                        elif outcome["name"] == "Yes":
+                            # TODO: Improve this so that it uses anytime td alternate odds also
+                            # TODO: Improve logic from just looking for anytime td to looking for all non-threshld odds
+                            over_odds = outcome["price"]
+                            under_odds = None
+                            threshold = 1
 
                     # Initialize the market key if not present
                     if market_key not in aggregated_odds:
@@ -160,10 +167,11 @@ def derive_probabilities_from_aggregated_odds(aggregated_player_odds):
     aggregated_player_stat_probabilities = {}
     for market_key, market in aggregated_player_odds.items():
             for bookmaker_key, bookmaker in market.items():
-
-                
-
-                if bookmaker["over_odds"] is not None and bookmaker["under_odds"] is not None and bookmaker["threshold"] is not None:
+                if bookmaker["over_odds"] is not None and bookmaker["threshold"] is not None:
+                    if bookmaker["under_odds"] is None:
+                        # Handle cases of binary odds like anytime TD
+                        # TODO: Currently we assume no vig, how could we improve that?
+                        bookmaker["under_odds"] = 1 / (1 - implied_probability(bookmaker["over_odds"]))
                     # Initialize the market key if not present
                     if market_key not in aggregated_player_stat_probabilities:
                         aggregated_player_stat_probabilities[market_key] = {}
@@ -172,12 +180,49 @@ def derive_probabilities_from_aggregated_odds(aggregated_player_odds):
                         aggregated_player_stat_probabilities[market_key][bookmaker_key] = {}
 
                     aggregated_player_stat_probabilities[market_key][bookmaker_key] = get_fair_probability_from_odds(over_odds=bookmaker["over_odds"], under_odds=bookmaker["under_odds"], threshold=bookmaker["threshold"])
-                    
+
     return aggregated_player_stat_probabilities
 
 def combine_probabilities_from_bookmakers(aggregated_player_stat_probabilities):
-    #TODO: Implement, should return a dictionary with stat --> predicted_value
-    print("combine_probabilities_from_bookmakers not yet implemented")
+    """
+    Combines probabilities from different bookmakers into a single predicted stat value for each market/stat
+    by calculating a weighted average of thresholds based on probabilities.
+
+    Args:
+        aggregated_player_stat_probabilities (dict): Dictionary containing over/under probabilities 
+                                                     and thresholds from various bookmakers.
+                                                     
+    Returns:
+        dict: Combined predicted stat values for each market/stat.
+    """
+    combined_predictions = {}
+
+    for stat, bookmakers_data in aggregated_player_stat_probabilities.items():
+        weighted_threshold_sum = 0
+        total_weight = 0
+
+        # Calculate weighted threshold based on probabilities
+        for bookmaker, odds_data in bookmakers_data.items():
+            threshold = odds_data["threshold"]
+            over_prob = odds_data["over"]
+
+            # TODO: For anytime TD (and maybe others) we're getting 1 as the predicted stat - we need to somehow get this to use the under/over probability to predict - if there's 25% chance of going over 1 td, then we should write 0.25 touchdowns are predicted (this will be improved when we have odds for more TD possiblities such as odds to go over 2 TDs)
+            # Use the probability of going over as a weight for this threshold
+            weighted_threshold_sum += threshold * over_prob
+            total_weight += over_prob
+
+        # Compute the implied stat as a weighted average of thresholds
+        if total_weight > 0:
+            implied_stat_value = weighted_threshold_sum / total_weight
+        else:
+            implied_stat_value = sum([odds_data["threshold"] for odds_data in bookmakers_data.values()]) / len(bookmakers_data)
+
+        # Store the predicted stat value for this market/stat
+        combined_predictions[stat] = implied_stat_value
+
+    return combined_predictions
+
+
 
 def predict_fantasy_points_from_stats(player_predicted_stats, league_settings):
     print("predict_fantasy_points_from_stats not yet implemented")
