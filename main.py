@@ -51,42 +51,137 @@ def calculate_fantasy_points(projected_stats, scoring_settings):
     return fantasy_points
 
 
-def process_player_stats(player, league_settings, all_player_odds):
+def predict_stat_from_odds(over_odds, under_odds, threshold):
     """
-    Process the stats for a single player: calculate projected stats and fantasy points.
+    Placeholder function to calculate predicted stat based on odds and threshold.
+    Actual implementation will be added later.
     """
-    player_name = YAHOO_ODDS_API_PLAYER_NAME_MAPPING.get(player["name"]["full"], player["name"]["full"])
-    aggregated_player_odds = {}
+    # Placeholder logic - actual logic to be implemented later
+    return (over_odds + under_odds) / 2 * threshold  # Simplified example, not real calculation
 
-    for game_id, game_odds in all_player_odds.items():
-        for bookmaker in game_odds["bookmakers"]:
+
+def aggregate_player_odds(player_name, all_player_odds):
+    aggregated_odds = {}
+    # Loop through each game and bookmaker in all_player_odds
+    for game_id, game_data in all_player_odds.items():
+        for bookmaker in game_data["bookmakers"]:
             bookmaker_key = bookmaker["key"]
             for market in bookmaker["markets"]:
-                for outcome in market["outcomes"]:
-                    if "description" in outcome and outcome["description"] == player_name:
-                        if bookmaker_key not in aggregated_player_odds:
-                            aggregated_player_odds[bookmaker_key] = {}
-                        if market["key"] not in aggregated_player_odds[bookmaker_key]:
-                            aggregated_player_odds[bookmaker_key][market["key"]] = {"over": None, "under": None}
-                        aggregated_player_odds[bookmaker_key][market["key"]]["over"] = {
-                            "odds": outcome["price"],
-                            "point": outcome.get("point", 0)
-                        }
+                market_key = market["key"]
+                
+                
+                # Find outcomes for the specified player in this market
+                outcomes = [outcome for outcome in market["outcomes"] if outcome.get("description") == player_name]
+                
+                # TODO: Does this work with non-over/under odds? No - we'll need to add a new sitation where outcome["name"] = "yes" for anytime touchdown (and maybe more)
+                if outcomes:
+                    # Identify Over and Under outcomes, if available
+                    over_odds, under_odds, threshold = None, None, None
+                    for outcome in outcomes:
+                        if outcome["name"].lower() == "over":
+                            over_odds = outcome["price"]
+                            threshold = outcome["point"]
+                        elif outcome["name"].lower() == "under":
+                            under_odds = outcome["price"]
+                            threshold = outcome["point"]
 
-    if aggregated_player_odds:
-        projected_stats = predict_stats_for_player(aggregated_player_odds)
-        projected_fantasy_points = calculate_fantasy_points(projected_stats, league_settings)
-        return {
-            "player_name": player_name,
-            "projected_points": projected_fantasy_points,
-            "projected_stats": projected_stats
-        }
+                    # Initialize the market key if not present
+                    if market_key not in aggregated_odds:
+                        aggregated_odds[market_key] = {}
+                    # Use the bookmaker_key instead of the full dictionary as the key
+                    if bookmaker_key not in aggregated_odds[market_key]:
+                        aggregated_odds[market_key][bookmaker_key] = {}
+                    aggregated_odds[market_key][bookmaker_key] = {
+                        "over_odds": over_odds,
+                        "under_odds": under_odds,
+                        "threshold": threshold
+                    }
+
+    return aggregated_odds
+
+
+def predict_stats_from_odds(player, all_player_odds):
+    """
+    Predict stats for a player across all markets using the odds data.
+
+    Args:
+        player (dict): Player dictionary with details like name and position.
+        all_player_odds (dict): Odds data for all games and players from various bookmakers.
+
+    Returns:
+        dict: Predicted stats for each market/stat relevant to the player.
+    """
+    player_name = YAHOO_ODDS_API_PLAYER_NAME_MAPPING.get(player["name"]["full"], player["name"]["full"])
+    predicted_stats = {}
+    aggregated_player_odds = aggregate_player_odds(player_name, all_player_odds)
+    aggregated_player_stat_probabilities=derive_probabilities_from_aggregated_odds(aggregated_player_odds)
+    predicted_stats = combine_probabilities_from_bookmakers(aggregated_player_stat_probabilities)
+    
+    return predicted_stats
+
+
+def implied_probability(odds):
+    """Calculate implied probability from decimal odds."""
+    if odds is None:
+        return None
     else:
-        return {
-            "player_name": player_name,
-            "projected_points": 0.0,
-            "projected_stats": {}
-        }
+        return 1 / odds
+
+def get_fair_probability_from_odds(over_odds, under_odds, threshold):
+    """
+    Calculate the fair probability of an event occurring (Over/Under) by adjusting for the bookmaker's vig.
+    
+    Args:
+        over_odds (float): The odds for the "Over" outcome.
+        under_odds (float): The odds for the "Under" outcome.
+        threshold (float): The line or threshold set by the bookmaker (e.g., points, yards).
+    
+    Returns:
+        dict: A dictionary containing the fair probabilities for "Over" and "Under".
+    """
+    # Step 1: Calculate implied probabilities from odds
+    implied_over_prob = implied_probability(over_odds)
+    implied_under_prob = implied_probability(under_odds)
+    
+    # Step 2: Adjust for the vig by normalizing
+    total_implied_prob = implied_over_prob + implied_under_prob
+    fair_over_prob = implied_over_prob / total_implied_prob
+    fair_under_prob = implied_under_prob / total_implied_prob
+    
+    return {
+        "over": fair_over_prob,
+        "under": fair_under_prob,
+        "threshold": threshold
+    }
+
+
+
+def derive_probabilities_from_aggregated_odds(aggregated_player_odds):
+    aggregated_player_stat_probabilities = {}
+    for market_key, market in aggregated_player_odds.items():
+            for bookmaker_key, bookmaker in market.items():
+
+                
+
+                if bookmaker["over_odds"] is not None and bookmaker["under_odds"] is not None and bookmaker["threshold"] is not None:
+                    # Initialize the market key if not present
+                    if market_key not in aggregated_player_stat_probabilities:
+                        aggregated_player_stat_probabilities[market_key] = {}
+                    # Use the bookmaker_key instead of the full dictionary as the key
+                    if bookmaker_key not in aggregated_player_stat_probabilities[market_key]:
+                        aggregated_player_stat_probabilities[market_key][bookmaker_key] = {}
+
+                    aggregated_player_stat_probabilities[market_key][bookmaker_key] = get_fair_probability_from_odds(over_odds=bookmaker["over_odds"], under_odds=bookmaker["under_odds"], threshold=bookmaker["threshold"])
+                    
+    return aggregated_player_stat_probabilities
+
+def combine_probabilities_from_bookmakers(aggregated_player_stat_probabilities):
+    #TODO: Implement, should return a dictionary with stat --> predicted_value
+    print("combine_probabilities_from_bookmakers not yet implemented")
+
+def predict_fantasy_points_from_stats(player_predicted_stats, league_settings):
+    print("predict_fantasy_points_from_stats not yet implemented")
+    return None
 
 
 def print_rosters_with_projected_stats(use_saved_data=True):
@@ -95,6 +190,8 @@ def print_rosters_with_projected_stats(use_saved_data=True):
     """
     try:
         rosters = yahoo_api.get_users_lineups()
+        # TODO: Consider getting league scoring settings before fetching odds and only get the markets that will matter for scoring.
+        # TODO: Try getting alternate markets, they might have some cool specific odds like odds to break 100 yards
         all_player_odds = odds_api.fetch_odds_for_all_games(rosters, use_saved_data=use_saved_data)
         player_data_list = []
         all_stat_keys = set()
@@ -106,8 +203,10 @@ def print_rosters_with_projected_stats(use_saved_data=True):
                 continue
 
             for player in roster["players"]["player"]:
-                player_data = process_player_stats(player, league_settings, all_player_odds)
-                all_stat_keys.update(player_data["projected_stats"].keys())
+                player["predicted_stats"] = predict_stats_from_odds(player=player, all_player_odds=all_player_odds)
+                continue
+                player["predicted_fantasy_points"] = predict_fantasy_points_from_stats(player_predicted_stats=player["predicted_stats"], league_settings=league_settings)
+                all_stat_keys.update(player["predicted_fantasy_points"]["projected_stats"].keys())
                 player_data_list.append(player_data)
 
         sorted_player_data = sorted(player_data_list, key=lambda x: x["projected_points"], reverse=True)
@@ -215,7 +314,7 @@ def print_betting_opportunities(opportunities):
 
 
 if __name__ == "__main__":
-    print_rosters_with_projected_stats(use_saved_data=False)
+    print_rosters_with_projected_stats(use_saved_data=True)
     # all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=False)
     # fanduel_opportunities = find_betting_opportunities_with_fanduel(all_player_odds)
     # print_betting_opportunities(fanduel_opportunities)
