@@ -196,29 +196,28 @@ def combine_probabilities_from_bookmakers(aggregated_player_stat_probabilities):
         dict: Combined predicted stat values for each market/stat.
     """
     combined_predictions = {}
-
     for stat, bookmakers_data in aggregated_player_stat_probabilities.items():
-        weighted_threshold_sum = 0
-        total_weight = 0
-
+        bookmaker_count = 0
+        total_expected_stat = 0
         # Calculate weighted threshold based on probabilities
         for bookmaker, odds_data in bookmakers_data.items():
             threshold = odds_data["threshold"]
             over_prob = odds_data["over"]
+            under_prob = odds_data["under"]
 
-            # TODO: For anytime TD (and maybe others) we're getting 1 as the predicted stat - we need to somehow get this to use the under/over probability to predict - if there's 25% chance of going over 1 td, then we should write 0.25 touchdowns are predicted (this will be improved when we have odds for more TD possiblities such as odds to go over 2 TDs)
-            # Use the probability of going over as a weight for this threshold
-            weighted_threshold_sum += threshold * over_prob
-            total_weight += over_prob
+            # TODO: when we have odds for more TD possiblities such as odds to go over 2 TDs)
+            if threshold == 1:
+                # Handle case for anytime TD, TODO: make this more sophistocated later
+                expected_stat = over_prob
+                total_expected_stat += expected_stat
+            else:
+                delta_factor = 1 / threshold
+                expected_stat = threshold * (1 - delta_factor + (2 * delta_factor * over_prob))
+                total_expected_stat += expected_stat
+            bookmaker_count += 1
 
         # Compute the implied stat as a weighted average of thresholds
-        if total_weight > 0:
-            implied_stat_value = weighted_threshold_sum / total_weight
-        else:
-            implied_stat_value = sum([odds_data["threshold"] for odds_data in bookmakers_data.values()]) / len(bookmakers_data)
-
-        # Store the predicted stat value for this market/stat
-        combined_predictions[stat] = implied_stat_value
+        combined_predictions[stat] = total_expected_stat / bookmaker_count
 
     return combined_predictions
 
@@ -249,7 +248,6 @@ def print_rosters_with_projected_stats(use_saved_data=True):
 
             for player in roster["players"]["player"]:
                 player["predicted_stats"] = predict_stats_from_odds(player=player, all_player_odds=all_player_odds)
-                continue
                 player["predicted_fantasy_points"] = predict_fantasy_points_from_stats(player_predicted_stats=player["predicted_stats"], league_settings=league_settings)
                 all_stat_keys.update(player["predicted_fantasy_points"]["projected_stats"].keys())
                 player_data_list.append(player_data)
