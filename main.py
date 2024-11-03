@@ -3,7 +3,7 @@ from predicted_stats import predict_stats_for_player, STAT_ID_MAPPING
 import yahoo_api
 import requests
 import odds_api
-from config import YAHOO_ODDS_API_PLAYER_NAME_MAPPING
+from config import YAHOO_ODDS_API_PLAYER_NAME_MAPPING, STAT_MARKET_MAPPING
 import json
 
 def calculate_bonus_points(stat_value, bonus_details):
@@ -32,16 +32,16 @@ def calculate_bonus_points(stat_value, bonus_details):
 
     return total_bonus_points
 
-def calculate_fantasy_points(projected_stats, scoring_settings):
+def calculate_fantasy_points(predicted_stats, league_settings):
     """
     Calculate fantasy points for a player based on their projected stats and the league's scoring settings.
     """
     fantasy_points = 0.0
-    for stat_key, stat_value in projected_stats.items():
+    for stat_key, stat_value in predicted_stats.items():
         stat_id = STAT_ID_MAPPING.get(stat_key)
         if not stat_id:
             continue
-        for category in scoring_settings["stats"]["stat"]:
+        for category in league_settings["stats"]["stat"]:
             if int(category["stat_id"]) == stat_id:
                 modifier = float(category["value"])
                 bonus_points = 0.0
@@ -222,12 +222,6 @@ def combine_probabilities_from_bookmakers(aggregated_player_stat_probabilities):
     return combined_predictions
 
 
-
-def predict_fantasy_points_from_stats(player_predicted_stats, league_settings):
-    print("predict_fantasy_points_from_stats not yet implemented")
-    return None
-
-
 def print_rosters_with_projected_stats(use_saved_data=True):
     """
     Fetch rosters and odds, process stats, and print players' projected fantasy points and stats.
@@ -248,8 +242,14 @@ def print_rosters_with_projected_stats(use_saved_data=True):
 
             for player in roster["players"]["player"]:
                 player["predicted_stats"] = predict_stats_from_odds(player=player, all_player_odds=all_player_odds)
-                player["predicted_fantasy_points"] = predict_fantasy_points_from_stats(player_predicted_stats=player["predicted_stats"], league_settings=league_settings)
-                all_stat_keys.update(player["predicted_fantasy_points"]["projected_stats"].keys())
+
+                player["predicted_fantasy_points"] = calculate_fantasy_points(predicted_stats=player["predicted_stats"], league_settings=league_settings)
+                all_stat_keys.update(player["predicted_stats"].keys())
+                player_data = {
+                    "player_name": player["name"]["full"],
+                    "projected_points": player["predicted_fantasy_points"],
+                    "projected_stats": player["predicted_stats"]
+                }
                 player_data_list.append(player_data)
 
         sorted_player_data = sorted(player_data_list, key=lambda x: x["projected_points"], reverse=True)
