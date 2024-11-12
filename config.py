@@ -50,3 +50,12 @@ STAT_MARKET_MAPPING = {
 YAHOO_ODDS_API_PLAYER_NAME_MAPPING ={
     "A.J. Brown": "AJ Brown"
 }
+
+# Regions that odds api will search for sportsbooks in. Do not remove any values, only comment out the ones you don't need
+ACTIVE_REGIONS = [
+    "us",
+    "us2",
+    "uk",
+    "eu",
+    "au"
+]

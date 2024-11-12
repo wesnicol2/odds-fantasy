@@ -2,7 +2,7 @@ import requests
 import datetime
 import os
 import json
-from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR
+from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR, ACTIVE_REGIONS
 
 # Path for the cache file
 CACHE_FILE = os.path.join(DATA_DIR, "odds_api_cache.json")
@@ -59,8 +59,14 @@ def get_event_player_odds(event_id, regions='us', markets='player_rush_yds,playe
     sorted_markets = sorted(markets_list)
     markets = ",".join(sorted_markets)
 
-    event_odds_url = f"{EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
+    regions_list = [item.strip() for item in regions.split(",")]
+    sorted_regions = sorted(regions_list)
+    regions = ",".join(sorted_regions)
 
+
+    event_odds_url = f"{EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
+    if event_id is None:
+        return None
     # Load the cached data
     cache = load_cached_data()
 
@@ -174,8 +180,11 @@ def fetch_odds_for_all_games(rosters=None, use_saved_data=True):
         markets_to_fetch = sorted(markets_to_fetch)
         markets_str = ",".join(markets_to_fetch)
 
+        regions_str = ",".join(sorted(set(ACTIVE_REGIONS)))
+        
+
         # Fetch event player odds for the game
-        event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
+        event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, regions=regions_str, use_saved_data=use_saved_data)
 
         if event_odds:
             all_event_odds[game_id] = event_odds  # Store odds by event ID

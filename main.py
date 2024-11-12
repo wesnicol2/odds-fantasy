@@ -357,7 +357,7 @@ def print_betting_opportunities(opportunities):
 
 
 if __name__ == "__main__":
-    print_rosters_with_projected_stats(use_saved_data=True)
+    print_rosters_with_projected_stats(use_saved_data=False)
     # all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=False)
     # fanduel_opportunities = find_betting_opportunities_with_fanduel(all_player_odds)
     # print_betting_opportunities(fanduel_opportunities)
