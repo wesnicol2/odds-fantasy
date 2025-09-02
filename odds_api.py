@@ -2,7 +2,7 @@ import requests
 import datetime
 import os
 import json
-from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR
+from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING_YAHOO, DATA_DIR
 
 # Path for the cache file
 CACHE_FILE = os.path.join(DATA_DIR, "odds_api_cache.json")
@@ -86,7 +86,7 @@ def get_required_markets_for_position(position):
         list: A list of markets relevant for the position (e.g., 'player_pass_yds').
     """
     yahoo_stats = POSITION_STAT_CONFIG.get(position, [])
-    return [STAT_MARKET_MAPPING[stat] for stat in yahoo_stats if stat in STAT_MARKET_MAPPING]
+    return [STAT_MARKET_MAPPING_YAHOO[stat] for stat in yahoo_stats if stat in STAT_MARKET_MAPPING_YAHOO]
 
 def get_game_id_from_team_name(team_name):
     """
@@ -120,7 +120,7 @@ def group_players_by_game(rosters):
     """
     games = {}
     for roster in rosters:
-        for player in roster["players"]["player"]:
+        for player in roster["players"].values():
             nfl_team = player["editorial_team_full_name"]
             game_id = get_game_id_from_team_name(nfl_team)
             if game_id not in games:
@@ -164,7 +164,7 @@ def fetch_odds_for_all_games(rosters=None, use_saved_data=True):
                 markets_to_fetch.update(markets)
         else:
             # Fetch all available markets for games when rosters are not provided
-            markets_to_fetch = set(STAT_MARKET_MAPPING.values())
+            markets_to_fetch = set(STAT_MARKET_MAPPING_YAHOO.values())
 
         markets_to_fetch = sorted(markets_to_fetch)
         markets_str = ",".join(markets_to_fetch)

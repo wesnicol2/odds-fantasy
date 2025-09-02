@@ -1,9 +1,9 @@
 from pprint import pprint
-from predicted_stats import predict_stats_for_player, STAT_ID_MAPPING
-import yahoo_api
+from predicted_stats import predict_stats_for_player
+import sleeper_api
 import requests
 import odds_api
-from config import YAHOO_ODDS_API_PLAYER_NAME_MAPPING
+from config import SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, STAT_MARKET_MAPPING_SLEEPER
 
 def calculate_fantasy_points(projected_stats, scoring_settings):
     """
@@ -21,15 +21,15 @@ def calculate_fantasy_points(projected_stats, scoring_settings):
     # Loop over each stat category in the projected stats
     for stat_key, stat_value in projected_stats.items():
         # Map the stat_key to the Yahoo stat_id using STAT_ID_MAPPING
-        stat_id = STAT_ID_MAPPING.get(stat_key)
+        stat_id = STAT_MARKET_MAPPING_SLEEPER.get(stat_key)
         if not stat_id:
             continue  # If the stat_key isn't mapped, skip it
 
         # Find the corresponding stat_id in the league's scoring settings
-        for category in scoring_settings["stats"]["stat"]:
-            if int(category["stat_id"]) == stat_id:
+        for stat, value in scoring_settings.items():
+            if stat == stat_id:
                 # Multiply the projected stat value by the league's scoring modifier
-                modifier = float(category["value"])
+                modifier = float(value)
                 fantasy_points += stat_value * modifier
                 break  # Found the stat, no need to check further categories
 
@@ -42,8 +42,11 @@ def print_rosters_with_projected_stats(use_saved_data=True):
     Players are sorted by their predicted fantasy points in descending order.
     """
     try:
-        # Get all rosters from Yahoo
-        rosters = yahoo_api.get_users_lineups()
+        # Get all rosters from Sleeper
+        username = "wesnicol"
+        season = "2025"
+        roster = sleeper_api.get_user_sleeper_data(username, season)
+        rosters = [roster] # TODO: In the future, enhance to get multiple rosters
 
         # Fetch odds for all games, either using saved data or fresh API data
         all_player_odds = odds_api.fetch_odds_for_all_games(rosters, use_saved_data=use_saved_data)
@@ -54,20 +57,19 @@ def print_rosters_with_projected_stats(use_saved_data=True):
 
         # Loop through each roster
         for roster in rosters:
-            team_key = roster["team_key"]
 
             # Get the league's scoring settings for the team
-            league_settings = yahoo_api.get_league_scoring_settings(team_key)
+            league_settings = roster.get('scoring_rules')
             if not league_settings:
                 continue
 
             # Loop through each player in the roster
-            for player in roster["players"]["player"]:
+            for player in roster["players"].values():
                 # Use Odds API version of name from the beginning
-                player_yahoo_name = player["name"]["full"]
-                player_name = YAHOO_ODDS_API_PLAYER_NAME_MAPPING.get(player_yahoo_name)
+                player_sleeper_name = player["name"]["full"]
+                player_name = SLEEPER_ODDS_API_PLAYER_NAME_MAPPING.get(player_sleeper_name)
                 if not player_name:
-                    player_name = player_yahoo_name
+                    player_name = player_sleeper_name
                 aggregated_player_odds = {}
 
                 # Loop through all games' odds to find the player
@@ -263,15 +265,15 @@ def print_betting_opportunities(opportunities):
 
 if __name__ == "__main__":
     # Set `use_saved_data=False` to force fetching fresh odds data
-    # print_rosters_with_projected_stats(use_saved_data=True)
+    print_rosters_with_projected_stats(use_saved_data=True)
     
     
     # Assuming 'all_player_odds' contains the odds data for all games and markets
-    all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=False)
+    # all_player_odds = odds_api.fetch_odds_for_all_games(rosters=None, use_saved_data=False)
     
-    # Find the betting opportunities where FanDuel offers better odds and thresholds
-    fanduel_opportunities = find_betting_opportunities_with_fanduel(all_player_odds)
+    # # Find the betting opportunities where FanDuel offers better odds and thresholds
+    # fanduel_opportunities = find_betting_opportunities_with_fanduel(all_player_odds)
     
-    # Print the betting opportunities
-    print_betting_opportunities(fanduel_opportunities)
+    # # Print the betting opportunities
+    # print_betting_opportunities(fanduel_opportunities)
 
