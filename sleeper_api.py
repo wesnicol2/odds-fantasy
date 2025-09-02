@@ -92,3 +92,23 @@ def get_players():
     response = requests.get(url)
     response.raise_for_status()
     return response.json()
+
+def get_available_defenses(username, season):
+    # 1. Get all player metadata
+    all_players = get_players()
+    all_defenses = {pid: pdata for pid, pdata in all_players.items() if pdata.get("position") == "DEF"}
+
+    # 2. Get all rosters in the league
+    user_id = get_user_id(username)
+    leagues = get_user_leagues(user_id, season)
+    league_id = leagues[0]['league_id'] # TODO: Enhance to handle multiple leagues
+    rosters = get_league_rosters(league_id)
+    owned_def_ids = set()
+    for roster in rosters:
+        for pid in roster.get("players", []):
+            if pid in all_defenses:
+                owned_def_ids.add(pid)
+
+    # 3. Find unowned defenses
+    available_defenses = {pid: pdata for pid, pdata in all_defenses.items() if pid not in owned_def_ids}
+    return available_defenses

@@ -36,15 +36,12 @@ def calculate_fantasy_points(projected_stats, scoring_settings):
     return fantasy_points
 
 
-def print_rosters_with_projected_stats(use_saved_data=True):
+def print_rosters_with_projected_stats(username, season, use_saved_data=True):
     """
     Fetch and print the players along with their projected fantasy points and individual predicted stats in table format.
     Players are sorted by their predicted fantasy points in descending order.
     """
     try:
-        # Get all rosters from Sleeper
-        username = "wesnicol"
-        season = "2025"
         roster = sleeper_api.get_user_sleeper_data(username, season)
         rosters = [roster] # TODO: In the future, enhance to get multiple rosters
 
@@ -260,12 +257,44 @@ def print_betting_opportunities(opportunities):
 
         print(f"{opp['player']:<20} | {opp['market']:<20} | {opp['fanduel_odds']:<10} | {opp['fanduel_threshold']:<15} | {round(opp['average_odds'], 2):<10} | {round(opp['average_threshold'], 2):<15} | {round(opp['odds_factor'], 2):<10} | {round(opp['threshold_diff'], 2):<12}")
 
+def print_defense_possiblities(username, season, use_saved_data=True):
+    """
+    Fetch and print possible defenses for the user's roster.
+    """
+    try:
+        # Get all rosters from Sleeper
+        roster = sleeper_api.get_user_sleeper_data(username, season)
+        rosters = [roster] # TODO: In the future, enhance to get multiple rosters
+        possible_defenses = set()
+
+        # Loop through each roster
+        for roster in rosters:
+            # Get all avaliable defenses for each roster: 
+            defenses = sleeper_api.get_available_defenses(roster)
+
+
+            # Loop through each player in the roster
+            for defense in defenses.values():
+                print("TODO: Implement fetching defense stats and projected points")
+                
+
+        print("Possible Defenses in Your Roster:")
+        for defense in possible_defenses:
+            # Things to print for each defense: Team name, opposing team name, oposing team implied total, projected fantasy points
+            print(f"  - {defense}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR when making API request: {e}")
+        print(f"Response: {e.response.text}")
+        print(f"URL Requested: {e.request.url}")
 
 
 
 if __name__ == "__main__":
     # Set `use_saved_data=False` to force fetching fresh odds data
-    print_rosters_with_projected_stats(use_saved_data=True)
+    print_rosters_with_projected_stats(username="wesnicol", season="2025", use_saved_data=True)
+
+    # print_defense_possiblities(username="wesnicol", season="2025", use_saved_data=True)
     
     
     # Assuming 'all_player_odds' contains the odds data for all games and markets

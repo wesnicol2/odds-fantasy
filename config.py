@@ -22,13 +22,13 @@ YAHOO_OAUTH_TOKEN_FILE = f'{DATA_DIR}/yahoo_token.json'  # File to save access a
 YAHOO_API_BASE_URL = "https://fantasysports.yahooapis.com/fantasy/v2"
 YAHOO_LEAGUE_ID = os.getenv('YAHOO_LEAGUE_ID')
 
-# Position-Stat Configuration (define relevant stats for each position)
+# Position-Stat Configuration (define relevant stats for each position) - These stats should be in Odds API format
 POSITION_STAT_CONFIG = {
-    "QB": ["player_pass_yds", "player_pass_tds", "player_rush_yds", "player_rush_tds", "player_interceptions"],
-    "RB": ["player_rush_yds", "player_rush_tds", "player_reception_yds", "player_reception_tds"],
-    "WR": ["player_reception_yds", "player_reception_tds"],
-    "TE": ["player_reception_yds", "player_reception_tds"],
-    "K": [],  # Placeholder if needed later
+    "QB": ["player_rush_yds", "player_rush_tds", "player_pass_yds", "player_pass_tds", "player_interceptions"],
+    "RB": ["player_rush_yds", "player_rush_tds", "player_reception_yds", "player_reception_tds", "player_receptions"],
+    "WR": ["player_rush_yds", "player_rush_tds", "player_reception_yds", "player_reception_tds", "player_receptions"],
+    "TE": ["player_rush_yds", "player_rush_tds", "player_reception_yds", "player_reception_tds", "player_receptions"],
+    "K": ["player_field_goals", "player_kicking_points", "player_pats"],  # Placeholder if needed later
     "DEF": [],  # Placeholder for defense stats
 }
 
