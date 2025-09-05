@@ -1,5 +1,6 @@
 from pprint import pprint
 from collections import defaultdict
+import datetime
 from predicted_stats import predict_stats_for_player
 import sleeper_api
 import requests
@@ -335,75 +336,98 @@ def print_defense_possiblities(username, season, use_saved_data=True):
     """
     Fetch and print possible defenses for the user's roster.
     """
+    import datetime
     try:
         # Get all rosters from Sleeper
         roster = sleeper_api.get_user_sleeper_data(username, season)
         rosters = [roster] # TODO: In the future, enhance to get multiple rosters
 
+        # Define week windows
+        today = datetime.datetime.now()
+        days_until_thursday = (3 - today.weekday()) % 7
+        this_week_start = today + datetime.timedelta(days=days_until_thursday)
+        this_week_end = this_week_start + datetime.timedelta(days=4)  # Monday
+        next_week_start = this_week_start + datetime.timedelta(days=7)
+        next_week_end = next_week_start + datetime.timedelta(days=4)
+
         # Loop through each roster
         for roster in rosters:
-            # Get a list of all defenses available in the league. This should be a list of strings representing defense names 
-            
             defenses = sleeper_api.get_available_defenses(username=username, season=season)
-            # Get each defenses name as a list of strings
             defense_names = [
                 f"{d.get('first_name','').strip()} {d.get('last_name','').strip()}".strip()
                 for d in defenses.values()
             ]
-
             for p in roster.get("players", {}).values():
                 if p.get("primary_position") == "DEF":
                     name = p.get("editorial_team_full_name")
                     if name:
                         defense_names.append(name)
-
             seen = set()
             defense_names = [x for x in defense_names if not (x in seen or seen.add(x))]
 
-            all_defense_data = []
+            # Group defenses by week window
+            this_week_defenses = []
+            next_week_defenses = []
             for defense in defense_names:
-                # Things to print for each defense: Team name, opposing team name, oposing team implied total, projected fantasy points
-                # Get game info from odds api
-                
-                game_data = odds_api.get_defensive_odds_for_team(team_name=defense, use_saved_data=use_saved_data)
-                # Get opposing team name based on whether the defense is home or away
-                if game_data.get("home_team") == defense:
-                    opposing_team_name = game_data.get("away_team", "N/A")
-                else:
-                    opposing_team_name = game_data.get("home_team", "N/A")
+                all_game_data = odds_api.get_defensive_odds_for_team(team_name=defense, use_saved_data=use_saved_data)
+                if not all_game_data:
+                    continue
+                for game_id, game_data in all_game_data.items():
+                    commence_time_str = game_data.get("commence_time")
+                    if not commence_time_str:
+                        continue
+                    # Parse commence_time (assume ISO8601 or unix timestamp)
+                    try:
+                        if isinstance(commence_time_str, (int, float)):
+                            commence_time = datetime.datetime.fromtimestamp(commence_time_str)
+                        else:
+                            commence_time = datetime.datetime.fromisoformat(commence_time_str.replace("Z", ""))
+                    except Exception:
+                        continue
 
-                # Calculate opponent implied total from the spreads and totals
-                
-                implied_total_count = 0
-                total_implied_total = 0
-                for bookmaker in game_data.get("bookmakers", []):
-                    for market in bookmaker.get("markets", []):
-                        if market["key"] == "spreads":
-                            for outcome in market.get("outcomes", []):
-                                if outcome["name"] == opposing_team_name:
-                                    spread = outcome.get("point", 0)
-                        if market["key"] == "totals":
-                            for outcome in market.get("outcomes", []):
-                                if outcome["name"] == "Over":
-                                    total = outcome.get("point", 0)
-                    # Implied total for opposing team = (total + spread) / 2
-                    opponent_implied_total = implied_total(game_total=total, team_spread=spread)
-                    implied_total_count = implied_total_count + 1
-                    total_implied_total += opponent_implied_total 
-                
-                average_implied_total = total_implied_total / implied_total_count
+                    # Get opposing team name
+                    if game_data.get("home_team") == defense:
+                        opposing_team_name = game_data.get("away_team", "N/A")
+                    else:
+                        opposing_team_name = game_data.get("home_team", "N/A")
 
-                # Add to list of dicts with all team data
-                all_defense_data.append({
-                    "defense": defense,
-                    "opposing_team": opposing_team_name,
-                    "average_implied_total": average_implied_total,
-                    "implied_total_count": implied_total_count
-                })
+                    # Calculate opponent implied total
+                    implied_total_count = 0
+                    total_implied_total = 0
+                    for bookmaker in game_data.get("bookmakers", []):
+                        for market in bookmaker.get("markets", []):
+                            if market["key"] == "spreads":
+                                for outcome in market.get("outcomes", []):
+                                    if outcome["name"] == opposing_team_name:
+                                        spread = outcome.get("point", 0)
+                            if market["key"] == "totals":
+                                for outcome in market.get("outcomes", []):
+                                    if outcome["name"] == "Over":
+                                        total = outcome.get("point", 0)
+                        opponent_implied_total = implied_total(game_total=total, team_spread=spread)
+                        implied_total_count += 1
+                        total_implied_total += opponent_implied_total
+                    average_implied_total = total_implied_total / implied_total_count if implied_total_count else None
 
-            print("Defense Possibilities and Opponent Implied Totals:")
-            # sort data by lowest average implied total first
-            print_defense_table(all_defense_data, decimals=2)
+                    defense_data = {
+                        "defense": defense,
+                        "opposing_team": opposing_team_name,
+                        "average_implied_total": average_implied_total,
+                        "implied_total_count": implied_total_count,
+                        "game_date": commence_time.strftime('%Y-%m-%d %a'),
+                    }
+
+                    if this_week_start <= commence_time <= this_week_end:
+                        this_week_defenses.append(defense_data)
+                    elif next_week_start <= commence_time <= next_week_end:
+                        next_week_defenses.append(defense_data)
+
+            # Print tables
+            print(f"Defenses Playing This Week ({this_week_start.strftime('%b %d')}–{this_week_end.strftime('%b %d, %Y')}):")
+            print_defense_table(this_week_defenses, decimals=2)
+            print("")
+            print(f"Defenses Playing Next Week ({next_week_start.strftime('%b %d')}–{next_week_end.strftime('%b %d, %Y')}):")
+            print_defense_table(next_week_defenses, decimals=2)
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR when making API request: {e}")
@@ -432,8 +456,12 @@ def print_defense_table(all_defense_data, decimals=2):
             d.get("projected_fantasy_points", "TBD"),
         ))
 
+    if not rows:
+        print("No defenses found for this week.")
+        return
+
     # compute column widths (headers + rows)
-    cols = list(zip(*([headers] + rows))) if rows else [headers]
+    cols = list(zip(*([headers] + rows)))
     widths = [max(len(str(cell)) for cell in col) for col in cols]
 
     # left align text cols (0,1), right align numeric-ish cols (2,3,4)
