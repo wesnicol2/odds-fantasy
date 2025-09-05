@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 from dataclasses import dataclass
+import statistics
 
 from predicted_stats import implied_probability
 
@@ -106,12 +107,10 @@ def aggregate_players_from_event(
                     out_summaries.setdefault(alias, {})
                     acc = out_summaries[alias].setdefault(
                         market_key,
-                        {"sum_over": 0.0, "sum_under": 0.0, "sum_point": 0.0, "n_over": 0, "n_under": 0, "n_point": 0},
+                        {"over_vals": [], "under_vals": [], "point_vals": []},
                     )
-                    acc["sum_over"] += p_over
-                    acc["sum_under"] += p_under
-                    acc["n_over"] += 1
-                    acc["n_under"] += 1
+                    acc["over_vals"].append(p_over)
+                    acc["under_vals"].append(p_under)
                     # threshold from over (preferred) or under
                     pt = None
                     if over and ("point" in over):
@@ -120,8 +119,7 @@ def aggregate_players_from_event(
                         pt = under.get("point")
                     if pt is not None:
                         try:
-                            acc["sum_point"] += float(pt)
-                            acc["n_point"] += 1
+                            acc["point_vals"].append(float(pt))
                         except Exception:
                             pass
 
@@ -130,15 +128,18 @@ def aggregate_players_from_event(
     for alias, mkts in out_summaries.items():
         finalized[alias] = {}
         for mkey, acc in mkts.items():
-            n = max(acc["n_over"], acc["n_under"], acc["n_point"], 1)
-            avg_over = (acc["sum_over"] / acc["n_over"]) if acc["n_over"] else 0.0
-            avg_under = (acc["sum_under"] / acc["n_under"]) if acc["n_under"] else 0.0
-            avg_point = (acc["sum_point"] / acc["n_point"]) if acc["n_point"] else 0.0
+            over_vals = acc.get("over_vals", [])
+            under_vals = acc.get("under_vals", [])
+            point_vals = acc.get("point_vals", [])
+            samples = max(len(over_vals), len(under_vals), len(point_vals))
+            med_over = statistics.median(over_vals) if over_vals else 0.0
+            med_under = statistics.median(under_vals) if under_vals else 0.0
+            med_point = statistics.median(point_vals) if point_vals else 0.0
             finalized[alias][mkey] = MarketSummary(
-                avg_over_prob=avg_over,
-                avg_under_prob=avg_under,
-                avg_threshold=avg_point,
-                samples=n,
+                avg_over_prob=med_over,
+                avg_under_prob=med_under,
+                avg_threshold=med_point,
+                samples=samples,
             )
 
     return out_per_player, finalized

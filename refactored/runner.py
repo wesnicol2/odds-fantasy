@@ -11,7 +11,7 @@ from .aggregator import aggregate_by_week
 from .range_model import compute_fantasy_range
 from . import ratelimit
 from . import odds_client
-from .debug_tools import debug_rb_calculations
+from .debug_tools import debug_rb_calculations, debug_wr_calculations, debug_te_calculations
 
 
 def _print_header(msg: str):
@@ -49,6 +49,7 @@ def _fetch_event_odds_for_plan(plan_by_week: Dict[str, dict], use_saved_data: bo
         "player_anytime_td",
         "player_receptions",
         "player_receptions_alternate",
+        "player_reception_yds",
         "player_rush_yds",
         "player_rush_yds_alternate",
         "player_pass_yds",
@@ -91,7 +92,7 @@ def _format_table(rows, headers):
         print(fmt.format(*r))
 
 
-def run(username: str, season: str, use_saved_data: bool, region: str):
+def run(username: str, season: str, use_saved_data: bool, region: str, debug_positions: set[str] | None = None):
     # Step 1: Roster
     _print_header("Step 1/5: Fetch roster from Sleeper")
     roster = sleeper_api.get_user_sleeper_data(username, season)
@@ -162,11 +163,18 @@ def run(username: str, season: str, use_saved_data: bool, region: str):
                 f"{ceil:.2f}",
             ])
 
-            # Temporary detailed debug for RBs
-            try:
-                debug_rb_calculations(p_info.get("full_name", alias), p_info, by_book, per_player_summaries.get(alias, {}), scoring_rules)
-            except Exception as e:
-                print(f"[RB DEBUG] error while debugging {p_info.get('full_name', alias)}: {e}")
+            # Optional detailed debug per position
+            if debug_positions:
+                pos = (p_info.get("primary_position") or "").upper()
+                try:
+                    if "RB" in debug_positions and pos == "RB":
+                        debug_rb_calculations(p_info.get("full_name", alias), p_info, by_book, per_player_summaries.get(alias, {}), scoring_rules)
+                    if "WR" in debug_positions and pos == "WR":
+                        debug_wr_calculations(p_info.get("full_name", alias), p_info, by_book, per_player_summaries.get(alias, {}), scoring_rules)
+                    if "TE" in debug_positions and pos == "TE":
+                        debug_te_calculations(p_info.get("full_name", alias), p_info, by_book, per_player_summaries.get(alias, {}), scoring_rules)
+                except Exception as e:
+                    print(f"[DEBUG] error while debugging {p_info.get('full_name', alias)} ({pos}): {e}")
 
         rows.sort(key=lambda r: float(r[4]), reverse=True)
         print(f"{w.title()} Week Projections (players with available markets): {len(rows)}")
@@ -189,9 +197,13 @@ def main():
     parser.add_argument("--season", default="2025", help="Season year, e.g. 2025")
     parser.add_argument("--region", default="us", help="Odds API region, default 'us'")
     parser.add_argument("--fresh", action="store_true", help="Fetch fresh odds (ignore cache)")
+    parser.add_argument("--debug-positions", default="", help="Comma-separated positions to debug in detail (e.g., RB,WR)")
     args = parser.parse_args()
 
-    run(username=args.username, season=args.season, use_saved_data=not args.fresh, region=args.region)
+    dbg = {p.strip().upper() for p in args.debug_positions.split(',')} if args.debug_positions else set()
+    if "" in dbg:
+        dbg.discard("")
+    run(username=args.username, season=args.season, use_saved_data=not args.fresh, region=args.region, debug_positions=dbg if dbg else None)
 
 
 if __name__ == "__main__":

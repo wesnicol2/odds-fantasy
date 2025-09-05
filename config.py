@@ -25,9 +25,9 @@ YAHOO_LEAGUE_ID = os.getenv('YAHOO_LEAGUE_ID')
 # Position-Stat Configuration (define relevant stats for each position) - These stats should be in Odds API format
 POSITION_STAT_CONFIG = {
     "QB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_pass_yds", "player_pass_yds_alternate", "player_pass_tds", "player_pass_tds_alternate", "player_interceptions"],
-    "RB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate"],
-    "WR": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate"],
-    "TE": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate"],
+    "RB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate", "player_reception_yds"],
+    "WR": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate", "player_reception_yds"],
+    "TE": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate", "player_reception_yds"],
     "K":  ["player_field_goals", "player_kicking_points", "player_pats"],  
     "DEF": ["spreads", "totals"]
 }
