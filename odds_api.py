@@ -2,7 +2,7 @@ import requests
 import datetime
 import os
 import json
-from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING_YAHOO, DATA_DIR
+from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR, POSITION_STAT_CONFIG
 
 # Path for the cache file
 CACHE_FILE = os.path.join(DATA_DIR, "odds_api_cache.json")
@@ -86,7 +86,7 @@ def get_required_markets_for_position(position):
         list: A list of markets relevant for the position (e.g., 'player_pass_yds').
     """
     yahoo_stats = POSITION_STAT_CONFIG.get(position, [])
-    return [STAT_MARKET_MAPPING_YAHOO[stat] for stat in yahoo_stats if stat in STAT_MARKET_MAPPING_YAHOO]
+    return [STAT_MARKET_MAPPING[stat] for stat in yahoo_stats if stat in STAT_MARKET_MAPPING]
 
 def get_game_id_from_team_name(team_name):
     """
@@ -164,7 +164,7 @@ def fetch_odds_for_all_games(rosters=None, use_saved_data=True):
                 markets_to_fetch.update(markets)
         else:
             # Fetch all available markets for games when rosters are not provided
-            markets_to_fetch = set(STAT_MARKET_MAPPING_YAHOO.values())
+            markets_to_fetch = set(STAT_MARKET_MAPPING.values())
 
         markets_to_fetch = sorted(markets_to_fetch)
         markets_str = ",".join(markets_to_fetch)
@@ -255,6 +255,34 @@ def save_player_odds(player_odds, filename=f'{DATA_DIR}/all_player_odds.json'):
         print(f"Player odds data successfully saved to {filename}.")
     except IOError as e:
         print(f"Error saving player odds to file: {e}")
+
+
+def get_defensive_odds_for_team(team_name, use_saved_data=True):
+    """
+    Fetches defensive player odds for a specific NFL team.
+
+    Args:
+        team_name (str): The full name of the NFL team (e.g., "Kansas City Chiefs").
+
+    Returns:
+        dict: Odds data for defensive players of the specified team, or None if no match is found.
+    """
+    game_id = get_game_id_from_team_name(team_name)
+    if not game_id:
+        return None
+
+    # Fetch event player odds for the game, focusing on defensive stats
+    defensive_markets = POSITION_STAT_CONFIG["DEF"]
+    markets_str = ",".join(defensive_markets)
+
+    event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
+
+    if event_odds:
+        return event_odds  # Return odds for the specific game
+    else:
+        print(f"No odds data found for team '{team_name}' in game ID '{game_id}'.")
+        return None
+
 
 
 def identify_betting_opportunities_on_fanduel(all_player_odds):

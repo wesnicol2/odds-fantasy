@@ -24,16 +24,16 @@ YAHOO_LEAGUE_ID = os.getenv('YAHOO_LEAGUE_ID')
 
 # Position-Stat Configuration (define relevant stats for each position) - These stats should be in Odds API format
 POSITION_STAT_CONFIG = {
-    "QB": ["player_rush_yds", "player_rush_tds", "player_pass_yds", "player_pass_tds", "player_interceptions"],
-    "RB": ["player_rush_yds", "player_rush_tds", "player_reception_yds", "player_reception_tds", "player_receptions"],
-    "WR": ["player_rush_yds", "player_rush_tds", "player_reception_yds", "player_reception_tds", "player_receptions"],
-    "TE": ["player_rush_yds", "player_rush_tds", "player_reception_yds", "player_reception_tds", "player_receptions"],
-    "K": ["player_field_goals", "player_kicking_points", "player_pats"],  # Placeholder if needed later
-    "DEF": [],  # Placeholder for defense stats
+    "QB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_pass_yds", "player_pass_yds_alternate", "player_pass_tds", "player_pass_tds_alternate", "player_interceptions"],
+    "RB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate"],
+    "WR": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate"],
+    "TE": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate"],
+    "K":  ["player_field_goals", "player_kicking_points", "player_pats"],  
+    "DEF": ["spreads", "totals"]
 }
 
 # This mapping holds a key = yahoo Stat name and value = corresponding odds api market
-STAT_MARKET_MAPPING_YAHOO = {
+STAT_MARKET_MAPPING = {
     "player_pass_yds": "player_pass_yds",
     "player_pass_tds": "player_pass_tds",
     "player_interceptions": "player_pass_interceptions",

@@ -1,4 +1,5 @@
 from pprint import pprint
+from collections import defaultdict
 from predicted_stats import predict_stats_for_player
 import sleeper_api
 import requests
@@ -105,17 +106,34 @@ def print_rosters_with_projected_stats(username, season, use_saved_data=True):
                     player_data_list.append({
                         "player_name": player_name,
                         "projected_points": projected_fantasy_points,
-                        "projected_stats": projected_stats  # Add predicted stats to player data
+                        "projected_stats": projected_stats,
+                        "position": player.get("primary_position", "N/A")
                     })
                 else:
                     # If no odds data, treat player as 0 projected points
                     player_data_list.append({
                         "player_name": player_name,
                         "projected_points": 0.0,
-                        "projected_stats": {}  # No stats available
+                        "projected_stats": {},
+                        "position": player.get("primary_position", "N/A")
                     })
 
-        # Sort the players by projected fantasy points (descending order)
+            print("All players in order of projected fantasy points:")
+            print_all_player_projected_stats(player_data_list, all_stat_keys)
+
+
+            print("Ideal lineup: ")
+            print_ideal_lineup(player_data_list)
+        
+
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR when making API request: {e}")
+        print(f"Response: {e.response.text}")
+        print(f"URL Requested: {e.request.url}")
+
+
+def print_all_player_projected_stats(player_data_list, all_stat_keys):
+    # Sort the players by projected fantasy points (descending order)
         sorted_player_data = sorted(player_data_list, key=lambda x: x["projected_points"], reverse=True)
 
         # Convert all_stat_keys to a sorted list for table columns
@@ -126,6 +144,7 @@ def print_rosters_with_projected_stats(username, season, use_saved_data=True):
         print(header)
         print("-" * len(header))
 
+        # Print top players for each position. 1qb, 2 wr, 2 rb, 1 te, 1 flex (WR/RB/TE)
         # Print each player's data in table format
         for player_data in sorted_player_data:
             player_name = player_data['player_name']
@@ -137,10 +156,65 @@ def print_rosters_with_projected_stats(username, season, use_saved_data=True):
             row += " | ".join([f"{predicted_stats.get(stat, 0):<20.2f}" for stat in all_stat_keys])
             print(row)
 
-    except requests.exceptions.RequestException as e:
-        print(f"ERROR when making API request: {e}")
-        print(f"Response: {e.response.text}")
-        print(f"URL Requested: {e.request.url}")
+
+def print_ideal_lineup(player_data_list):
+    # Sort the players by projected fantasy points (descending order)
+    sorted_player_data = sorted(player_data_list, key=lambda x: x["projected_points"], reverse=True)
+
+    # --- Build starting lineup ----------------------------------------------------
+    # Bucket players by position (use 'primary_position' if that's your key)
+    buckets = defaultdict(list)
+    for p in sorted_player_data:
+        pos = p.get("position") or p.get("primary_position") or p.get("pos")
+        p["_pos"] = pos  # normalize for printing
+        if pos in ("QB", "RB", "WR", "TE"):
+            buckets[pos].append(p)
+
+    used_names = set()
+
+    def take(pos: str, n: int):
+        picks = []
+        for p in buckets.get(pos, []):
+            name = p["player_name"]
+            if name not in used_names:
+                picks.append(p)
+                used_names.add(name)
+                if len(picks) == n:
+                    break
+        return picks
+
+    lineup = {
+        "QB":   take("QB", 1),
+        "WR":   take("WR", 2),
+        "RB":   take("RB", 2),
+        "TE":   take("TE", 1),
+    }
+
+    # FLEX = best remaining WR/RB/TE not already used
+    flex_pool = []
+    for pos in ("WR", "RB", "TE"):
+        for p in buckets.get(pos, []):
+            if p["player_name"] not in used_names:
+                flex_pool.append(p)
+    flex_pool.sort(key=lambda x: x["projected_points"], reverse=True)
+    lineup["FLEX"] = flex_pool[:1]
+    for p in lineup["FLEX"]:
+        used_names.add(p["player_name"])
+
+    # --- Print starting lineup ----------------------------------------------------
+    print("\nSTARTING LINEUP")
+    slot_header = f"{'Slot':<6} | {'Player Name':<20} | {'Pos':<3} | {'Fantasy Points':>15}"
+    print(slot_header)
+    print("-" * len(slot_header))
+
+    def print_slot(slot: str, p: dict):
+        print(f"{slot:<6} | {p['player_name']:<20} | {p['_pos']:<3} | {p['projected_points']:>15.2f}")
+
+    for p in lineup["QB"]:   print_slot("QB",   p)
+    for p in lineup["WR"]:   print_slot("WR",   p)
+    for p in lineup["RB"]:   print_slot("RB",   p)
+    for p in lineup["TE"]:   print_slot("TE",   p)
+    for p in lineup["FLEX"]: print_slot("FLEX", p) 
 
 
 def find_betting_opportunities_with_fanduel(all_player_odds):
@@ -265,23 +339,71 @@ def print_defense_possiblities(username, season, use_saved_data=True):
         # Get all rosters from Sleeper
         roster = sleeper_api.get_user_sleeper_data(username, season)
         rosters = [roster] # TODO: In the future, enhance to get multiple rosters
-        possible_defenses = set()
 
         # Loop through each roster
         for roster in rosters:
-            # Get all avaliable defenses for each roster: 
-            defenses = sleeper_api.get_available_defenses(roster)
+            # Get a list of all defenses available in the league. This should be a list of strings representing defense names 
+            
+            defenses = sleeper_api.get_available_defenses(username=username, season=season)
+            # Get each defenses name as a list of strings
+            defense_names = [
+                f"{d.get('first_name','').strip()} {d.get('last_name','').strip()}".strip()
+                for d in defenses.values()
+            ]
 
+            for p in roster.get("players", {}).values():
+                if p.get("primary_position") == "DEF":
+                    name = p.get("editorial_team_full_name")
+                    if name:
+                        defense_names.append(name)
 
-            # Loop through each player in the roster
-            for defense in defenses.values():
-                print("TODO: Implement fetching defense stats and projected points")
+            seen = set()
+            defense_names = [x for x in defense_names if not (x in seen or seen.add(x))]
+
+            all_defense_data = []
+            for defense in defense_names:
+                # Things to print for each defense: Team name, opposing team name, oposing team implied total, projected fantasy points
+                # Get game info from odds api
                 
+                game_data = odds_api.get_defensive_odds_for_team(team_name=defense, use_saved_data=use_saved_data)
+                # Get opposing team name based on whether the defense is home or away
+                if game_data.get("home_team") == defense:
+                    opposing_team_name = game_data.get("away_team", "N/A")
+                else:
+                    opposing_team_name = game_data.get("home_team", "N/A")
 
-        print("Possible Defenses in Your Roster:")
-        for defense in possible_defenses:
-            # Things to print for each defense: Team name, opposing team name, oposing team implied total, projected fantasy points
-            print(f"  - {defense}")
+                # Calculate opponent implied total from the spreads and totals
+                
+                implied_total_count = 0
+                total_implied_total = 0
+                for bookmaker in game_data.get("bookmakers", []):
+                    for market in bookmaker.get("markets", []):
+                        if market["key"] == "spreads":
+                            for outcome in market.get("outcomes", []):
+                                if outcome["name"] == opposing_team_name:
+                                    spread = outcome.get("point", 0)
+                        if market["key"] == "totals":
+                            for outcome in market.get("outcomes", []):
+                                if outcome["name"] == "Over":
+                                    total = outcome.get("point", 0)
+                    # Implied total for opposing team = (total + spread) / 2
+                    opponent_implied_total = implied_total(game_total=total, team_spread=spread)
+                    implied_total_count = implied_total_count + 1
+                    total_implied_total += opponent_implied_total 
+                
+                average_implied_total = total_implied_total / implied_total_count
+
+                # Add to list of dicts with all team data
+                all_defense_data.append({
+                    "defense": defense,
+                    "opposing_team": opposing_team_name,
+                    "average_implied_total": average_implied_total,
+                    "implied_total_count": implied_total_count
+                })
+
+            print("Defense Possibilities and Opponent Implied Totals:")
+            # sort data by lowest average implied total first
+            print_defense_table(all_defense_data, decimals=2)
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR when making API request: {e}")
@@ -289,12 +411,46 @@ def print_defense_possiblities(username, season, use_saved_data=True):
         print(f"URL Requested: {e.request.url}")
 
 
+def implied_total(game_total, team_spread):
+    return game_total/2 - team_spread/2
+
+def print_defense_table(all_defense_data, decimals=2):
+    headers = ("Defense", "Opponent", "Opp Avg Implied", "# Books", "Proj FPts")
+    rows = []
+
+    def fmt_num(x):
+        if isinstance(x, (int, float)):
+            return f"{x:.{decimals}f}" if isinstance(x, float) else f"{x:d}"
+        return "—"
+
+    for d in sorted(all_defense_data, key=lambda x: x["average_implied_total"]):
+        rows.append((
+            d.get("defense", ""),
+            d.get("opposing_team", ""),
+            fmt_num(d.get("average_implied_total")),
+            fmt_num(d.get("implied_total_count")),
+            d.get("projected_fantasy_points", "TBD"),
+        ))
+
+    # compute column widths (headers + rows)
+    cols = list(zip(*([headers] + rows))) if rows else [headers]
+    widths = [max(len(str(cell)) for cell in col) for col in cols]
+
+    # left align text cols (0,1), right align numeric-ish cols (2,3,4)
+    fmt = f"{{:<{widths[0]}}}  {{:<{widths[1]}}}  {{:>{widths[2]}}}  {{:>{widths[3]}}}  {{:>{widths[4]}}}"
+    sep = "  ".join("─" * w for w in widths)
+
+    print(fmt.format(*headers))
+    print(sep)
+    for r in rows:
+        print(fmt.format(*r))
+
 
 if __name__ == "__main__":
     # Set `use_saved_data=False` to force fetching fresh odds data
-    print_rosters_with_projected_stats(username="wesnicol", season="2025", use_saved_data=True)
+    # print_rosters_with_projected_stats(username="wesnicol", season="2025", use_saved_data=False)
 
-    # print_defense_possiblities(username="wesnicol", season="2025", use_saved_data=True)
+    print_defense_possiblities(username="wesnicol", season="2025", use_saved_data=False)
     
     
     # Assuming 'all_player_odds' contains the odds data for all games and markets
