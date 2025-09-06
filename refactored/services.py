@@ -34,7 +34,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh}")
     roster = sleeper_api.get_user_sleeper_data(username, season)
     if not roster:
-        return {"players": [], "ratelimit": ratelimit.format_status()}
+        return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
 
     # Plan games only for requested week
     (this_start, this_end), (next_start, next_end) = compute_week_windows()
@@ -72,7 +72,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
 
     # Sort by mid desc
     players_out.sort(key=lambda x: x["mid"], reverse=True)
-    return {"week": week, "players": players_out, "ratelimit": ratelimit.format_status()}
+    return {"week": week, "players": players_out, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
 
 
 def build_lineup(players: List[dict], target: str = "mid") -> Dict:
@@ -117,7 +117,18 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
         nonlocal total
         pts = float(p.get(target, 0.0))
         total += pts
-        rows.append({"slot": slot, "name": p["name"], "pos": p["pos"], "team": p.get("team"), "points": round(pts, 2)})
+        rows.append({
+            "slot": slot,
+            "name": p["name"],
+            "pos": p["pos"],
+            # keep team in payload for future, UI may ignore it
+            "team": p.get("team"),
+            "points": round(pts, 2),
+            # include full trio for UI rendering
+            "floor": round(float(p.get("floor", 0.0)), 2),
+            "mid": round(float(p.get("mid", 0.0)), 2),
+            "ceiling": round(float(p.get("ceiling", 0.0)), 2),
+        })
 
     for p in lineup["QB"]: add_slot("QB", p)
     for p in lineup["RB"]: add_slot("RB", p)
@@ -238,5 +249,4 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
 
     # Sort ascending by implied total (lower is better for defense)
     out_rows.sort(key=lambda r: (r["implied_total_median"], -r["book_count"]))
-    return {"week": week, "defenses": out_rows, "ratelimit": ratelimit.format_status()}
-
+    return {"week": week, "defenses": out_rows, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}

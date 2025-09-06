@@ -67,3 +67,39 @@ def format_status() -> str:
         pass
 
     return f"remaining={pct_str}, source={src}, endpoint={ep}"
+
+
+def get_details() -> dict:
+    """Return a structured view of the last rate limit readings.
+
+    Keys:
+      - remaining: int | None
+      - used: int | None
+      - total: int | None (remaining+used when available)
+      - pct: float | None (0..100)
+      - pct_str: str (e.g., '84.2%')
+      - source: 'network' | 'cache' | 'n/a'
+      - endpoint: str
+    """
+    rem = _LAST.get("remaining")
+    used = _LAST.get("used")
+    total = None
+    pct = None
+    pct_str = "?%"
+    try:
+        if isinstance(rem, int) and isinstance(used, int):
+            total = rem + used
+            if total > 0:
+                pct = (rem / total) * 100.0
+                pct_str = f"{pct:.1f}%"
+    except Exception:
+        pass
+    return {
+        "remaining": rem if isinstance(rem, int) else None,
+        "used": used if isinstance(used, int) else None,
+        "total": total,
+        "pct": pct,
+        "pct_str": pct_str,
+        "source": _LAST.get("source") or "n/a",
+        "endpoint": _LAST.get("endpoint") or "n/a",
+    }

@@ -31,7 +31,7 @@ def application(environ, start_response):
 
     try:
         if path == "/health":
-            return _json_response(start_response, "200 OK", {"status": "ok", "ratelimit": ratelimit.format_status()})
+            return _json_response(start_response, "200 OK", {"status": "ok", "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()})
 
         if path == "/projections":
             username = q("username", "wesnicol")
@@ -51,6 +51,7 @@ def application(environ, start_response):
             proj = compute_projections(username=username, season=season, week=week, fresh=fresh)
             lineup = build_lineup(proj.get("players", []), target=target)
             lineup["ratelimit"] = ratelimit.format_status()
+            lineup["ratelimit_info"] = ratelimit.get_details()
             return _json_response(start_response, "200 OK", lineup)
 
         if path == "/lineup/diffs":
@@ -61,6 +62,7 @@ def application(environ, start_response):
             proj = compute_projections(username=username, season=season, week=week, fresh=fresh)
             diffs = build_lineup_diffs(proj.get("players", []))
             diffs["ratelimit"] = ratelimit.format_status()
+            diffs["ratelimit_info"] = ratelimit.get_details()
             return _json_response(start_response, "200 OK", diffs)
 
         if path == "/defenses":
@@ -102,4 +104,3 @@ Endpoints:
 
 if __name__ == "__main__":
     main()
-
