@@ -218,7 +218,20 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             odds = odds_client.get_event_player_odds(gid, markets="spreads,totals", use_saved_data=(not fresh))
             # Collect per-book implied totals for opponent
             implieds: List[float] = []
-            for book in (odds[0].get("bookmakers", []) if isinstance(odds, list) and odds else []):
+            # Normalize event structure: list or dict
+            ev_obj = None
+            if isinstance(odds, list) and odds:
+                ev_obj = odds[0]
+            elif isinstance(odds, dict):
+                ev_obj = odds
+            else:
+                ev_obj = None
+            if ev_obj is None:
+                print(f"[services] defenses: no odds for game={gid} team={team}")
+                continue
+            books = ev_obj.get("bookmakers", [])
+            print(f"[services] defenses: team={team} opp={opp} game={gid} books={len(books)}")
+            for book in books:
                 total_pt = None
                 opp_spread = None
                 for m in book.get("markets", []):
@@ -235,6 +248,8 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
                         implieds.append(_implied_total(float(total_pt), float(opp_spread)))
                 except Exception:
                     pass
+            if not implieds:
+                print(f"[services] defenses: no implied totals computed for team={team} game={gid}")
             if implieds:
                 implieds.sort()
                 mid = implieds[len(implieds)//2] if len(implieds) % 2 == 1 else (implieds[len(implieds)//2 -1] + implieds[len(implieds)//2])/2

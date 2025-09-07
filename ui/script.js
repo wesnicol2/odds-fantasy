@@ -1,6 +1,13 @@
 function $(id) { return document.getElementById(id); }
 function val(id) { return $(id).value.trim(); }
 
+// In-memory cache for preloaded data
+const appCache = {
+  lineups: { this: {}, next: {} },
+  defenses: { this: null, next: null },
+  lastRateLimit: null,
+};
+
 function setStatus(el, msg) { if (el) el.textContent = msg || ''; }
 
 function formatRateLimit(info, fallbackStr) {
@@ -60,6 +67,10 @@ function renderLineup(containerId, title, payload) {
 function renderDefenses(containerId, payload) {
   const c = $(containerId);
   const rows = payload.defenses || [];
+  if (!rows.length) {
+    c.innerHTML = '<div class="status">No defenses found for this week.</div>';
+    return;
+  }
   const table = [
     '<table><thead><tr><th>Defense</th><th>Opponent</th><th>Game Date</th><th>Opp Implied</th><th># Books</th><th>Source</th></tr></thead><tbody>',
     ...rows.map(r => `<tr><td>${r.defense}</td><td>${r.opponent}</td><td>${r.game_date}</td><td>${Number(r.implied_total_median).toFixed(2)}</td><td>${r.book_count}</td><td>${r.source}</td></tr>`),
@@ -70,41 +81,71 @@ function renderDefenses(containerId, payload) {
 }
 
 async function loadLineup(week, target) {
-  const url = apiUrl('/lineup', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
-    week,
-    target
-  });
-  console.debug('GET', url);
-  const { ok, data } = await fetchJSON(url);
-  if (!ok) return alert('Failed to load lineup');
+  // Use cached data preloaded on refresh
+  const data = appCache.lineups?.[week]?.[target];
+  if (!data) return alert('Please click Refresh first.');
   const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
   const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
   renderLineup(containerId, title, data);
-  updateRateLimitDisplays(data);
+  updateRateLimitDisplays(appCache.lastRateLimit || data);
 }
 
 async function loadDefenses(week) {
-  const url = apiUrl('/defenses', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
-    week,
-    scope: 'both'
-  });
-  console.debug('GET', url);
-  const { ok, data } = await fetchJSON(url);
-  if (!ok) return alert('Failed to load defenses');
+  const data = appCache.defenses?.[week];
+  if (!data) return alert('Please click Refresh first.');
   const containerId = week === 'this' ? 'defenses-this' : 'defenses-next';
   renderDefenses(containerId, data);
-  updateRateLimitDisplays(data);
+  updateRateLimitDisplays(appCache.lastRateLimit || data);
 }
 
-async function pingApi() {
-  const url = apiUrl('/health');
-  const { ok, data } = await fetchJSON(url);
-  setStatus($('pingStatus'), ok ? 'API OK' : 'API Error');
-  updateRateLimitDisplays(data || {});
+async function refreshAll() {
+  const username = val('username') || 'wesnicol';
+  const season = val('season') || '2025';
+
+  const reqs = [];
+  const pushReq = (keyPath, url) => {
+    reqs.push(
+      fetchJSON(url).then(({ ok, data }) => {
+        if (!ok) throw new Error('Request failed: ' + url);
+        // Store data into cache by keyPath
+        let ref = appCache;
+        for (let i = 0; i < keyPath.length - 1; i++) {
+          const k = keyPath[i];
+          ref[k] = ref[k] || {};
+          ref = ref[k];
+        }
+        ref[keyPath[keyPath.length - 1]] = data;
+        appCache.lastRateLimit = data;
+      })
+    );
+  };
+
+  // Preload lineups for both weeks and all targets
+  [ 'this', 'next' ].forEach(week => {
+    [ 'mid', 'floor', 'ceiling' ].forEach(target => {
+      const url = apiUrl('/lineup', { username, season, week, target });
+      pushReq(['lineups', week, target], url);
+    });
+  });
+
+  // Preload defenses (owned + available)
+  [ 'this', 'next' ].forEach(week => {
+    const url = apiUrl('/defenses', { username, season, week, scope: 'both' });
+    pushReq(['defenses', week], url);
+  });
+
+  setStatus($('pingStatus'), 'Refreshing...');
+  try {
+    await Promise.all(reqs);
+    setStatus($('pingStatus'), 'Ready');
+    // Render defaults: This week mid lineup + this week defenses
+    loadLineup('this', 'mid');
+    loadDefenses('this');
+  } catch (e) {
+    console.error(e);
+    alert('Refresh failed. Check API base URL and server.');
+    setStatus($('pingStatus'), 'Error');
+  }
 }
 
 async function dbgProjections(week) {
@@ -121,7 +162,7 @@ async function dbgProjections(week) {
 
 // Wire handlers
 document.addEventListener('DOMContentLoaded', () => {
-  $('btnPing').addEventListener('click', pingApi);
+  $('btnRefresh').addEventListener('click', refreshAll);
   document.querySelectorAll('.btn-lineup').forEach(btn => {
     btn.addEventListener('click', () => loadLineup(btn.dataset.week, btn.dataset.target));
   });
@@ -130,6 +171,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btnProjThis').addEventListener('click', () => dbgProjections('this'));
   $('btnProjNext').addEventListener('click', () => dbgProjections('next'));
-  // Periodic update of health for active rate-limit counter
-  setInterval(pingApi, 10000);
+  // Auto refresh on load
+  refreshAll();
 });
