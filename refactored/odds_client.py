@@ -3,8 +3,16 @@ from __future__ import annotations
 import os
 import json
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Any
 REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
+
+# Reuse HTTP connections for speed
+_SESSION = requests.Session()
+_SESSION.headers.update({"Accept": "application/json"})
+_SESSION.mount("https://", HTTPAdapter(pool_connections=16, pool_maxsize=32))
+_SESSION.mount("http://", HTTPAdapter(pool_connections=16, pool_maxsize=32))
 from config import API_KEY, EVENTS_URL, DATA_DIR
 from . import ratelimit
 
@@ -44,7 +52,7 @@ def get_nfl_events(regions: str = "us", use_saved_data: bool = True) -> list[dic
         return []
 
     # Fresh mode: bypass cache and hit network
-    resp = requests.get(url, timeout=REQ_TIMEOUT)
+    resp = _SESSION.get(url, timeout=REQ_TIMEOUT)
     resp.raise_for_status()
     data = resp.json()
     ratelimit.update_from_response(resp.headers, "events")
@@ -64,7 +72,7 @@ def get_event_player_odds(event_id: str, regions: str = "us", markets: str = "",
         ratelimit.update_cached(f"event_odds:{event_id}")
         return {}
 
-    resp = requests.get(url, timeout=REQ_TIMEOUT)
+    resp = _SESSION.get(url, timeout=REQ_TIMEOUT)
     resp.raise_for_status()
     data = resp.json()
     ratelimit.update_from_response(resp.headers, f"event_odds:{event_id}")

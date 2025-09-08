@@ -31,6 +31,28 @@ function updateRateLimitDisplays(payload) {
   setStatus($('rlHeader'), str);
 }
 
+// UI loading helpers
+function disableAllButtons(disabled) {
+  document.querySelectorAll('button').forEach(btn => { btn.disabled = !!disabled; });
+}
+function showGlobalLoading(msg) {
+  const overlay = $('globalLoading');
+  if (!overlay) return;
+  const txt = $('globalLoadingText');
+  if (txt) txt.textContent = msg || 'Loading…';
+  overlay.classList.remove('hidden');
+}
+function hideGlobalLoading() {
+  const overlay = $('globalLoading');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+}
+function showContainerLoading(containerId, msg) {
+  const c = $(containerId);
+  if (!c) return;
+  c.innerHTML = `<div class="status"><span class="spinner"></span> ${msg || 'Loading…'}</div>`;
+}
+
 async function fetchJSON(url) {
   const t0 = performance.now();
   dbg('fetchJSON:start', url);
@@ -101,12 +123,24 @@ function renderDefenses(containerId, payload) {
 
 async function loadLineup(week, target) {
   // Use cached data preloaded on refresh
-  const data = appCache.lineups?.[week]?.[target];
-  if (!data) { dbg('loadLineup:no-cache', { week, target }); return alert('Please click Refresh first.'); }
+  const cached = appCache.lineups?.[week]?.[target];
   const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
   const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
-  renderLineup(containerId, title, data);
-  updateRateLimitDisplays(appCache.lastRateLimit || data);
+  if (!cached) {
+    dbg('loadLineup:no-cache', { week, target });
+    showContainerLoading(containerId, 'Loading lineup…');
+    const fresh = isFreshSelected() ? '1' : '0';
+    const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, fresh });
+    const { ok, data } = await fetchJSON(url);
+    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load lineup.</div>'; return; }
+    appCache.lineups[week] = appCache.lineups[week] || {};
+    appCache.lineups[week][target] = data;
+    renderLineup(containerId, title, data);
+    updateRateLimitDisplays(data);
+    return;
+  }
+  renderLineup(containerId, title, cached);
+  updateRateLimitDisplays(appCache.lastRateLimit || cached);
 }
 
 function renderPlayers(containerId, players) {
@@ -127,29 +161,52 @@ function renderPlayers(containerId, players) {
 }
 
 async function showPlayers(week) {
-  const data = appCache.projections?.[week];
-  if (!data) { dbg('showPlayers:no-cache', { week }); return alert('Please click Refresh first.'); }
-  const players = data.players || [];
+  const cached = appCache.projections?.[week];
   const containerId = week === 'this' ? 'players-this' : 'players-next';
-  renderPlayers(containerId, players);
+  if (!cached) {
+    dbg('showPlayers:no-cache', { week });
+    showContainerLoading(containerId, 'Loading players…');
+    const fresh = isFreshSelected() ? '1' : '0';
+    const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, fresh });
+    const { ok, data } = await fetchJSON(url);
+    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load players.</div>'; return; }
+    appCache.projections[week] = data;
+    renderPlayers(containerId, data.players || []);
+    updateRateLimitDisplays(data);
+    return;
+  }
+  renderPlayers(containerId, cached.players || []);
   updateRateLimitDisplays(appCache.lastRateLimit || {});
 }
 
 async function loadDefenses(week) {
-  const data = appCache.defenses?.[week];
-  if (!data) { dbg('loadDefenses:no-cache', { week }); return alert('Please click Refresh first.'); }
+  const cached = appCache.defenses?.[week];
   const containerId = week === 'this' ? 'defenses-this' : 'defenses-next';
-  renderDefenses(containerId, data);
-  updateRateLimitDisplays(appCache.lastRateLimit || data);
+  if (!cached) {
+    dbg('loadDefenses:no-cache', { week });
+    showContainerLoading(containerId, 'Loading defenses…');
+    const fresh = isFreshSelected() ? '1' : '0';
+    const url = apiUrl('/defenses', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, scope: 'both', fresh });
+    const { ok, data } = await fetchJSON(url);
+    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load defenses.</div>'; return; }
+    appCache.defenses[week] = data;
+    renderDefenses(containerId, data);
+    updateRateLimitDisplays(data);
+    return;
+  }
+  renderDefenses(containerId, cached);
+  updateRateLimitDisplays(appCache.lastRateLimit || cached);
 }
 
 async function refreshAll() {
   const username = val('username') || 'wesnicol';
   const season = val('season') || '2025';
   const fresh = isFreshSelected() ? '1' : '0';
-  const url = apiUrl('/dashboard', { username, season, fresh });
+  const url = apiUrl('/dashboard', { username, season, fresh, weeks: 'this', def_scope: 'owned', include_players: '1' });
   dbg('refreshAll:start', { url, username, season });
   setStatus($('pingStatus'), 'Refreshing...');
+  showGlobalLoading('Refreshing dashboard…');
+  disableAllButtons(true);
   try {
     const { ok, data } = await fetchJSON(url);
     if (!ok) throw new Error('Request failed: ' + url);
@@ -181,6 +238,9 @@ async function refreshAll() {
     console.error('[ui] refreshAll:error', e);
     alert('Refresh failed. Check API base URL and server.');
     setStatus($('pingStatus'), 'Error');
+  } finally {
+    hideGlobalLoading();
+    disableAllButtons(false);
   }
 }
 
@@ -191,6 +251,7 @@ async function dbgProjections(week) {
     week,
     fresh: isFreshSelected() ? '1' : '0'
   });
+  showContainerLoading('projectionsDebug', 'Loading projections…');
   const { ok, data } = await fetchJSON(url);
   if (!ok) { dbg('dbgProjections:fail', { week, url }); return alert('Failed to load projections'); }
   $('projectionsDebug').textContent = JSON.stringify(data, null, 2);

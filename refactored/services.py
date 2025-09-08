@@ -255,6 +255,16 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     events = odds_client.get_nfl_events()
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
 
+    # Prefetch odds per event once to avoid duplicate calls per team
+    ev_odds_map = {}
+    for e in window_events:
+        gid = e["id"]
+        try:
+            ev_odds_map[gid] = odds_client.get_event_player_odds(gid, markets="spreads,totals", use_saved_data=(not fresh))
+        except Exception as exc:
+            print(f"[services] defenses: fetch odds failed game={gid} err={exc}")
+            ev_odds_map[gid] = None
+
     out_rows: List[dict] = []
     for team, source in team_list:
         # Find events where this team plays
@@ -263,7 +273,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
                 continue
             gid = e["id"]
             opp = e["away_team"] if e["home_team"] == team else e["home_team"]
-            odds = odds_client.get_event_player_odds(gid, markets="spreads,totals", use_saved_data=(not fresh))
+            odds = ev_odds_map.get(gid)
             # Collect per-book implied totals for opponent
             implieds: List[float] = []
             # Normalize event structure: list or dict
@@ -318,8 +328,16 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     return payload
 
 
-def build_dashboard(username: str, season: str, region: str = "us", fresh: bool = False) -> Dict:
-    """Build a single payload for UI: both weeks' lineups (mid/floor/ceiling) and defenses.
+def build_dashboard(
+    username: str,
+    season: str,
+    region: str = "us",
+    fresh: bool = False,
+    weeks: str = "both",  # 'this' | 'next' | 'both'
+    def_scope: str = "owned",  # 'owned' | 'available' | 'both'
+    include_players: bool = True,
+) -> Dict:
+    """Build a single payload for UI: lineups and defenses with optional scoping.
 
     Structure:
     {
@@ -332,29 +350,38 @@ def build_dashboard(username: str, season: str, region: str = "us", fresh: bool 
       "ratelimit_info": {...}
     }
     """
-    print(f"[services] build_dashboard user={username} season={season} fresh={fresh}")
+    print(f"[services] build_dashboard user={username} season={season} fresh={fresh} weeks={weeks} def_scope={def_scope} inc_players={include_players}")
 
-    # Projections for both weeks
-    proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh)
-    proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh)
+    # Projections scoped by weeks
+    proj_this = None
+    proj_next = None
+    if weeks in ("this", "both"):
+        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh)
+    if weeks in ("next", "both"):
+        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh)
 
     # Build lineups from one projections call per week
-    lineups = {
-        "this": {
+    lineups = {"this": None, "next": None}
+    if proj_this is not None:
+        lineups["this"] = {
             "mid": build_lineup(proj_this.get("players", []), target="mid"),
             "floor": build_lineup(proj_this.get("players", []), target="floor"),
             "ceiling": build_lineup(proj_this.get("players", []), target="ceiling"),
-        },
-        "next": {
+        }
+    if proj_next is not None:
+        lineups["next"] = {
             "mid": build_lineup(proj_next.get("players", []), target="mid"),
             "floor": build_lineup(proj_next.get("players", []), target="floor"),
             "ceiling": build_lineup(proj_next.get("players", []), target="ceiling"),
-        },
-    }
+        }
 
-    # Defenses for both weeks
-    defs_this = list_defenses(username=username, season=season, week="this", scope="both", fresh=fresh)
-    defs_next = list_defenses(username=username, season=season, week="next", scope="both", fresh=fresh)
+    # Defenses scoped by weeks and scope parameter
+    defs_this = None
+    defs_next = None
+    if weeks in ("this", "both"):
+        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh)
+    if weeks in ("next", "both"):
+        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh)
 
     # Choose latest ratelimit info
     rl_info = ratelimit.get_details()
@@ -363,8 +390,8 @@ def build_dashboard(username: str, season: str, region: str = "us", fresh: bool 
         "lineups": lineups,
         "defenses": {"this": defs_this, "next": defs_next},
         "projections": {
-            "this": {"players": proj_this.get("players", [])},
-            "next": {"players": proj_next.get("players", [])},
+            "this": {"players": (proj_this.get("players", []) if (include_players and proj_this is not None) else [])},
+            "next": {"players": (proj_next.get("players", []) if (include_players and proj_next is not None) else [])},
         },
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": rl_info,
