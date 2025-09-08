@@ -1,10 +1,15 @@
+// Simple debug logger
+const DEBUG = true; // toggle to enable/disable UI debug logs
+function dbg(...args) { if (DEBUG && console && console.log) console.log('[ui]', ...args); }
+
 function $(id) { return document.getElementById(id); }
-function val(id) { return $(id).value.trim(); }
+function val(id) { return ($(id) ? $(id).value : '').trim(); }
 
 // In-memory cache for preloaded data
 const appCache = {
   lineups: { this: {}, next: {} },
   defenses: { this: null, next: null },
+  projections: { this: null, next: null },
   lastRateLimit: null,
 };
 
@@ -27,8 +32,14 @@ function updateRateLimitDisplays(payload) {
 }
 
 async function fetchJSON(url) {
+  const t0 = performance.now();
+  dbg('fetchJSON:start', url);
   const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  const data = await res.json();
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch (e) { data = { _parse_error: true, raw: text }; }
+  const dt = (performance.now() - t0).toFixed(1);
+  dbg('fetchJSON:done', { url, status: res.status, ok: res.ok, ms: dt, bytes: text?.length || 0 });
   return { ok: res.ok, status: res.status, data };
 }
 
@@ -38,8 +49,15 @@ function apiUrl(path, params = {}) {
   return `${base}${path}?${q.toString()}`;
 }
 
+function isFreshSelected() {
+  const el = document.querySelector('input[name="dataMode"]:checked');
+  const mode = el ? el.value : 'cache';
+  return mode === 'fresh';
+}
+
 function renderLineup(containerId, title, payload) {
   const c = $(containerId);
+  dbg('renderLineup', { containerId, title, count: (payload.lineup||[]).length, target: payload.target, total: payload.total_points });
   const rows = payload.lineup || [];
   const target = payload.target || 'mid';
   const total = payload.total_points ?? 0;
@@ -66,6 +84,7 @@ function renderLineup(containerId, title, payload) {
 
 function renderDefenses(containerId, payload) {
   const c = $(containerId);
+  dbg('renderDefenses', { containerId, count: (payload.defenses||[]).length });
   const rows = payload.defenses || [];
   if (!rows.length) {
     c.innerHTML = '<div class="status">No defenses found for this week.</div>';
@@ -83,16 +102,42 @@ function renderDefenses(containerId, payload) {
 async function loadLineup(week, target) {
   // Use cached data preloaded on refresh
   const data = appCache.lineups?.[week]?.[target];
-  if (!data) return alert('Please click Refresh first.');
+  if (!data) { dbg('loadLineup:no-cache', { week, target }); return alert('Please click Refresh first.'); }
   const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
   const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
   renderLineup(containerId, title, data);
   updateRateLimitDisplays(appCache.lastRateLimit || data);
 }
 
+function renderPlayers(containerId, players) {
+  const c = $(containerId);
+  const rows = Array.isArray(players) ? players.slice() : [];
+  if (!rows.length) {
+    c.innerHTML = '<div class="status">No players found.</div>';
+    return;
+  }
+  // Sort by mid descending
+  rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
+  const table = [
+    '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>',
+    ...rows.map(r => `<tr><td>${r.name}</td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`),
+    '</tbody></table>'
+  ].join('\n');
+  c.innerHTML = table;
+}
+
+async function showPlayers(week) {
+  const data = appCache.projections?.[week];
+  if (!data) { dbg('showPlayers:no-cache', { week }); return alert('Please click Refresh first.'); }
+  const players = data.players || [];
+  const containerId = week === 'this' ? 'players-this' : 'players-next';
+  renderPlayers(containerId, players);
+  updateRateLimitDisplays(appCache.lastRateLimit || {});
+}
+
 async function loadDefenses(week) {
   const data = appCache.defenses?.[week];
-  if (!data) return alert('Please click Refresh first.');
+  if (!data) { dbg('loadDefenses:no-cache', { week }); return alert('Please click Refresh first.'); }
   const containerId = week === 'this' ? 'defenses-this' : 'defenses-next';
   renderDefenses(containerId, data);
   updateRateLimitDisplays(appCache.lastRateLimit || data);
@@ -101,48 +146,39 @@ async function loadDefenses(week) {
 async function refreshAll() {
   const username = val('username') || 'wesnicol';
   const season = val('season') || '2025';
-
-  const reqs = [];
-  const pushReq = (keyPath, url) => {
-    reqs.push(
-      fetchJSON(url).then(({ ok, data }) => {
-        if (!ok) throw new Error('Request failed: ' + url);
-        // Store data into cache by keyPath
-        let ref = appCache;
-        for (let i = 0; i < keyPath.length - 1; i++) {
-          const k = keyPath[i];
-          ref[k] = ref[k] || {};
-          ref = ref[k];
-        }
-        ref[keyPath[keyPath.length - 1]] = data;
-        appCache.lastRateLimit = data;
-      })
-    );
-  };
-
-  // Preload lineups for both weeks and all targets
-  [ 'this', 'next' ].forEach(week => {
-    [ 'mid', 'floor', 'ceiling' ].forEach(target => {
-      const url = apiUrl('/lineup', { username, season, week, target });
-      pushReq(['lineups', week, target], url);
-    });
-  });
-
-  // Preload defenses (owned + available)
-  [ 'this', 'next' ].forEach(week => {
-    const url = apiUrl('/defenses', { username, season, week, scope: 'both' });
-    pushReq(['defenses', week], url);
-  });
-
+  const fresh = isFreshSelected() ? '1' : '0';
+  const url = apiUrl('/dashboard', { username, season, fresh });
+  dbg('refreshAll:start', { url, username, season });
   setStatus($('pingStatus'), 'Refreshing...');
   try {
-    await Promise.all(reqs);
+    const { ok, data } = await fetchJSON(url);
+    if (!ok) throw new Error('Request failed: ' + url);
+    // Populate cache
+    appCache.lineups.this.mid = data?.lineups?.this?.mid || null;
+    appCache.lineups.this.floor = data?.lineups?.this?.floor || null;
+    appCache.lineups.this.ceiling = data?.lineups?.this?.ceiling || null;
+    appCache.lineups.next.mid = data?.lineups?.next?.mid || null;
+    appCache.lineups.next.floor = data?.lineups?.next?.floor || null;
+    appCache.lineups.next.ceiling = data?.lineups?.next?.ceiling || null;
+    appCache.defenses.this = data?.defenses?.this || null;
+    appCache.defenses.next = data?.defenses?.next || null;
+    appCache.projections.this = data?.projections?.this || null;
+    appCache.projections.next = data?.projections?.next || null;
+    appCache.lastRateLimit = data;
     setStatus($('pingStatus'), 'Ready');
-    // Render defaults: This week mid lineup + this week defenses
+    dbg('refreshAll:cache-filled', {
+      lineups_this: Object.keys(appCache.lineups.this).length,
+      lineups_next: Object.keys(appCache.lineups.next).length,
+      defenses_this: !!appCache.defenses.this,
+      defenses_next: !!appCache.defenses.next,
+      players_this: (data?.projections?.this?.players || []).length,
+      players_next: (data?.projections?.next?.players || []).length,
+    });
+    // Render defaults
     loadLineup('this', 'mid');
     loadDefenses('this');
   } catch (e) {
-    console.error(e);
+    console.error('[ui] refreshAll:error', e);
     alert('Refresh failed. Check API base URL and server.');
     setStatus($('pingStatus'), 'Error');
   }
@@ -152,10 +188,11 @@ async function dbgProjections(week) {
   const url = apiUrl('/projections', {
     username: val('username') || 'wesnicol',
     season: val('season') || '2025',
-    week
+    week,
+    fresh: isFreshSelected() ? '1' : '0'
   });
   const { ok, data } = await fetchJSON(url);
-  if (!ok) return alert('Failed to load projections');
+  if (!ok) { dbg('dbgProjections:fail', { week, url }); return alert('Failed to load projections'); }
   $('projectionsDebug').textContent = JSON.stringify(data, null, 2);
   updateRateLimitDisplays(data);
 }
@@ -169,8 +206,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.btn-defenses').forEach(btn => {
     btn.addEventListener('click', () => loadDefenses(btn.dataset.week));
   });
+  document.querySelectorAll('.btn-players').forEach(btn => {
+    btn.addEventListener('click', () => showPlayers(btn.dataset.week));
+  });
   $('btnProjThis').addEventListener('click', () => dbgProjections('this'));
   $('btnProjNext').addEventListener('click', () => dbgProjections('next'));
-  // Auto refresh on load
-  refreshAll();
+  dbg('DOMContentLoaded');
+  // Click 'Refresh' to load dashboard data when you want to fetch.
 });

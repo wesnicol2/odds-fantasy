@@ -112,6 +112,29 @@ class ApiTestCase(unittest.TestCase):
         status, headers, payload = wsgi_get('/nope')
         self.assertTrue(status.startswith('404'))
 
+    @patch('refactored.api.build_dashboard')
+    def test_dashboard(self, mock_dash):
+        mock_dash.return_value = {
+            'lineups': {
+                'this': {
+                    'mid': {'target': 'mid', 'lineup': [], 'total_points': 0},
+                    'floor': {'target': 'floor', 'lineup': [], 'total_points': 0},
+                    'ceiling': {'target': 'ceiling', 'lineup': [], 'total_points': 0},
+                },
+                'next': {
+                    'mid': {'target': 'mid', 'lineup': [], 'total_points': 0},
+                    'floor': {'target': 'floor', 'lineup': [], 'total_points': 0},
+                    'ceiling': {'target': 'ceiling', 'lineup': [], 'total_points': 0},
+                }
+            },
+            'defenses': {'this': {'defenses': []}, 'next': {'defenses': []}},
+            'ratelimit': 'remaining=?%'
+        }
+        status, headers, payload = wsgi_get('/dashboard?username=u&season=2025')
+        self.assertTrue(status.startswith('200'))
+        self.assertIn('lineups', payload)
+        self.assertIn('defenses', payload)
+
 
 if __name__ == '__main__':
     unittest.main()

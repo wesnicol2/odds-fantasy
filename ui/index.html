@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Odds Fantasy Dashboard</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="/ui/styles.css" />
 </head>
 <body>
   <header>
@@ -22,6 +22,9 @@
         Season:
         <input id="season" type="text" value="2025" />
       </label>
+      <span>Data:</span>
+      <label><input type="radio" name="dataMode" value="cache" checked /> Cache</label>
+      <label><input type="radio" name="dataMode" value="fresh" /> Fresh</label>
       <button id="btnRefresh">Refresh</button>
       <span id="pingStatus" class="status"></span>
       <span id="rlHeader" class="status"></span>
@@ -73,19 +76,29 @@
       </div>
       <pre id="projectionsDebug" class="debug"></pre>
     </section>
+
+    <section>
+      <h2>Players — This Week</h2>
+      <div class="btn-row">
+        <button data-week="this" class="btn-players">Show Players</button>
+      </div>
+      <div id="players-this" class="results"></div>
+    </section>
+
+    <section>
+      <h2>Players — Next Week</h2>
+      <div class="btn-row">
+        <button data-week="next" class="btn-players">Show Players</button>
+      </div>
+      <div id="players-next" class="results"></div>
+    </section>
   </main>
 
   <footer>
     <span id="rateLimit" class="status"></span>
   </footer>
 
-  <script src="script.js"></script>
-  <script>
-    // Auto-ping on load to show API connection status
-    window.addEventListener('load', () => {
-      document.getElementById('btnPing').click();
-    });
-  </script>
+  <script src="/ui/script.js"></script>
 </body>
   
 </html>

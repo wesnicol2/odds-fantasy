@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple, Optional
 import datetime as dt
+import time
+import os
 
 import sleeper_api
 
@@ -20,18 +22,50 @@ def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
 
 
 def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], use_saved_data: bool) -> Dict[str, Dict[str, list]]:
+    """Fetch event odds concurrently per week for planned games.
+
+    Uses a small thread pool to parallelize network calls when cache misses occur.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     out: Dict[str, Dict[str, list]] = {"this": {}, "next": {}}
     for w in ("this", "next"):
-        for gid, g in plan_by_week.get(w, {}).items():
+        items = list(plan_by_week.get(w, {}).items())
+        if not items:
+            continue
+        max_workers = min(8, max(1, len(items)))
+
+        def task(pair):
+            gid, g = pair
             markets_str = ",".join(sorted(set(g.markets)))
             print(f"[services] fetch odds week={w} game={gid} markets={len(g.markets)}")
-            out[w][gid] = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, use_saved_data=use_saved_data)
-            print(f"[services] ratelimit: {ratelimit.format_status()}")
+            data = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, use_saved_data=use_saved_data)
+            return gid, data
+
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = [ex.submit(task, it) for it in items]
+            for fut in as_completed(futures):
+                try:
+                    gid, data = fut.result()
+                    out[w][gid] = data
+                except Exception as e:
+                    print(f"[services] fetch odds error: {e}")
+        print(f"[services] fetch odds week={w} complete; games={len(out[w])} rl={ratelimit.format_status()}")
     return out
 
 
 def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False) -> Dict:
     print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh}")
+    # In-process TTL cache
+    ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
+    _proj_cache = getattr(compute_projections, "_cache", {})
+    key = (username, season, week, region)
+    now = time.time()
+    if not fresh and key in _proj_cache:
+        ts, payload = _proj_cache[key]
+        if now - ts < ttl:
+            print(f"[services] compute_projections cache hit key={key} age={int(now-ts)}s")
+            return payload
     roster = sleeper_api.get_user_sleeper_data(username, season)
     if not roster:
         return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
@@ -72,7 +106,11 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
 
     # Sort by mid desc
     players_out.sort(key=lambda x: x["mid"], reverse=True)
-    return {"week": week, "players": players_out, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+    payload = {"week": week, "players": players_out, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+    # store in cache
+    _proj_cache[key] = (now, payload)
+    compute_projections._cache = _proj_cache
+    return payload
 
 
 def build_lineup(players: List[dict], target: str = "mid") -> Dict:
@@ -193,6 +231,16 @@ def _def_teams_for_user(username: str, season: str) -> Tuple[List[str], List[str
 
 def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False) -> Dict:
     print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh}")
+    # In-process TTL cache
+    ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
+    _def_cache = getattr(list_defenses, "_cache", {})
+    key = (username, season, week, scope)
+    now = time.time()
+    if not fresh and key in _def_cache:
+        ts, payload = _def_cache[key]
+        if now - ts < ttl:
+            print(f"[services] list_defenses cache hit key={key} age={int(now-ts)}s")
+            return payload
     (this_start, this_end), (next_start, next_end) = compute_week_windows()
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
 
@@ -264,4 +312,62 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
 
     # Sort ascending by implied total (lower is better for defense)
     out_rows.sort(key=lambda r: (r["implied_total_median"], -r["book_count"]))
-    return {"week": week, "defenses": out_rows, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+    payload = {"week": week, "defenses": out_rows, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+    _def_cache[key] = (now, payload)
+    list_defenses._cache = _def_cache
+    return payload
+
+
+def build_dashboard(username: str, season: str, region: str = "us", fresh: bool = False) -> Dict:
+    """Build a single payload for UI: both weeks' lineups (mid/floor/ceiling) and defenses.
+
+    Structure:
+    {
+      "lineups": {
+         "this": {"mid": {...}, "floor": {...}, "ceiling": {...}},
+         "next": {"mid": {...}, "floor": {...}, "ceiling": {...}}
+      },
+      "defenses": {"this": {...}, "next": {...}},
+      "ratelimit": str,
+      "ratelimit_info": {...}
+    }
+    """
+    print(f"[services] build_dashboard user={username} season={season} fresh={fresh}")
+
+    # Projections for both weeks
+    proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh)
+    proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh)
+
+    # Build lineups from one projections call per week
+    lineups = {
+        "this": {
+            "mid": build_lineup(proj_this.get("players", []), target="mid"),
+            "floor": build_lineup(proj_this.get("players", []), target="floor"),
+            "ceiling": build_lineup(proj_this.get("players", []), target="ceiling"),
+        },
+        "next": {
+            "mid": build_lineup(proj_next.get("players", []), target="mid"),
+            "floor": build_lineup(proj_next.get("players", []), target="floor"),
+            "ceiling": build_lineup(proj_next.get("players", []), target="ceiling"),
+        },
+    }
+
+    # Defenses for both weeks
+    defs_this = list_defenses(username=username, season=season, week="this", scope="both", fresh=fresh)
+    defs_next = list_defenses(username=username, season=season, week="next", scope="both", fresh=fresh)
+
+    # Choose latest ratelimit info
+    rl_info = ratelimit.get_details()
+
+    payload = {
+        "lineups": lineups,
+        "defenses": {"this": defs_this, "next": defs_next},
+        "projections": {
+            "this": {"players": proj_this.get("players", [])},
+            "next": {"players": proj_next.get("players", [])},
+        },
+        "ratelimit": ratelimit.format_status(),
+        "ratelimit_info": rl_info,
+    }
+    print(f"[services] build_dashboard complete; rl={payload['ratelimit']}")
+    return payload

@@ -2,6 +2,7 @@ import requests
 from config import SLEEPER_TO_ODDSAPI_TEAM
 
 SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
+REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
 
 
 def get_player_enhanced_info(player_id):
@@ -59,7 +60,7 @@ def get_user_id(username):
     Fetch the Sleeper user ID for a given username.
     """
     url = f"{SLEEPER_BASE_URL}/user/{username}"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()["user_id"]
 
@@ -69,7 +70,7 @@ def get_user_leagues(user_id, season):
     Fetch all leagues for a user in a given season.
     """
     url = f"{SLEEPER_BASE_URL}/user/{user_id}/leagues/nfl/{season}"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -79,7 +80,7 @@ def get_league_rosters(league_id):
     Fetch all rosters for a given league.
     """
     url = f"{SLEEPER_BASE_URL}/league/{league_id}/rosters"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -89,7 +90,7 @@ def get_players():
     Fetch all NFL player metadata from Sleeper.
     """
     url = f"{SLEEPER_BASE_URL}/players/nfl"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
