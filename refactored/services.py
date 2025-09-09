@@ -79,8 +79,18 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     odds_by_week = _fetch_odds(plan, cache_mode=eff_mode)
     planned = plan[week]
     ev_odds = odds_by_week.get(week, {})
+    # Debug: print planned vs matched counts
+    try:
+        planned_players = sum(len(g.players) for g in planned.values())
+    except Exception:
+        planned_players = 0
 
     per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, planned)
+    try:
+        matched_players = len(per_player_odds)
+        print(f"[services] aggregate matched_players={matched_players} planned_players={planned_players} games={len(planned)}")
+    except Exception:
+        pass
 
     # Build info index
     info_by_alias: Dict[str, dict] = {}

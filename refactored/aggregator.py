@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, List, Tuple
+import os
 from dataclasses import dataclass
 import statistics
 
@@ -41,6 +42,25 @@ def aggregate_players_from_event(
     out_per_player: dict = {}
     out_summaries: dict = {}
 
+    # Debug toggle
+    _DBG = os.getenv("API_DEBUG") in ("1", "true", "True")
+
+    def _norm_name(s: str) -> str:
+        if not s:
+            return ""
+        s = s.lower()
+        # strip punctuation and dots/apostrophes
+        import re
+        s = re.sub(r"[\.'`-]", " ", s)
+        s = re.sub(r"[^a-z0-9 ]", "", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        # drop suffixes like jr, sr, ii, iii, iv, v
+        toks = [t for t in s.split(" ") if t not in ("jr", "sr", "ii", "iii", "iv", "v")]
+        return " ".join(toks)
+
+    # Build normalized alias map for fuzzy matching
+    norm_alias_map: Dict[str, str] = { _norm_name(a): a for a in (target_player_aliases or set()) }
+
     # Normalize event structure: can be a list with one event, or a dict
     if isinstance(event_odds, dict):
         events_list = [event_odds]
@@ -59,9 +79,15 @@ def aggregate_players_from_event(
                 # First gather outcomes by alias for this market so we can de‑vig per book
                 alias_outcomes = {}
                 for outcome in market.get("outcomes", []):
-                    alias = outcome.get("description")
-                    if not alias or alias not in target_player_aliases:
+                    raw_desc = outcome.get("description")
+                    if not raw_desc:
                         continue
+                    alias = raw_desc if raw_desc in target_player_aliases else None
+                    if alias is None:
+                        n = _norm_name(raw_desc)
+                        alias = norm_alias_map.get(n)
+                        if alias is None:
+                            continue
                     side = _classify_side(outcome.get("name")) or "over"
                     alias_outcomes.setdefault(alias, {"over": None, "under": None})
                     alias_outcomes[alias][side] = {
