@@ -58,14 +58,18 @@ def plan_relevant_games_and_markets(
     roster: dict,
     week_windows: Tuple[Tuple[_dt.datetime, _dt.datetime], Tuple[_dt.datetime, _dt.datetime]],
     regions: str = "us",
-    use_saved_data: bool = True,
+    use_saved_data: bool | None = None,
+    cache_mode: str = "auto",
 ) -> Dict[str, Dict[str, PlannedGame]]:
     """Plan minimal event-odds calls by week window.
 
     Returns a dict with keys 'this' and 'next', each mapping game_id -> PlannedGame.
     """
     (this_start, this_end), (next_start, next_end) = week_windows
-    events = odds_client.get_nfl_events(regions=regions, use_saved_data=use_saved_data)
+    # Backward-compat: map use_saved_data to cache_mode when provided
+    if use_saved_data is not None:
+        cache_mode = 'cache' if use_saved_data else 'fresh'
+    events = odds_client.get_nfl_events(regions=regions, mode=cache_mode)
 
     # Index events by window
     this_events: dict[str, dict] = {}

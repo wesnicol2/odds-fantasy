@@ -54,7 +54,7 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], use_saved_data: bool
     return out
 
 
-def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False) -> Dict:
+def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto") -> Dict:
     print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
@@ -72,10 +72,11 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
 
     # Plan games only for requested week
     (this_start, this_end), (next_start, next_end) = compute_week_windows()
-    plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, use_saved_data=(not fresh))
+    eff_mode = 'fresh' if fresh else cache_mode
+    plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
     plan = {week: plan_all.get(week, {})}
 
-    odds_by_week = _fetch_odds(plan, use_saved_data=(not fresh))
+    odds_by_week = _fetch_odds(plan, cache_mode=eff_mode)
     planned = plan[week]
     ev_odds = odds_by_week.get(week, {})
 
@@ -229,7 +230,7 @@ def _def_teams_for_user(username: str, season: str) -> Tuple[List[str], List[str
     return owned, available
 
 
-def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False) -> Dict:
+def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto") -> Dict:
     print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
@@ -252,7 +253,8 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
         team_list += [(t, "available") for t in available]
 
     # Filter events in window
-    events = odds_client.get_nfl_events()
+    eff_mode = 'fresh' if fresh else cache_mode
+    events = odds_client.get_nfl_events(mode=eff_mode)
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
 
     # Prefetch odds per event once to avoid duplicate calls per team
@@ -260,7 +262,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     for e in window_events:
         gid = e["id"]
         try:
-            ev_odds_map[gid] = odds_client.get_event_player_odds(gid, markets="spreads,totals", use_saved_data=(not fresh))
+            ev_odds_map[gid] = odds_client.get_event_player_odds(gid, markets="spreads,totals", mode=eff_mode)
         except Exception as exc:
             print(f"[services] defenses: fetch odds failed game={gid} err={exc}")
             ev_odds_map[gid] = None
@@ -333,6 +335,7 @@ def build_dashboard(
     season: str,
     region: str = "us",
     fresh: bool = False,
+    cache_mode: str = "auto",
     weeks: str = "both",  # 'this' | 'next' | 'both'
     def_scope: str = "owned",  # 'owned' | 'available' | 'both'
     include_players: bool = True,
@@ -356,9 +359,9 @@ def build_dashboard(
     proj_this = None
     proj_next = None
     if weeks in ("this", "both"):
-        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh)
+        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
     if weeks in ("next", "both"):
-        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh)
+        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
 
     # Build lineups from one projections call per week
     lineups = {"this": None, "next": None}
@@ -379,9 +382,9 @@ def build_dashboard(
     defs_this = None
     defs_next = None
     if weeks in ("this", "both"):
-        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh)
+        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
     if weeks in ("next", "both"):
-        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh)
+        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
 
     # Choose latest ratelimit info
     rl_info = ratelimit.get_details()

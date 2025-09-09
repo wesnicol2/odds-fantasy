@@ -126,9 +126,10 @@ def application(environ, start_response):
             week = q("week", "this")
             region = q("region", "us")
             fresh = q("fresh", "0") in ("1", "true", "True")
+            mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] projections user={username} season={season} week={week} region={region} fresh={fresh}")
-            data = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh)
+            _dprint(f"[api] projections user={username} season={season} week={week} region={region} mode={mode} fresh={fresh}")
+            data = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode))
             _dprint(f"[api] projections done players={len(data.get('players', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
@@ -138,9 +139,10 @@ def application(environ, start_response):
             week = q("week", "this")
             target = q("target", "mid")
             fresh = q("fresh", "0") in ("1", "true", "True")
+            mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] lineup user={username} season={season} week={week} target={target} fresh={fresh}")
-            proj = compute_projections(username=username, season=season, week=week, fresh=fresh)
+            _dprint(f"[api] lineup user={username} season={season} week={week} target={target} mode={mode} fresh={fresh}")
+            proj = compute_projections(username=username, season=season, week=week, fresh=fresh, cache_mode=('fresh' if fresh else mode))
             lineup = build_lineup(proj.get("players", []), target=target)
             lineup["ratelimit"] = ratelimit.format_status()
             lineup["ratelimit_info"] = ratelimit.get_details()
@@ -152,9 +154,10 @@ def application(environ, start_response):
             season = q("season", "2025")
             week = q("week", "this")
             fresh = q("fresh", "0") in ("1", "true", "True")
+            mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] lineup/diffs user={username} season={season} week={week} fresh={fresh}")
-            proj = compute_projections(username=username, season=season, week=week, fresh=fresh)
+            _dprint(f"[api] lineup/diffs user={username} season={season} week={week} mode={mode} fresh={fresh}")
+            proj = compute_projections(username=username, season=season, week=week, fresh=fresh, cache_mode=('fresh' if fresh else mode))
             diffs = build_lineup_diffs(proj.get("players", []))
             diffs["ratelimit"] = ratelimit.format_status()
             diffs["ratelimit_info"] = ratelimit.get_details()
@@ -167,9 +170,10 @@ def application(environ, start_response):
             week = q("week", "this")
             scope = q("scope", "both")
             fresh = q("fresh", "0") in ("1", "true", "True")
+            mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] defenses user={username} season={season} week={week} scope={scope} fresh={fresh}")
-            data = list_defenses(username=username, season=season, week=week, scope=scope, fresh=fresh)
+            _dprint(f"[api] defenses user={username} season={season} week={week} scope={scope} mode={mode} fresh={fresh}")
+            data = list_defenses(username=username, season=season, week=week, scope=scope, fresh=fresh, cache_mode=('fresh' if fresh else mode))
             _dprint(f"[api] defenses done rows={len(data.get('defenses', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
@@ -178,12 +182,13 @@ def application(environ, start_response):
             season = q("season", "2025")
             region = q("region", "us")
             fresh = q("fresh", "0") in ("1", "true", "True")
+            mode = q("mode", "auto")
             weeks = q("weeks", "this")  # default lighter workload
             def_scope = q("def_scope", "owned")
             include_players = q("include_players", "1") in ("1", "true", "True")
             t0 = time.time()
-            _dprint(f"[api] dashboard user={username} season={season} region={region} fresh={fresh} weeks={weeks} def_scope={def_scope} include_players={include_players}")
-            data = build_dashboard(username=username, season=season, region=region, fresh=fresh, weeks=weeks, def_scope=def_scope, include_players=include_players)
+            _dprint(f"[api] dashboard user={username} season={season} region={region} mode={mode} fresh={fresh} weeks={weeks} def_scope={def_scope} include_players={include_players}")
+            data = build_dashboard(username=username, season=season, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), weeks=weeks, def_scope=def_scope, include_players=include_players)
             _dprint(f"[api] dashboard done rl={data.get('ratelimit')} dt={(time.time()-t0):.2f}s")
             return _json_response_adv(environ, start_response, data)
 
@@ -208,6 +213,9 @@ def main():
 
     # Set module debug flag from CLI
     set_debug(args.debug)
+    if args.debug:
+        # propagate to submodules that read env directly
+        os.environ['API_DEBUG'] = '1'
 
     print("""
 Starting Odds Fantasy API

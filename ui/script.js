@@ -13,6 +13,16 @@ const appCache = {
   lastRateLimit: null,
 };
 
+// Track network activity to drive header spinner
+let _inflight = 0;
+function _updateNetSpin() {
+  const el = $('netSpin');
+  if (!el) return;
+  if (_inflight > 0) el.classList.remove('hidden'); else el.classList.add('hidden');
+}
+function _incNet() { _inflight++; _updateNetSpin(); }
+function _decNet() { _inflight = Math.max(0, _inflight - 1); _updateNetSpin(); }
+
 function setStatus(el, msg) { if (el) el.textContent = msg || ''; }
 
 function formatRateLimit(info, fallbackStr) {
@@ -56,12 +66,14 @@ function showContainerLoading(containerId, msg) {
 async function fetchJSON(url) {
   const t0 = performance.now();
   dbg('fetchJSON:start', url);
+  _incNet();
   const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); } catch (e) { data = { _parse_error: true, raw: text }; }
   const dt = (performance.now() - t0).toFixed(1);
   dbg('fetchJSON:done', { url, status: res.status, ok: res.ok, ms: dt, bytes: text?.length || 0 });
+  _decNet();
   return { ok: res.ok, status: res.status, data };
 }
 
@@ -71,10 +83,9 @@ function apiUrl(path, params = {}) {
   return `${base}${path}?${q.toString()}`;
 }
 
-function isFreshSelected() {
+function getDataMode() {
   const el = document.querySelector('input[name="dataMode"]:checked');
-  const mode = el ? el.value : 'cache';
-  return mode === 'fresh';
+  return el ? el.value : 'auto';
 }
 
 function renderLineup(containerId, title, payload) {
@@ -129,8 +140,8 @@ async function loadLineup(week, target) {
   if (!cached) {
     dbg('loadLineup:no-cache', { week, target });
     showContainerLoading(containerId, 'Loading lineup…');
-    const fresh = isFreshSelected() ? '1' : '0';
-    const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, fresh });
+  const mode = getDataMode();
+  const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, mode });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load lineup.</div>'; return; }
     appCache.lineups[week] = appCache.lineups[week] || {};
@@ -166,8 +177,8 @@ async function showPlayers(week) {
   if (!cached) {
     dbg('showPlayers:no-cache', { week });
     showContainerLoading(containerId, 'Loading players…');
-    const fresh = isFreshSelected() ? '1' : '0';
-    const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, fresh });
+  const mode = getDataMode();
+  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load players.</div>'; return; }
     appCache.projections[week] = data;
@@ -185,8 +196,8 @@ async function loadDefenses(week) {
   if (!cached) {
     dbg('loadDefenses:no-cache', { week });
     showContainerLoading(containerId, 'Loading defenses…');
-    const fresh = isFreshSelected() ? '1' : '0';
-    const url = apiUrl('/defenses', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, scope: 'both', fresh });
+  const mode = getDataMode();
+  const url = apiUrl('/defenses', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, scope: 'both', mode });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load defenses.</div>'; return; }
     appCache.defenses[week] = data;
@@ -201,8 +212,8 @@ async function loadDefenses(week) {
 async function refreshAll() {
   const username = val('username') || 'wesnicol';
   const season = val('season') || '2025';
-  const fresh = isFreshSelected() ? '1' : '0';
-  const url = apiUrl('/dashboard', { username, season, fresh, weeks: 'this', def_scope: 'owned', include_players: '1' });
+  const mode = getDataMode();
+  const url = apiUrl('/dashboard', { username, season, mode, weeks: 'this', def_scope: 'owned', include_players: '1' });
   dbg('refreshAll:start', { url, username, season });
   setStatus($('pingStatus'), 'Refreshing...');
   showGlobalLoading('Refreshing dashboard…');
@@ -249,7 +260,7 @@ async function dbgProjections(week) {
     username: val('username') || 'wesnicol',
     season: val('season') || '2025',
     week,
-    fresh: isFreshSelected() ? '1' : '0'
+    mode: getDataMode()
   });
   showContainerLoading('projectionsDebug', 'Loading projections…');
   const { ok, data } = await fetchJSON(url);
@@ -274,4 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnProjNext').addEventListener('click', () => dbgProjections('next'));
   dbg('DOMContentLoaded');
   // Click 'Refresh' to load dashboard data when you want to fetch.
+  // Global error surfacing for visibility
+  window.addEventListener('error', (e) => {
+    console.error('[ui] window.error', e?.error || e?.message || e);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('[ui] unhandledrejection', e?.reason || e);
+  });
 });
