@@ -1,7 +1,14 @@
+import os
+import json
+import time
 import requests
-from config import SLEEPER_TO_ODDSAPI_TEAM
+from config import SLEEPER_TO_ODDSAPI_TEAM, DATA_DIR
 
 SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
+REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
+_PLAYERS_CACHE = None
+_PLAYERS_CACHE_FILE = os.path.join(DATA_DIR, 'sleeper_players.json')
+_PLAYERS_TTL = int(os.getenv('SLEEPER_PLAYERS_TTL', '86400'))  # 24h
 
 
 def get_player_enhanced_info(player_id):
@@ -59,7 +66,7 @@ def get_user_id(username):
     Fetch the Sleeper user ID for a given username.
     """
     url = f"{SLEEPER_BASE_URL}/user/{username}"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()["user_id"]
 
@@ -69,7 +76,7 @@ def get_user_leagues(user_id, season):
     Fetch all leagues for a user in a given season.
     """
     url = f"{SLEEPER_BASE_URL}/user/{user_id}/leagues/nfl/{season}"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -79,19 +86,43 @@ def get_league_rosters(league_id):
     Fetch all rosters for a given league.
     """
     url = f"{SLEEPER_BASE_URL}/league/{league_id}/rosters"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
 
-def get_players():
+def get_players(fresh: bool = False):
+    """Fetch all NFL player metadata from Sleeper with simple disk cache.
+
+    Set env SLEEPER_FRESH=1 or pass fresh=True to bypass cache.
     """
-    Fetch all NFL player metadata from Sleeper.
-    """
+    global _PLAYERS_CACHE
+    if _PLAYERS_CACHE is not None and not fresh:
+        return _PLAYERS_CACHE
+    # Try disk cache
+    try:
+        if (not fresh) and os.path.exists(_PLAYERS_CACHE_FILE):
+            mtime = os.path.getmtime(_PLAYERS_CACHE_FILE)
+            if (time.time() - mtime) < _PLAYERS_TTL:
+                with open(_PLAYERS_CACHE_FILE, 'r') as f:
+                    _PLAYERS_CACHE = json.load(f)
+                    return _PLAYERS_CACHE
+    except Exception:
+        pass
+    # Fetch from network
     url = f"{SLEEPER_BASE_URL}/players/nfl"
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+    _PLAYERS_CACHE = data
+    # Save to disk best-effort
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(_PLAYERS_CACHE_FILE, 'w') as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+    return data
 
 def get_available_defenses(username, season):
     # 1. Get all player metadata
