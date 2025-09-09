@@ -2,7 +2,7 @@ import requests
 import datetime
 import os
 import json
-from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR
+from config import API_KEY, EVENTS_URL, POSITION_STAT_CONFIG, STAT_MARKET_MAPPING, DATA_DIR, POSITION_STAT_CONFIG
 
 # Path for the cache file
 CACHE_FILE = os.path.join(DATA_DIR, "odds_api_cache.json")
@@ -90,22 +90,22 @@ def get_required_markets_for_position(position):
 
 def get_game_id_from_team_name(team_name):
     """
-    Fetches the game ID for the specified team from the list of NFL events.
+    Fetches all event IDs for the specified team from the list of NFL events.
 
     Args:
         team_name (str): The full name of the NFL team (e.g., "Kansas City Chiefs").
 
     Returns:
-        str: The game ID for the team's next NFL game, or None if no match is found.
+        list: A list of event IDs for all upcoming games involving the team. Empty list if no match is found.
     """
     nfl_events = get_nfl_events()
-    
+    event_ids = []
     for event in nfl_events:
         if team_name == event['home_team'] or team_name == event['away_team']:
-            return event['id']
-    
-    print(f"Team '{team_name}' not found in any upcoming games.")
-    return None
+            event_ids.append(event['id'])
+    if not event_ids:
+        print(f"Team '{team_name}' not found in any upcoming games.")
+    return event_ids
 
 # Group players by NFL game to minimize API requests
 def group_players_by_game(rosters):
@@ -120,9 +120,9 @@ def group_players_by_game(rosters):
     """
     games = {}
     for roster in rosters:
-        for player in roster["players"]["player"]:
+        for player in roster["players"].values():
             nfl_team = player["editorial_team_full_name"]
-            game_id = get_game_id_from_team_name(nfl_team)
+            game_id = get_game_id_from_team_name(nfl_team)[0] # Only take the first game ID to keep only the next week of stats
             if game_id not in games:
                 games[game_id] = {"players": []}
             games[game_id]["players"].append(player)
@@ -255,6 +255,35 @@ def save_player_odds(player_odds, filename=f'{DATA_DIR}/all_player_odds.json'):
         print(f"Player odds data successfully saved to {filename}.")
     except IOError as e:
         print(f"Error saving player odds to file: {e}")
+
+
+def get_defensive_odds_for_team(team_name, use_saved_data=True):
+    """
+    Fetches defensive player odds for a specific NFL team.
+
+    Args:
+        team_name (str): The full name of the NFL team (e.g., "Kansas City Chiefs").
+
+    Returns:
+        dict: Odds data for defensive players of the specified team, or None if no match is found.
+    """
+    game_ids = get_game_id_from_team_name(team_name)
+    if not game_ids:
+        return None
+
+    defensive_markets = POSITION_STAT_CONFIG["DEF"]
+    markets_str = ",".join(defensive_markets)
+
+    all_event_odds = {}
+    for game_id in game_ids:
+        event_odds = get_event_player_odds(event_id=game_id, markets=markets_str, use_saved_data=use_saved_data)
+        if event_odds:
+            all_event_odds[game_id] = event_odds
+        else:
+            print(f"No odds data found for team '{team_name}' in game ID '{game_id}'.")
+
+    return all_event_odds if all_event_odds else None
+
 
 
 def identify_betting_opportunities_on_fanduel(all_player_odds):

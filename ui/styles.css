@@ -1,0 +1,28 @@
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #222; background: #fafafa; }
+header { background: #0f172a; color: #fff; padding: 12px 16px; }
+h1 { margin: 0 0 8px 0; font-size: 20px; }
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; }
+button { padding: 8px 12px; border: 1px solid #334155; background: #1e293b; color: #fff; border-radius: 4px; cursor: pointer; }
+button:hover { background: #0ea5e9; border-color: #0ea5e9; }
+.btn-row { display: flex; gap: 8px; margin: 8px 0; }
+main { padding: 16px; max-width: 1100px; margin: 0 auto; }
+section { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.results { margin-top: 8px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e5e7eb; }
+th { background: #f1f5f9; }
+.status { margin-left: 10px; font-size: 13px; color: #334155; }
+.debug { background: #0b1020; color: #e2e8f0; padding: 10px; border-radius: 6px; max-height: 300px; overflow: auto; }
+
+/* Loading helpers */
+.hidden { display: none !important; }
+.spinner { width: 16px; height: 16px; border: 3px solid #cbd5e1; border-top-color: #0ea5e9; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.overlay-box { background: #0f172a; color: #e2e8f0; padding: 12px 16px; border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.25); display: inline-flex; gap: 10px; align-items: center; }
+
+/* Disabled button feedback */
+button:disabled { opacity: 0.6; cursor: not-allowed; }
