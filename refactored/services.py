@@ -21,7 +21,7 @@ def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
     return (this_start, this_end) if which == "this" else (next_start, next_end)
 
 
-def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], use_saved_data: bool) -> Dict[str, Dict[str, list]]:
+def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str) -> Dict[str, Dict[str, list]]:
     """Fetch event odds concurrently per week for planned games.
 
     Uses a small thread pool to parallelize network calls when cache misses occur.
@@ -38,8 +38,8 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], use_saved_data: bool
         def task(pair):
             gid, g = pair
             markets_str = ",".join(sorted(set(g.markets)))
-            print(f"[services] fetch odds week={w} game={gid} markets={len(g.markets)}")
-            data = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, use_saved_data=use_saved_data)
+            print(f"[services] fetch odds week={w} game={gid} markets={len(g.markets)} mode={cache_mode}")
+            data = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, mode=cache_mode)
             return gid, data
 
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
