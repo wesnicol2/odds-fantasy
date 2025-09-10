@@ -14,6 +14,8 @@ from .range_model import compute_fantasy_range
 from . import odds_client
 from . import ratelimit
 from config import SLEEPER_TO_ODDSAPI_TEAM
+from predicted_stats import predict_stats_for_player
+from config import STAT_MARKET_MAPPING_SLEEPER
 
 
 def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
@@ -411,3 +413,190 @@ def build_dashboard(
     }
     print(f"[services] build_dashboard complete; rl={payload['ratelimit']}")
     return payload
+
+
+def _norm_name(s: str) -> str:
+    try:
+        s = (s or "").lower()
+        import re
+        s = re.sub(r"[\.'`-]", " ", s)
+        s = re.sub(r"[^a-z0-9 ]", "", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        toks = [t for t in s.split(" ") if t not in ("jr", "sr", "ii", "iii", "iv", "v")]
+        return " ".join(toks)
+    except Exception:
+        return s or ""
+
+
+def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto") -> Dict:
+    """Return per-book odds and market summaries used for a single player.
+
+    Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).
+    """
+    (this_start, this_end), (next_start, next_end) = compute_week_windows()
+    eff_mode = cache_mode
+    # Roster & planning (to get scoring rules and player mapping)
+    roster = sleeper_api.get_user_sleeper_data(username, season)
+    scoring_rules = roster.get("scoring_rules", {}) if roster else {}
+    windows = (this_start, this_end) if week == "this" else (next_start, next_end)
+    plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
+    planned = plan_all.get(week, {})
+    # Fetch odds for planned games
+    odds_by_week = _fetch_odds({week: planned}, cache_mode=eff_mode)
+    ev_odds = odds_by_week.get(week, {})
+    # Aggregate
+    per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, planned)
+    # Build alias->info map
+    info_by_alias: Dict[str, dict] = {}
+    for g in planned.values():
+        for p in g.players:
+            info_by_alias[p["alias"]] = p
+    # Resolve name -> alias (exact or normalized)
+    target_alias = None
+    n_target = _norm_name(name)
+    for alias, pinfo in info_by_alias.items():
+        full = pinfo.get("full_name", alias)
+        if full == name:
+            target_alias = alias
+            break
+    if target_alias is None:
+        for alias, pinfo in info_by_alias.items():
+            full = pinfo.get("full_name", alias)
+            if _norm_name(full) == n_target:
+                target_alias = alias
+                break
+    if target_alias is None:
+        return {"player": {"name": name}, "markets": {}, "primary_order": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+
+    by_book = per_player_odds.get(target_alias, {})
+    market_summaries = per_player_summaries.get(target_alias, {})
+
+    # Predicted mean stats per market (averaged over books)
+    mean_stats = predict_stats_for_player(by_book)
+    # Compute rough impact score = abs(mean * multiplier)
+    impacts: Dict[str, float] = {}
+    for mkey, mean_val in mean_stats.items():
+        rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
+        mult = 0.0
+        try:
+            if rule and (rule in scoring_rules):
+                mult = float(scoring_rules[rule])
+        except Exception:
+            mult = 0.0
+        impacts[mkey] = abs((mean_val or 0.0) * (mult or 0.0))
+    order = sorted(impacts.keys(), key=lambda k: impacts[k], reverse=True)
+    primary = order[:5]
+
+    # Build per-market details
+    markets_out: Dict[str, dict] = {}
+    for mkey in set(list(by_book.keys()) + list(market_summaries.keys()) + list(mean_stats.keys())):
+        # Per-book rows
+        books = []
+        for book_key, mkts in by_book.items():
+            sides = mkts.get(mkey, {"over": None, "under": None})
+            books.append({
+                "book": book_key,
+                "over": sides.get("over"),
+                "under": sides.get("under"),
+            })
+        summ = market_summaries.get(mkey)
+        m_summ = None
+        if summ is not None:
+            m_summ = {
+                "avg_threshold": getattr(summ, "avg_threshold", 0.0),
+                "avg_over_prob": getattr(summ, "avg_over_prob", 0.0),
+                "avg_under_prob": getattr(summ, "avg_under_prob", 0.0),
+                "samples": getattr(summ, "samples", 0),
+            }
+        markets_out[mkey] = {
+            "summary": m_summ,
+            "mean_stat": mean_stats.get(mkey),
+            "impact_score": impacts.get(mkey, 0.0),
+            "books": books,
+        }
+
+    pinfo = info_by_alias.get(target_alias, {})
+    payload = {
+        "player": {
+            "name": pinfo.get("full_name", name or target_alias),
+            "pos": pinfo.get("primary_position"),
+            "team": pinfo.get("editorial_team_full_name"),
+        },
+        "markets": markets_out,
+        "primary_order": primary,
+        "all_order": order,
+        "ratelimit": ratelimit.format_status(),
+        "ratelimit_info": ratelimit.get_details(),
+    }
+    return payload
+
+
+def get_defense_odds_details(username: str, season: str, week: str = "this", defense: str = "", cache_mode: str = "auto") -> Dict:
+    """Return per-book totals/spreads and implied totals for opponent against this defense.
+
+    Sorted by implied total ascending per game, includes medians.
+    """
+    (this_start, this_end), (next_start, next_end) = compute_week_windows()
+    eff_mode = cache_mode
+    # Window and events
+    start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
+    events = odds_client.get_nfl_events(mode=eff_mode)
+    window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
+    # Find games with this defense
+    games = [e for e in window_events if defense in (e.get("home_team"), e.get("away_team"))]
+    details = []
+    for e in games:
+        gid = e["id"]
+        opp = e["away_team"] if e["home_team"] == defense else e["home_team"]
+        ev_odds = odds_client.get_event_player_odds(gid, markets="spreads,totals", mode=eff_mode)
+        # Normalize
+        ev_obj = ev_odds[0] if isinstance(ev_odds, list) and ev_odds else (ev_odds if isinstance(ev_odds, dict) else None)
+        if not ev_obj:
+            continue
+        books_rows = []
+        implieds = []
+        for book in ev_obj.get("bookmakers", []):
+            total_pt = None
+            opp_spread = None
+            for m in book.get("markets", []):
+                if m.get("key") == "totals":
+                    for o in m.get("outcomes", []):
+                        if o.get("name") == "Over":
+                            total_pt = o.get("point")
+                if m.get("key") == "spreads":
+                    for o in m.get("outcomes", []):
+                        if o.get("name") == opp:
+                            opp_spread = o.get("point")
+            impl = None
+            try:
+                if total_pt is not None and opp_spread is not None:
+                    impl = _implied_total(float(total_pt), float(opp_spread))
+                    implieds.append(impl)
+            except Exception:
+                impl = None
+            books_rows.append({
+                "book": book.get("key"),
+                "total_point": total_pt,
+                "opponent_spread": opp_spread,
+                "opponent_implied": impl,
+            })
+        median = None
+        if implieds:
+            implieds.sort()
+            median = implieds[len(implieds)//2] if len(implieds) % 2 == 1 else (implieds[len(implieds)//2 -1] + implieds[len(implieds)//2])/2
+        details.append({
+            "game_id": gid,
+            "opponent": opp,
+            "commence_time": e.get("commence_time"),
+            "books": books_rows,
+            "implied_total_median": median,
+        })
+    # Sort games by implied total ascending
+    details.sort(key=lambda g: (g.get("implied_total_median") if g.get("implied_total_median") is not None else 9999))
+    return {
+        "defense": defense,
+        "week": week,
+        "games": details,
+        "ratelimit": ratelimit.format_status(),
+        "ratelimit_info": ratelimit.get_details(),
+    }

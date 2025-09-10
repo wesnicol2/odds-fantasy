@@ -18,6 +18,7 @@ from socketserver import ThreadingMixIn
 from typing import Callable
 
 from . import ratelimit
+from . import services  # for detail endpoints
 from .services import compute_projections, build_lineup, build_lineup_diffs, list_defenses, build_dashboard
 
 # Module-level debug flag (defaults to False). Can be enabled via --debug CLI.
@@ -179,6 +180,31 @@ def application(environ, start_response):
             _dprint(f"[api] defenses user={username} season={season} week={week} scope={scope} mode={mode} fresh={fresh}")
             data = list_defenses(username=username, season=season, week=week, scope=scope, fresh=fresh, cache_mode=('fresh' if fresh else mode))
             _dprint(f"[api] defenses done rows={len(data.get('defenses', []))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, "200 OK", data)
+
+        if path == "/player/odds":
+            username = q("username", "wesnicol")
+            season = q("season", "2025")
+            week = q("week", "this")
+            region = q("region", "us")
+            name = q("name", "")
+            mode = q("mode", "auto")
+            t0 = time.time()
+            _dprint(f"[api] player/odds user={username} season={season} week={week} name={name} mode={mode}")
+            data = services.get_player_odds_details(username=username, season=season, week=week, region=region, name=name, cache_mode=mode)
+            _dprint(f"[api] player/odds done markets={len(data.get('markets', {}))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, "200 OK", data)
+
+        if path == "/defense/odds":
+            username = q("username", "wesnicol")
+            season = q("season", "2025")
+            week = q("week", "this")
+            defense = q("defense", "")
+            mode = q("mode", "auto")
+            t0 = time.time()
+            _dprint(f"[api] defense/odds user={username} season={season} week={week} defense={defense} mode={mode}")
+            data = services.get_defense_odds_details(username=username, season=season, week=week, defense=defense, cache_mode=mode)
+            _dprint(f"[api] defense/odds done games={len(data.get('games', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
         if path == "/dashboard":
