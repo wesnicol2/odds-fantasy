@@ -38,3 +38,22 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .pill { display: inline-block; padding: 2px 6px; border-radius: 999px; background: #1e293b; color: #cbd5e1; font-size: 12px; margin-left: 6px; }
 .muted { color: #94a3b8; }
 
+/* Predicted stats emphasis */
+.predicted { background: #0f172a; border: 1px solid #233; border-radius: 8px; padding: 10px; margin: 6px 0 10px 0; }
+.predicted-title { font-size: 12px; color: #93c5fd; letter-spacing: 0.04em; text-transform: uppercase; }
+.predicted-values { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-top: 6px; }
+.predicted-values .pv { display: inline-flex; gap: 6px; align-items: baseline; background: #111827; border: 1px solid #233; padding: 6px 10px; border-radius: 6px; }
+.predicted-values .pv .label { font-size: 12px; color: #9ca3af; }
+.predicted-values .pv .val { font-size: 18px; font-weight: 600; color: #e5e7eb; }
+.predicted-values .pv.floor .val { color: #f59e0b; }
+.predicted-values .pv.mid .val { color: #22c55e; }
+.predicted-values .pv.ceiling .val { color: #60a5fa; }
+
+/* Collapsible market blocks */
+.market { border: 1px solid #1f2937; border-radius: 8px; margin: 8px 0; overflow: hidden; background: #0b1222; }
+.market-summary { cursor: pointer; padding: 8px 10px; display: flex; align-items: center; gap: 10px; background: #0e162a; border-bottom: 1px solid #1f2937; }
+.market-summary .title { font-weight: 600; color: #e5e7eb; }
+.market-summary .meta { color: #9ca3af; font-size: 12px; }
+.market-summary .chev { margin-left: auto; transition: transform 0.15s ease; color: #9ca3af; }
+.market-summary[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.market-details { padding: 8px 10px; }
