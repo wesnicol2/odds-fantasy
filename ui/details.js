@@ -1,4 +1,4 @@
-// Details modal helpers and on-demand odds detail viewers
+﻿// Details modal helpers and on-demand odds detail viewers
 
 function showDetails(title, html) {
   var overlay = document.getElementById('detailsOverlay');
@@ -15,7 +15,7 @@ function hideDetails() {
 }
 
 function _fmt(val, digits=2) {
-  return (val==null || Number.isNaN(Number(val))) ? '—' : Number(val).toFixed(digits);
+  return (val==null || Number.isNaN(Number(val))) ? 'â€”' : Number(val).toFixed(digits);
 }
 
 function _escapeHtml(s) {
@@ -56,20 +56,20 @@ function renderMarketBlock(key, payload) {
   var header = [
     '<div class="market-summary" aria-expanded="false" data-target="mk_', safeKey, '">',
       '<div class="title">', _prettyMarketLabel(key), '</div>',
-      '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : '—'),
+      '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : 'â€”'),
       ' <span class="pill">impact ', _fmt(impact), '</span>',
       s && (s.samples!=null) ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : '',
       '</div>',
-      '<div class="chev">▶</div>',
+      '<div class="chev">â–¶</div>',
     '</div>'
   ].join('');
   var rows = (payload.books || []).map(function(b){
     return '<tr>'
       + '<td>' + (b.book||'') + '</td>'
-      + '<td>' + (b.over && b.over.odds!=null?_fmt(b.over.odds):'—') + '</td>'
-      + '<td>' + (b.over && b.over.point!=null?_fmt(b.over.point):'—') + '</td>'
-      + '<td>' + (b.under && b.under.odds!=null?_fmt(b.under.odds):'—') + '</td>'
-      + '<td>' + (b.under && b.under.point!=null?_fmt(b.under.point):'—') + '</td>'
+      + '<td>' + (b.over && b.over.odds!=null?_fmt(b.over.odds):'â€”') + '</td>'
+      + '<td>' + (b.over && b.over.point!=null?_fmt(b.over.point):'â€”') + '</td>'
+      + '<td>' + (b.under && b.under.odds!=null?_fmt(b.under.odds):'â€”') + '</td>'
+      + '<td>' + (b.under && b.under.point!=null?_fmt(b.under.point):'â€”') + '</td>'
       + '</tr>';
   }).join('');
   var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
@@ -77,6 +77,17 @@ function renderMarketBlock(key, payload) {
 }
 
 async function openPlayerDetails(name, week) {
+  try {
+    var n = String(name||'');
+    n = n.replace(/[\u00B7\u2022\u2219]/g,' ').replace(/[\u00C2]/g,'');
+    var STAT_LABELS = ['Any TD','Pass Yds','Pass TDs','INTs','Rush Yds','Rec','Rec Yds'];
+    var idx = -1;
+    for (var i=0;i<STAT_LABELS.length;i++){ var k = STAT_LABELS[i]; var p = n.indexOf(' '+k); if (p > 0) { idx = (idx<0? p : Math.min(idx,p)); } }
+    if (idx > 0) n = n.substring(0, idx);
+    n = n.replace(/\s+/g,' ').trim();
+    if (n) name = n;
+  } catch (e) {}
+
   showDetails('Player Details', '<div class="status"><span class="spinner"></span> Loading...</div>');
   // Fetch odds detail + projections for fantasy points trio
   var oddsUrl = apiUrl('/player/odds', {
@@ -112,7 +123,7 @@ async function openPlayerDetails(name, week) {
     if (match) { floor = match.floor; mid = match.mid; ceiling = match.ceiling; }
   } catch (e) { /* ignore */ }
 
-  var head = '<div style="margin-bottom:6px;"><strong>' + (p.name || name) + '</strong> <span class="muted">' + (p.pos || '') + ' · ' + (p.team || '') + '</span></div>';
+  var head = '<div style="margin-bottom:6px;"><strong>' + (p.name || name) + '</strong> <span class="muted">' + (p.pos || '') + ' Â· ' + (p.team || '') + '</span></div>';
   var predicted = ''
     + '<div class="predicted">'
     +   '<div class="predicted-title">Fantasy Points</div>'
@@ -123,13 +134,39 @@ async function openPlayerDetails(name, week) {
     +   '</div>'
     + '</div>';
 
+  // Stat coverage summary for this position
+  function expectedForPos(pos){
+    switch((pos||'').toUpperCase()){
+      case 'QB': return ['player_pass_yds','player_pass_tds','player_pass_interceptions','player_rush_yds'];
+      case 'RB': return ['player_rush_yds','player_anytime_td','player_receptions','player_reception_yds'];
+      case 'WR': return ['player_receptions','player_reception_yds','player_anytime_td'];
+      case 'TE': return ['player_receptions','player_reception_yds','player_anytime_td'];
+      default: return ['player_anytime_td'];
+    }
+  }
+  var mkeys = Object.keys(markets||{});
+  var present = [];
+  var fallback = [];
+  var missing = [];
+  expectedForPos(p.pos).forEach(function(k){
+    if (mkeys.indexOf(k) >= 0) {
+      if (markets[k] && markets[k].summary) present.push(k); else fallback.push(k);
+    } else missing.push(k);
+  });
+  var covPill = function(k, cls, text){ return '<span class="pill ' + cls + '" title="' + _escapeHtml(text) + '">' + _prettyMarketLabel(k) + '</span>'; };
+  var covHtml = '<div class="muted" style="margin:6px 0 4px 0;">Stat Coverage: '
+    + (present.map(function(k){return covPill(k,'','OK');}).join(' ') || '')
+    + (fallback.length? (' ' + fallback.map(function(k){return covPill(k,'pill-warn','Used fallback (no prob summary)');}).join(' ')) : '')
+    + (missing.length? (' ' + missing.map(function(k){return covPill(k,'pill-warn','Missing odds/market');}).join(' ')) : '')
+    + '</div>';
+
   var primaryHtml = primary.map(function(k){ return renderMarketBlock(k, markets[k]); }).join('');
   if (!primaryHtml) primaryHtml = '<div class="muted">No primary markets.</div>';
   var others = (data.all_order || []).filter(function(k){ return primary.indexOf(k) === -1; });
   var otherHtml = others.map(function(k){ return renderMarketBlock(k, markets[k]); }).join('');
   if (!otherHtml) otherHtml = '<div class="muted">No other markets.</div>';
   var debugHtml = renderRawOddsSection(data.raw_odds);
-  var html = [head, predicted, '<h4>Primary Markets</h4>', primaryHtml, '<h4>Other Markets</h4>', otherHtml, debugHtml].join('');
+  var html = [head, predicted, covHtml, '<h4>Primary Markets</h4>', primaryHtml, '<h4>Other Markets</h4>', otherHtml, debugHtml].join('');
   showDetails('Player Details', html);
 }
 
@@ -152,16 +189,16 @@ async function openDefenseDetails(defense, week) {
     var header = [
       '<div class="market-summary" aria-expanded="false" data-target="', id, '">',
         '<div class="title">', defense, ' vs ', g.opponent, '</div>',
-        '<div class="meta">', (g.commence_time||''), ' · Opp Implied Median: <strong>', _fmt(g.implied_total_median), '</strong></div>',
-        '<div class="chev">▶</div>',
+        '<div class="meta">', (g.commence_time||''), ' Â· Opp Implied Median: <strong>', _fmt(g.implied_total_median), '</strong></div>',
+        '<div class="chev">â–¶</div>',
       '</div>'
     ].join('');
     var rows = (g.books||[]).map(function(b){
       return '<tr>'
         + '<td>' + (b.book||'') + '</td>'
-        + '<td>' + (b.total_point!=null?_fmt(b.total_point):'—') + '</td>'
-        + '<td>' + (b.opponent_spread!=null?_fmt(b.opponent_spread):'—') + '</td>'
-        + '<td>' + (b.opponent_implied!=null?_fmt(b.opponent_implied):'—') + '</td>'
+        + '<td>' + (b.total_point!=null?_fmt(b.total_point):'â€”') + '</td>'
+        + '<td>' + (b.opponent_spread!=null?_fmt(b.opponent_spread):'â€”') + '</td>'
+        + '<td>' + (b.opponent_implied!=null?_fmt(b.opponent_implied):'â€”') + '</td>'
         + '</tr>';
     }).join('');
     var table = '<table><thead><tr><th>Book</th><th>Total</th><th>Opp Spread</th><th>Opp Implied</th></tr></thead><tbody>' + rows + '</tbody></table>';
@@ -194,20 +231,20 @@ function renderRawOddsSection(raw) {
         if (!ev) return;
         var eid = _escapeHtml(ev.id || item.id || (''+eidx+'_'+sub));
         var hdrTitle = (ev.home_team && ev.away_team) ? (_escapeHtml(ev.away_team) + ' @ ' + _escapeHtml(ev.home_team)) : ('Event ' + eid);
-        var meta = (ev.commence_time ? _escapeHtml(ev.commence_time) + ' · ' : '') + (ev.sport_key ? _escapeHtml(ev.sport_key) : '');
+        var meta = (ev.commence_time ? _escapeHtml(ev.commence_time) + ' Â· ' : '') + (ev.sport_key ? _escapeHtml(ev.sport_key) : '');
         var evHeader = '<div class="market-summary" aria-expanded="false" data-target="ev_' + eid + '">' +
                        '<div class="title">' + hdrTitle + '</div>' +
                        '<div class="meta">' + meta + '</div>' +
-                       '<div class="chev">▶</div></div>';
+                       '<div class="chev">â–¶</div></div>';
         var bms = Array.isArray(ev.bookmakers) ? ev.bookmakers : [];
         var bmBlocks = bms.map(function(bm, bidx){
           var bid = eid + '_bm_' + bidx;
           var btitle = _escapeHtml(bm.title || bm.key || ('Book ' + bidx));
-          var bmeta = (bm.key ? _escapeHtml(bm.key) + ' · ' : '') + (bm.last_update ? _escapeHtml(bm.last_update) : '');
+          var bmeta = (bm.key ? _escapeHtml(bm.key) + ' Â· ' : '') + (bm.last_update ? _escapeHtml(bm.last_update) : '');
           var bmHeader = '<div class="market-summary" aria-expanded="false" data-target="' + bid + '">' +
                          '<div class="title">' + btitle + '</div>' +
                          '<div class="meta">' + bmeta + '</div>' +
-                         '<div class="chev">▶</div></div>';
+                         '<div class="chev">â–¶</div></div>';
           var mkts = Array.isArray(bm.markets) ? bm.markets : [];
           var mBlocks = mkts.map(function(mkt, midx){
             var mid = bid + '_m_' + midx;
@@ -216,12 +253,12 @@ function renderRawOddsSection(raw) {
             var mHeader = '<div class="market-summary" aria-expanded="false" data-target="' + mid + '">' +
                           '<div class="title">' + mtitle + '</div>' +
                           '<div class="meta">' + mmeta + '</div>' +
-                          '<div class="chev">▶</div></div>';
+                          '<div class="chev">â–¶</div></div>';
             var outcomes = Array.isArray(mkt.outcomes) ? mkt.outcomes : [];
             var rows = outcomes.map(function(o){
               var name = _escapeHtml(o.name);
-              var price = (o.price!=null? _escapeHtml(o.price) : (o.odds!=null? _escapeHtml(o.odds): '—'));
-              var point = (o.point!=null? _escapeHtml(o.point) : '—');
+              var price = (o.price!=null? _escapeHtml(o.price) : (o.odds!=null? _escapeHtml(o.odds): 'â€”'));
+              var point = (o.point!=null? _escapeHtml(o.point) : 'â€”');
               var other = {};
               Object.keys(o||{}).forEach(function(k){ if (['name','price','odds','point'].indexOf(k)===-1) other[k]=o[k]; });
               var otherStr = (Object.keys(other).length? _escapeHtml(JSON.stringify(other)) : '');
@@ -283,7 +320,7 @@ document.addEventListener('DOMContentLoaded', function(){
     el.addEventListener('click', function(e){
       var td = e.target.closest('td'); if (!td) return;
       if (td.cellIndex !== nameColIndex) return;
-      var name = (td.textContent || '').trim(); if (!name) return;
+      var nameEl = td.querySelector('.player-name'); var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : (td.textContent || '').trim(); if (!name) return;
       openPlayerDetails(name, week);
     });
   }
@@ -301,8 +338,7 @@ document.addEventListener('DOMContentLoaded', function(){
       // Find the name cell in the same row depending on table layout
       var tr = td.parentElement; if (!tr) return;
       // Try typical layouts: lineup: name at index 1; players: name at index 0
-      var nameCell = tr.cells[1] || tr.cells[0];
-      var name = (nameCell && nameCell.textContent || '').trim(); if (!name) return;
+      var nameCell = tr.cells[1] || tr.cells[0]; var nameEl = nameCell ? nameCell.querySelector('.player-name') : null; var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : ((nameCell && nameCell.textContent) || '').trim(); if (!name) return;
       // Determine week from containerId suffix
       openPlayerDetails(name, week);
     });
@@ -328,3 +364,133 @@ document.addEventListener('DOMContentLoaded', function(){
   attachDefenseHandler('defenses-this', 'this');
   attachDefenseHandler('defenses-next', 'next');
 });
+
+// ---- UI overrides to highlight incomplete players and avoid zero placeholders ----
+// We override rendering helpers defined in script.js to add badges and dashes for missing stats.
+(function(){
+  // Defensive checks in case functions are renamed
+  function fmtCell(v, inc) { return inc ? 'â€”' : Number(v||0).toFixed(2); }
+
+  // Override renderPlayers to show incomplete badge and dashes
+  if (typeof window.renderPlayers === 'function') {
+    const _orig = window.renderPlayers;
+    window.renderPlayers = function(containerId, players) {
+      try {
+        const c = document.getElementById(containerId);
+        const rows = Array.isArray(players) ? players.slice() : [];
+        if (!c) return _orig(containerId, players);
+        if (!rows.length) { c.innerHTML = '<div class="status">No players found.</div>'; return; }
+        rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
+        const body = rows.map(r => {
+          const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
+          const nameHtml = inc ? (r.name + ' <span class="pill pill-warn" title="Odds missing; stats incomplete">incomplete</span>') : r.name;
+          return '<tr>'
+            + '<td>' + (inc ? ('<span class="incomplete-name">' + nameHtml + '</span>') : nameHtml) + '</td>'
+            + '<td>' + (r.pos || '') + '</td>'
+            + '<td>' + fmtCell(r.floor, inc) + '</td>'
+            + '<td>' + fmtCell(r.mid, inc) + '</td>'
+            + '<td>' + fmtCell(r.ceiling, inc) + '</td>'
+            + '</tr>';
+        }).join('');
+        c.innerHTML = '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>' + body + '</tbody></table>';
+      } catch (e) { try { _orig(containerId, players); } catch (_) {} }
+    }
+  }
+
+  // Override computeLineupFromPlayers to propagate incomplete flags
+  if (typeof window.computeLineupFromPlayers === 'function') {
+    window.computeLineupFromPlayers = function(players, target) {
+      const buckets = { QB: [], RB: [], WR: [], TE: [] };
+      for (const p of (players || [])) {
+        if (buckets[p.pos]) buckets[p.pos].push(p);
+      }
+      const by = (t) => (a, b) => Number(b[t] || 0) - Number(a[t] || 0);
+      Object.keys(buckets).forEach(pos => buckets[pos].sort(by(target)));
+      const used = new Set();
+      const take = (pos, n) => {
+        const out = [];
+        for (const p of buckets[pos]) {
+          if (!used.has(p.name)) { out.push(p); used.add(p.name); if (out.length === n) break; }
+        }
+        return out;
+      };
+      const lineup = { QB: take('QB', 1), RB: take('RB', 2), WR: take('WR', 2), TE: take('TE', 1) };
+      const flexPool = [];
+      for (const pos of ['WR','RB','TE']) {
+        for (const p of buckets[pos]) if (!used.has(p.name)) flexPool.push(p);
+      }
+      flexPool.sort(by(target));
+      lineup.FLEX = flexPool.slice(0, 1);
+      const rows = [];
+      let total = 0;
+      const add = (slot, p, countTotal=true) => {
+        const pts = Number(p[target] || 0);
+        if (countTotal) total += pts;
+        rows.push({ slot, name: p.name, pos: p.pos, floor: (p.floor!=null?Number(p.floor):null), mid: (p.mid!=null?Number(p.mid):null), ceiling: (p.ceiling!=null?Number(p.ceiling):null), incomplete: !!p.incomplete });
+      };
+      lineup.QB.forEach(p => add('QB', p));
+      lineup.RB.forEach(p => add('RB', p));
+      lineup.WR.forEach(p => add('WR', p));
+      lineup.TE.forEach(p => add('TE', p));
+      lineup.FLEX.forEach(p => add('FLEX', p));
+      // Append bench (all remaining players by target), but do not add to total
+      const bench = [];
+      for (const pos of ['QB','RB','WR','TE']) {
+        for (const p of buckets[pos]) if (!used.has(p.name)) bench.push(p);
+      }
+      bench.sort(by(target));
+      bench.forEach(p => add('BENCH', p, false));
+      return { target, lineup: rows, total_points: Number(total.toFixed(2)) };
+      }
+  }
+
+  // Override renderLineup to show incomplete badges and dashes
+  if (typeof window.renderLineup === 'function') {
+    const _origRL = window.renderLineup;
+    window.renderLineup = function(containerId, title, payload) {
+      try {
+        const c = document.getElementById(containerId);
+        const rows = (payload && payload.lineup) || [];
+        const target = (payload && payload.target) || 'mid';
+        const total = Number((payload && payload.total_points) || 0);
+        const ratelimit = (payload && payload.ratelimit) || '';
+        const headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th>';
+        const body = rows.map(r => {
+          const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
+          const nameHtml = inc ? (r.name + ' <span class="pill pill-warn" title="Odds missing; stats incomplete">incomplete</span>') : r.name;
+          const fmt = (v) => inc ? 'â€”' : Number(v||0).toFixed(2);
+          return '<tr>'
+            + '<td>' + (r.slot||'') + '</td>'
+            + '<td>' + (inc ? ('<span class="incomplete-name">' + nameHtml + '</span>') : nameHtml) + '</td>'
+            + '<td>' + (r.pos||'') + '</td>'
+            + '<td>' + fmt(r.floor) + '</td>'
+            + '<td>' + fmt(r.mid) + '</td>'
+            + '<td>' + fmt(r.ceiling) + '</td>'
+            + '</tr>';
+        }).join('');
+        c.innerHTML = [
+          `<h3>${title} - target: ${target} (total: ${total.toFixed(2)})</h3>`,
+          `<table><thead><tr>${headerCols}</tr></thead><tbody>`,
+          body,
+          '</tbody></table>',
+          `<div class="status">RateLimit: ${ratelimit}</div>`
+        ].join('\n');
+      } catch (e) { try { _origRL(containerId, title, payload); } catch (_) {} }
+    }
+  }
+})();
+
+// Load overrides (for clearer incomplete indicators and bench rows)
+try {
+  document.addEventListener('DOMContentLoaded', function(){
+    try {
+      var s = document.createElement('script');
+      s.src = '/ui/overrides.js';
+      document.body.appendChild(s);
+    } catch (e) { /* ignore */ }
+  });
+} catch (e) { /* ignore */ }
+
+
+
+

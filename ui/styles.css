@@ -43,6 +43,10 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .details-body th { background: #111827; color: #e5e7eb; }
 .pill { display: inline-block; padding: 2px 6px; border-radius: 999px; background: #1e293b; color: #cbd5e1; font-size: 12px; margin-left: 6px; }
 .muted { color: #94a3b8; }
+/* Warning pill for incomplete players */
+.pill-warn { background: #7f1d1d; color: #fecaca; }
+.pill-crit { background: #991b1b; color: #fee2e2; }
+.incomplete-name { color: #ef4444; font-weight: 600; }
 
 /* Predicted stats emphasis */
 .predicted { background: #0f172a; border: 1px solid #233; border-radius: 8px; padding: 10px; margin: 6px 0 10px 0; }

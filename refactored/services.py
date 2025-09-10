@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Dict, List, Tuple, Optional
 import datetime as dt
@@ -15,7 +15,8 @@ from . import odds_client
 from . import ratelimit
 from config import SLEEPER_TO_ODDSAPI_TEAM
 from predicted_stats import predict_stats_for_player
-from config import STAT_MARKET_MAPPING_SLEEPER
+from config import STAT_MARKET_MAPPING_SLEEPER, POSITION_STAT_CONFIG
+from .range_model import PRIMARY_MARKET_WHITELIST
 
 
 def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
@@ -103,9 +104,37 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     scoring_rules = roster.get("scoring_rules", {})
     players_out: List[dict] = []
 
+    # Helpers to diagnose missing coverage and normalize market keys
+    def _norm_market_key(k: str) -> str:
+        if not k:
+            return k
+        base = k.replace("_alternate", "")
+        if base in ("player_rush_tds", "player_reception_tds"):
+            return "player_anytime_td"
+        return base
+
+    def _expected_markets_for_pos(pos: str | None) -> set[str]:
+        raw = POSITION_STAT_CONFIG.get(pos or "", [])
+        exp = {_norm_market_key(x) for x in raw}
+        # Focus on primary markets used for fantasy conversion
+        return {m for m in exp if m in PRIMARY_MARKET_WHITELIST}
+
+    present_aliases = set(per_player_odds.keys())
     for alias, by_book in per_player_odds.items():
         pinfo = info_by_alias.get(alias, {})
         floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+
+        # Coverage diagnostics
+        available: set[str] = set()
+        for _bk, mkts in (by_book or {}).items():
+            for mkey in (mkts or {}).keys():
+                available.add(_norm_market_key(mkey))
+        expected = _expected_markets_for_pos(pinfo.get("primary_position"))
+        missing = sorted(list(expected - available))
+        # Summary keys; if absent, we used fallback band
+        summ_keys = {_norm_market_key(k) for k in (per_player_summaries.get(alias, {}) or {}).keys()}
+        fallback = sorted(list({k for k in available if k not in summ_keys}))
+
         players_out.append({
             "name": pinfo.get("full_name", alias),
             "pos": pinfo.get("primary_position"),
@@ -115,10 +144,60 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "ceiling": round(ceil, 2),
             "books_used": len(by_book.keys()),
             "markets_used": len(per_player_summaries.get(alias, {})),
+            "incomplete": bool(missing),
+            "missing_markets": missing,
+            "fallback_markets": fallback,
         })
 
-    # Sort by mid desc
-    players_out.sort(key=lambda x: x["mid"], reverse=True)
+    # Add planned roster players with no odds as incomplete entries
+    for alias, pinfo in info_by_alias.items():
+        if alias in present_aliases:
+            continue
+        # For players with no odds, mark all expected primary markets as missing
+        players_out.append({
+            "name": pinfo.get("full_name", alias),
+            "pos": pinfo.get("primary_position"),
+            "team": pinfo.get("editorial_team_full_name"),
+            "floor": None,
+            "mid": None,
+            "ceiling": None,
+            "books_used": 0,
+            "markets_used": 0,
+            "incomplete": True,
+            "missing_markets": sorted(list(_expected_markets_for_pos(pinfo.get("primary_position")))),
+            "fallback_markets": [],
+        })
+
+        # Include roster players without scheduled events as incomplete
+    try:
+        present_names = {p.get("name") for p in players_out}
+        for p in (roster.get("players", {}) or {}).values():
+            try:
+                full_name = (p.get("name", {}) or {}).get("full")
+                if not full_name or full_name in present_names:
+                    continue
+                pos = p.get("primary_position")
+                team = p.get("editorial_team_full_name")
+                players_out.append({
+                    "name": full_name,
+                    "pos": pos,
+                    "team": team,
+                    "floor": None,
+                    "mid": None,
+                    "ceiling": None,
+                    "books_used": 0,
+                    "markets_used": 0,
+                    "incomplete": True,
+                    "missing_markets": sorted(list(_expected_markets_for_pos(pos))),
+                    "fallback_markets": [],
+                })
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # Sort by mid desc, placing missing mids (None) at the end
+    players_out.sort(key=lambda x: (x.get("mid") if isinstance(x.get("mid"), (int, float)) else float("-inf")), reverse=True)
     payload = {"week": week, "players": players_out, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
     # store in cache
     _proj_cache[key] = (now, payload)
@@ -606,3 +685,7 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }
+
+
+
+
