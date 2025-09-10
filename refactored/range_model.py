@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Dict, Tuple
 from dataclasses import dataclass
@@ -100,26 +100,29 @@ def compute_fantasy_range(
     # 2) Build per-market ranges, focusing on primary markets only
     per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
     for key, mean_val in mean_stats_all.items():
+        use_key = key
         if key not in PRIMARY_MARKET_WHITELIST:
-            # use alternates only if the base isn’t present at all
+            # use alternates only if the base isnâ€™t present at all
             base_key = key.replace("_alternate", "")
             if base_key in mean_stats_all:
                 continue
-        summ = market_summaries.get(key)
+            if base_key != key:
+                use_key = base_key
+        summ = market_summaries.get(key) or market_summaries.get(use_key)
         if summ is None:
-            # Fallback: ±20% band around mean
+            # Fallback: Â±20% band around mean
             q10 = max(0.0, mean_val * 0.8)
             q50 = max(0.0, mean_val)
             q90 = max(0.0, mean_val * 1.2)
         else:
             q10, q50, q90 = _market_quantiles(
-                key,
+                use_key,
                 mean=mean_val,
                 threshold=getattr(summ, "avg_threshold", 0.0),
                 p_over=getattr(summ, "avg_over_prob", 0.0),
                 p_under=getattr(summ, "avg_under_prob", 0.0),
             )
-        per_market_ranges[key] = (q10, q50, q90)
+        per_market_ranges[use_key] = (q10, q50, q90)
 
     # 3) Convert ranges to fantasy points
     floor_stats = {k: v[0] for k, v in per_market_ranges.items()}
@@ -133,3 +136,4 @@ def compute_fantasy_range(
     mid_fp = _fantasy_points(mid_stats, scoring_rules)
     ceil_fp = _fantasy_points(ceil_stats, scoring_rules)
     return floor_fp, mid_fp, ceil_fp, per_market_ranges
+

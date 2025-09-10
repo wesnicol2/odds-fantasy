@@ -1,4 +1,4 @@
-// Simple debug logger
+﻿// Simple debug logger
 const DEBUG = true; // toggle to enable/disable UI debug logs
 function dbg(...args) { if (DEBUG && console && console.log) console.log('[ui]', ...args); }
 
@@ -94,6 +94,7 @@ function renderLineupFromPlayers(week) {
   const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
   const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
   renderLineup(containerId, title, payload);
+  addLineupControls(week, 'players', target);
   // Make headers clickable to switch target
   const c = document.getElementById(containerId);
   if (!c) return;
@@ -114,7 +115,7 @@ function renderLineupFromPlayers(week) {
 async function showLineup(week) {
   if (!appCache.lineupPlayers[week]) {
     const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
-    showContainerLoading(containerId, 'Loading lineup…');
+    showContainerLoading(containerId, 'Loading lineupâ€¦');
     const mode = getDataMode();
     const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode });
     const { ok, data } = await fetchJSON(url);
@@ -135,7 +136,7 @@ function showGlobalLoading(msg) {
   const overlay = $('globalLoading');
   if (!overlay) return;
   const txt = $('globalLoadingText');
-  if (txt) txt.textContent = msg || 'Loading…';
+  if (txt) txt.textContent = msg || 'Loadingâ€¦';
   overlay.classList.remove('hidden');
 }
 function hideGlobalLoading() {
@@ -146,7 +147,7 @@ function hideGlobalLoading() {
 function showContainerLoading(containerId, msg) {
   const c = $(containerId);
   if (!c) return;
-  c.innerHTML = `<div class="status"><md-circular-progress indeterminate aria-label="Loading"></md-circular-progress> ${msg || 'Loading…'}</div>`;
+  c.innerHTML = `<div class="status"><md-circular-progress indeterminate aria-label="Loading"></md-circular-progress> ${msg || 'Loadingâ€¦'}</div>`;
 }
 
 async function fetchJSON(url) {
@@ -193,7 +194,7 @@ function renderLineup(containerId, title, payload) {
       <td>${Number(r.ceiling).toFixed(2)}</td>
     </tr>`);
   const table = [
-    `<h3>${title} � target: ${target} (total: ${total.toFixed(2)})</h3>`,
+    `<h3>${title} — target: ${target} (total: ${total.toFixed(2)})</h3>`,
     `<table><thead><tr>${headerCols}</tr></thead><tbody>`,
     ...rowHtml,
     '</tbody></table>',
@@ -226,7 +227,7 @@ async function loadLineup(week, target) {
   const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
   if (!cached) {
     dbg('loadLineup:no-cache', { week, target });
-    showContainerLoading(containerId, 'Loading lineup…');
+    showContainerLoading(containerId, 'Loading lineupâ€¦');
   const mode = getDataMode();
   const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, mode });
     const { ok, data } = await fetchJSON(url);
@@ -238,6 +239,7 @@ async function loadLineup(week, target) {
     return;
   }
   renderLineup(containerId, title, cached);
+  addLineupControls(week, 'api', target);
   updateRateLimitDisplays(appCache.lastRateLimit || cached);
 }
 
@@ -258,12 +260,56 @@ function renderPlayers(containerId, players) {
   c.innerHTML = table;
 }
 
+// Inject lineup controls (Refresh, Close) into container
+function addLineupControls(week, source, target) {
+  try {
+    const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
+    const c = $(containerId);
+    if (!c) return;
+    // Remove existing controls to avoid duplicates
+    const old = c.querySelector('.lineup-controls');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    const controls = document.createElement('div');
+    controls.className = 'btn-row lineup-controls';
+    controls.innerHTML = `
+      <button onclick="window._refreshLineup('${week}','${target||'mid'}','${source||'api'}')">Refresh</button>
+      <button onclick="window._closeLineup('${week}')">Close</button>
+    `;
+    c.insertAdjacentElement('afterbegin', controls);
+  } catch (e) {
+    console.error('[ui] addLineupControls:error', e);
+  }
+}
+
+// Global helpers used by controls
+window._closeLineup = function(week) {
+  const id = (week === 'this' ? 'lineup-this' : 'lineup-next');
+  const el = $(id);
+  if (el) el.innerHTML = '';
+};
+
+window._refreshLineup = async function(week, target, source) {
+  try {
+    if (source === 'players') {
+      // Force re-fetch projections and re-render local lineup
+      appCache.lineupPlayers[week] = null;
+      await showLineup(week);
+    } else {
+      // Force re-fetch lineup from API by clearing cache
+      if (appCache.lineups[week]) delete appCache.lineups[week][target||'mid'];
+      await loadLineup(week, target||'mid');
+    }
+  } catch (e) {
+    console.error('[ui] _refreshLineup:error', e);
+  }
+};
+
 async function showPlayers(week) {
   const cached = appCache.projections?.[week];
   const containerId = week === 'this' ? 'players-this' : 'players-next';
   if (!cached) {
     dbg('showPlayers:no-cache', { week });
-    showContainerLoading(containerId, 'Loading players…');
+    showContainerLoading(containerId, 'Loading playersâ€¦');
   const mode = getDataMode();
   const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode });
     const { ok, data } = await fetchJSON(url);
@@ -282,7 +328,7 @@ async function loadDefenses(week) {
   const containerId = week === 'this' ? 'defenses-this' : 'defenses-next';
   if (!cached) {
     dbg('loadDefenses:no-cache', { week });
-    showContainerLoading(containerId, 'Loading defenses…');
+    showContainerLoading(containerId, 'Loading defensesâ€¦');
   const mode = getDataMode();
   const url = apiUrl('/defenses', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, scope: 'both', mode });
     const { ok, data } = await fetchJSON(url);
@@ -303,7 +349,7 @@ async function refreshAll() {
   const url = apiUrl('/dashboard', { username, season, mode, weeks: 'this', def_scope: 'owned', include_players: '1' });
   dbg('refreshAll:start', { url, username, season });
   setStatus($('pingStatus'), 'Refreshing...');
-  showGlobalLoading('Refreshing dashboard…');
+  showGlobalLoading('Refreshing dashboardâ€¦');
   disableAllButtons(true);
   try {
     const { ok, data } = await fetchJSON(url);
@@ -349,7 +395,7 @@ async function dbgProjections(week) {
     week,
     mode: getDataMode()
   });
-  showContainerLoading('projectionsDebug', 'Loading projections…');
+  showContainerLoading('projectionsDebug', 'Loading projectionsâ€¦');
   const { ok, data } = await fetchJSON(url);
   if (!ok) { dbg('dbgProjections:fail', { week, url }); return alert('Failed to load projections'); }
   $('projectionsDebug').textContent = JSON.stringify(data, null, 2);
@@ -368,8 +414,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.btn-players').forEach(btn => {
     btn.addEventListener('click', () => showPlayers(btn.dataset.week));
   });
-  $('btnProjThis').addEventListener('click', () => dbgProjections('this'));
-  $('btnProjNext').addEventListener('click', () => dbgProjections('next'));
+  if (btnProjThis) btnProjThis.addEventListener('click', () => dbgProjections('this'));
+  if (btnProjNext) btnProjNext.addEventListener('click', () => dbgProjections('next'));
   dbg('DOMContentLoaded');
   // Click 'Refresh' to load dashboard data when you want to fetch.
   // Global error surfacing for visibility
@@ -380,6 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[ui] unhandledrejection', e?.reason || e);
   });
 });
+
 
 
 

@@ -1,4 +1,4 @@
-// UI overrides for clearer incomplete indicators and bench rows
+﻿// UI overrides for clearer incomplete indicators and bench rows
 (function(){
   function onReady(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function fmtCell(v){ return (v==null ? '-' : Number(v).toFixed(2)); }
@@ -11,6 +11,17 @@
   function esc(s){ try { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); } catch(e){ return ''; } }
 
   onReady(function(){
+    // Remove raw projections + players sections from the page
+    try {
+      ['projectionsDebug','players-this','players-next'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) {
+          var sec = el.closest('section');
+          if (sec && sec.parentNode) sec.parentNode.removeChild(sec);
+        }
+      });
+    } catch (e) { }
+
     // Force fresh=1 on API calls when Fresh mode selected
     try {
       if (typeof window.apiUrl === 'function' && typeof window.getDataMode === 'function') {
@@ -19,6 +30,9 @@
           params = params || {};
           if (params.fresh == null) {
             params.fresh = (window.getDataMode() === 'fresh' ? '1' : '0');
+          }
+          if (params.region == null || String(params.region).trim() === '') {
+            params.region = 'us,us2';
           }
           return __origApiUrl(path, params);
         };
@@ -76,3 +90,4 @@
     }
   });
 })();
+

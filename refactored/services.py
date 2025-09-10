@@ -196,6 +196,35 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     except Exception:
         pass
 
+    # Optional debug: summarize market coverage and usage
+    try:
+        if os.getenv("API_DEBUG") in ("1", "true", "True"):
+            # Collect raw and normalized market keys across players
+            all_raw: set[str] = set()
+            for _alias, by_book in per_player_odds.items():
+                for _bk, mkts in (by_book or {}).items():
+                    for mkey in (mkts or {}).keys():
+                        all_raw.add(mkey)
+            all_norm = {_norm_market_key(k) for k in all_raw}
+            used_norm = {k for k in all_norm if k in PRIMARY_MARKET_WHITELIST}
+            ignored_norm = sorted(list(all_norm - used_norm))
+            print(f"[services][debug] markets: raw={len(all_raw)} norm={len(all_norm)} used={len(used_norm)} ignored={len(ignored_norm)}")
+            if ignored_norm:
+                print(f"[services][debug] markets_ignored_norm: {', '.join(sorted(list(ignored_norm)))}")
+
+            # Per-player gaps (limit output size)
+            missing_players = [p for p in players_out if p.get("incomplete")]
+            print(f"[services][debug] players_with_missing={len(missing_players)} / total={len(players_out)}")
+            for p in missing_players[:12]:
+                miss = ", ".join(p.get("missing_markets") or [])
+                fb = ", ".join(p.get("fallback_markets") or [])
+                print(f"[services][debug] missing: {p.get('name')} ({p.get('pos')}) -> missing=[{miss}] fallback=[{fb}]")
+    except Exception as _dbg_e:
+        try:
+            print(f"[services][debug] error: {str(_dbg_e)}")
+        except Exception:
+            pass
+
     # Sort by mid desc, placing missing mids (None) at the end
     players_out.sort(key=lambda x: (x.get("mid") if isinstance(x.get("mid"), (int, float)) else float("-inf")), reverse=True)
     payload = {"week": week, "players": players_out, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
@@ -321,7 +350,7 @@ def _def_teams_for_user(username: str, season: str) -> Tuple[List[str], List[str
     return owned, available
 
 
-def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto") -> Dict:
+def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us") -> Dict:
     print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
@@ -345,7 +374,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
 
     # Filter events in window
     eff_mode = 'fresh' if fresh else cache_mode
-    events = odds_client.get_nfl_events(mode=eff_mode)
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
 
     # Prefetch odds per event once to avoid duplicate calls per team
@@ -353,7 +382,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     for e in window_events:
         gid = e["id"]
         try:
-            ev_odds_map[gid] = odds_client.get_event_player_odds(gid, markets="spreads,totals", mode=eff_mode)
+            ev_odds_map[gid] = odds_client.get_event_player_odds(gid, markets="spreads,totals", regions=region, mode=eff_mode)
         except Exception as exc:
             print(f"[services] defenses: fetch odds failed game={gid} err={exc}")
             ev_odds_map[gid] = None
@@ -685,6 +714,8 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }
+
+
 
 
 
