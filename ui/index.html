@@ -34,23 +34,11 @@
 
   <main>
     <section>
-      <h2>Lineups â€” This Week</h2>
-      <div class="btn-row">
-        <button data-week="this" data-target="mid" class="btn-lineup">Ideal (Mid)</button>
-        <button data-week="this" data-target="floor" class="btn-lineup">Floor</button>
-        <button data-week="this" data-target="ceiling" class="btn-lineup">Ceiling</button>
-      </div>
-      <div id="lineup-this" class="results"></div>
+      <h2>Lineups — This Week</h2><div class="btn-row"><button data-week="this" class="btn-show-lineup">Show Lineup</button></div><div id="lineup-this" class="results"></div>
     </section>
 
     <section>
-      <h2>Lineups â€” Next Week</h2>
-      <div class="btn-row">
-        <button data-week="next" data-target="mid" class="btn-lineup">Ideal (Mid)</button>
-        <button data-week="next" data-target="floor" class="btn-lineup">Floor</button>
-        <button data-week="next" data-target="ceiling" class="btn-lineup">Ceiling</button>
-      </div>
-      <div id="lineup-next" class="results"></div>
+      <h2>Lineups — Next Week</h2><div class="btn-row"><button data-week="next" class="btn-show-lineup">Show Lineup</button></div><div id="lineup-next" class="results"></div>
     </section>
 
     <section>
@@ -102,7 +90,7 @@
   <!-- Global loading overlay -->
   <div id="globalLoading" class="overlay hidden">
     <div class="overlay-box">
-      <span class="spinner"></span>
+      <md-circular-progress indeterminate aria-label="Loading"></md-circular-progress>
       <span id="globalLoadingText">Loadingâ€¦</span>
     </div>
   </div>
@@ -111,3 +99,5 @@
 </body>
   
 </html>
+
+

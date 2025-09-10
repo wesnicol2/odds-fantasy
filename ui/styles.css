@@ -5,7 +5,7 @@ h1 { margin: 0 0 8px 0; font-size: 20px; }
 .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
 input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; }
-button { padding: 8px 12px; border: 1px solid #334155; background: #1e293b; color: #fff; border-radius: 4px; cursor: pointer; }
+
 button:hover { background: #0ea5e9; border-color: #0ea5e9; }
 .btn-row { display: flex; gap: 8px; margin: 8px 0; }
 main { padding: 16px; max-width: 1100px; margin: 0 auto; }
@@ -26,3 +26,4 @@ th { background: #f1f5f9; }
 
 /* Disabled button feedback */
 button:disabled { opacity: 0.6; cursor: not-allowed; }
+

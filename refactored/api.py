@@ -90,6 +90,10 @@ def _serve_static(environ, start_response: Callable, rel_path: str):
         return _json_response(start_response, '404 Not Found', {"error": "not_found", "path": f"/ui/{rel_path}"})
     ctype, _ = mimetypes.guess_type(str(target))
     ctype = ctype or 'application/octet-stream'
+    # Ensure UTF-8 charset for textual types to avoid replacement characters (�)
+    if ctype.startswith('text/') or ctype in ('application/javascript', 'application/json'):
+        if 'charset' not in ctype:
+            ctype = f"{ctype}; charset=utf-8"
     data = target.read_bytes()
     headers = [("Content-Type", ctype), ("Content-Length", str(len(data))), ("Access-Control-Allow-Origin", "*")]
     _dprint(f"[api] static 200 /ui/{rel_path or 'index.html'} bytes={len(data)} type={ctype}")
