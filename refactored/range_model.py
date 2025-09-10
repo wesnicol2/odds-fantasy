@@ -80,6 +80,9 @@ def _fantasy_points(stats: Dict[str, float], scoring_rules: Dict[str, float]) ->
                 mult = float(scoring_rules[rule_key])
             except Exception:
                 continue
+            # Ensure interceptions subtract points, regardless of league sign convention
+            if market_key == "player_pass_interceptions":
+                mult = -abs(mult)
             total += value * mult
     return total
 

@@ -15,7 +15,7 @@ function hideDetails() {
 }
 
 function _fmt(val, digits=2) {
-  return (val==null || Number.isNaN(Number(val))) ? 'â€”' : Number(val).toFixed(digits);
+  return (val==null || Number.isNaN(Number(val))) ? '-' : Number(val).toFixed(digits);
 }
 
 function _escapeHtml(s) {
@@ -54,13 +54,13 @@ function renderMarketBlock(key, payload) {
   var s = payload.summary || {}; var mean = payload.mean_stat; var impact = payload.impact_score || 0;
   var safeKey = (key || '').replace(/[^a-z0-9_]/gi, '_');
   var header = [
-    '<div class="market-summary" aria-expanded="false" data-target="mk_', safeKey, '">',
+    '<div class="market"summary- aria-expanded="false" data-target="mk_', safeKey, '">',
       '<div class="title">', _prettyMarketLabel(key), '</div>',
       '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : 'â€”'),
       ' <span class="pill">impact ', _fmt(impact), '</span>',
       s && (s.samples!=null) ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : '',
       '</div>',
-      '<div class="chev">â–¶</div>',
+      '<div class="chev">&#9656;</div>',
     '</div>'
   ].join('');
   var rows = (payload.books || []).map(function(b){
@@ -70,6 +70,34 @@ function renderMarketBlock(key, payload) {
       + '<td>' + (b.over && b.over.point!=null?_fmt(b.over.point):'â€”') + '</td>'
       + '<td>' + (b.under && b.under.odds!=null?_fmt(b.under.odds):'â€”') + '</td>'
       + '<td>' + (b.under && b.under.point!=null?_fmt(b.under.point):'â€”') + '</td>'
+      + '</tr>';
+  }).join('');
+  var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  return '<div class="market">' + header + '<div id="mk_' + safeKey + '" class="market"details hidden->' + table + '</div></div>';
+}
+
+// New clean renderer used by redesigned modal
+function renderMarketBlock2(key, payload) {
+  if (!payload) return '';
+  var s = payload.summary || {}; var mean = payload.mean_stat; var impact = payload.impact_score || 0;
+  var safeKey = (key || '').replace(/[^a-z0-9_]/gi, '_');
+  var header = [
+    '<div class="market-summary" aria-expanded="false" data-target="mk_', safeKey, '">',
+      '<div class="title">', _prettyMarketLabel(key), '</div>',
+      '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : '-'),
+      (s && (s.samples!=null) ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : ''),
+      ' <span class="pill">impact ', _fmt(impact), '</span>',
+      '</div>',
+      '<div class="chev">&#9656;</div>',
+    '</div>'
+  ].join('');
+  var rows = (payload.books || []).map(function(b){
+    return '<tr>'
+      + '<td>' + (b.book||'') + '</td>'
+      + '<td>' + (b.over && b.over.odds!=null?_fmt(b.over.odds):'-') + '</td>'
+      + '<td>' + (b.over && b.over.point!=null?_fmt(b.over.point):'-') + '</td>'
+      + '<td>' + (b.under && b.under.odds!=null?_fmt(b.under.odds):'-') + '</td>'
+      + '<td>' + (b.under && b.under.point!=null?_fmt(b.under.point):'-') + '</td>'
       + '</tr>';
   }).join('');
   var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
@@ -123,14 +151,17 @@ async function openPlayerDetails(name, week) {
     if (match) { floor = match.floor; mid = match.mid; ceiling = match.ceiling; }
   } catch (e) { /* ignore */ }
 
-  var head = '<div style="margin-bottom:6px;"><strong>' + (p.name || name) + '</strong> <span class="muted">' + (p.pos || '') + ' Â· ' + (p.team || '') + '</span></div>';
+  var head = '<div class="player-head">'
+    + '<div class="player-name">' + _escapeHtml(p.name || name) + '</div>'
+    + '<div class="player-meta">' + _escapeHtml(p.pos || '') + ' · ' + _escapeHtml(p.team || '') + '</div>'
+    + '</div>';
   var predicted = ''
-    + '<div class="predicted">'
-    +   '<div class="predicted-title">Fantasy Points</div>'
-    +   '<div class="predicted-values">'
-    +     '<div class="pv floor"><span class="label">Floor</span><span class="val">' + _fmt(floor) + '</span></div>'
-    +     '<div class="pv mid"><span class="label">Mid</span><span class="val">' + _fmt(mid) + '</span></div>'
-    +     '<div class="pv ceiling"><span class="label">Ceiling</span><span class="val">' + _fmt(ceiling) + '</span></div>'
+    + '<div class="details-section">'
+    +   '<div class="section-title">Fantasy Points</div>'
+    +   '<div class="cards">'
+    +     '<div class="card floor"><div class="label">Floor</div><div class="value">' + _fmt(floor) + '</div></div>'
+    +     '<div class="card mid"><div class="label">Mid</div><div class="value">' + _fmt(mid) + '</div></div>'
+    +     '<div class="card ceiling"><div class="label">Ceiling</div><div class="value">' + _fmt(ceiling) + '</div></div>'
     +   '</div>'
     + '</div>';
 
@@ -153,20 +184,40 @@ async function openPlayerDetails(name, week) {
       if (markets[k] && markets[k].summary) present.push(k); else fallback.push(k);
     } else missing.push(k);
   });
-  var covPill = function(k, cls, text){ return '<span class="pill ' + cls + '" title="' + _escapeHtml(text) + '">' + _prettyMarketLabel(k) + '</span>'; };
-  var covHtml = '<div class="muted" style="margin:6px 0 4px 0;">Stat Coverage: '
-    + (present.map(function(k){return covPill(k,'','OK');}).join(' ') || '')
-    + (fallback.length? (' ' + fallback.map(function(k){return covPill(k,'pill-warn','Used fallback (no prob summary)');}).join(' ')) : '')
-    + (missing.length? (' ' + missing.map(function(k){return covPill(k,'pill-warn','Missing odds/market');}).join(' ')) : '')
-    + '</div>';
+  var covHtml = [
+    '<div class="details-section">',
+      '<div class="section-title">Coverage</div>',
+      '<div class="chips">',
+        present.map(function(k){return '<span class="chip ok" title="OK">'+_prettyMarketLabel(k)+'</span>';}).join(' '),
+        (fallback.length? (' ' + fallback.map(function(k){return '<span class="chip warn" title="Used fallback (no prob summary)">'+_prettyMarketLabel(k)+'</span>';}).join(' ')) : ''),
+        (missing.length? (' ' + missing.map(function(k){return '<span class="chip crit" title="Missing odds/market">'+_prettyMarketLabel(k)+'</span>';}).join(' ')) : ''),
+      '</div>',
+    '</div>'
+  ].join('');
 
-  var primaryHtml = primary.map(function(k){ return renderMarketBlock(k, markets[k]); }).join('');
+  var primaryHtml = primary.map(function(k){ return renderMarketBlock2(k, markets[k]); }).join('');
   if (!primaryHtml) primaryHtml = '<div class="muted">No primary markets.</div>';
   var others = (data.all_order || []).filter(function(k){ return primary.indexOf(k) === -1; });
-  var otherHtml = others.map(function(k){ return renderMarketBlock(k, markets[k]); }).join('');
+  var otherHtml = others.map(function(k){ return renderMarketBlock2(k, markets[k]); }).join('');
   if (!otherHtml) otherHtml = '<div class="muted">No other markets.</div>';
   var debugHtml = renderRawOddsSection(data.raw_odds);
-  var html = [head, predicted, covHtml, '<h4>Primary Markets</h4>', primaryHtml, '<h4>Other Markets</h4>', otherHtml, debugHtml].join('');
+  var marketsHtml = [
+    '<div class="details-section">',
+      '<div class="section-title">Primary Markets</div>',
+      '<div class="market-list">', primaryHtml || '<div class="muted">No primary markets.</div>', '</div>',
+    '</div>',
+    '<div class="details-section">',
+      '<div class="section-title">Other Markets</div>',
+      '<div class="market-list">', otherHtml || '<div class="muted">No other markets.</div>', '</div>',
+    '</div>'
+  ].join('');
+  var html = [
+    '<div class="details-content">',
+      '<div>', head, predicted, covHtml, '</div>',
+      '<div>', marketsHtml, '</div>',
+    '</div>',
+    debugHtml
+  ].join('');
   showDetails('Player Details', html);
 }
 
@@ -188,9 +239,9 @@ async function openDefenseDetails(defense, week) {
     var id = 'def_' + idx;
     var header = [
       '<div class="market-summary" aria-expanded="false" data-target="', id, '">',
-        '<div class="title">', defense, ' vs ', g.opponent, '</div>',
-        '<div class="meta">', (g.commence_time||''), ' Â· Opp Implied Median: <strong>', _fmt(g.implied_total_median), '</strong></div>',
-        '<div class="chev">â–¶</div>',
+        '<div class="title">', _escapeHtml(defense), ' vs ', _escapeHtml(g.opponent||''), '</div>',
+        '<div class="meta">', _escapeHtml(_formatISOToLocal(g.commence_time||'')), ' &middot; Opp Implied Median: <strong>', _fmt(g.implied_total_median), '</strong></div>',
+        '<div class="chev">&#9656;</div>',
       '</div>'
     ].join('');
     var rows = (g.books||[]).map(function(b){
@@ -206,7 +257,7 @@ async function openDefenseDetails(defense, week) {
   }).join('');
   if (!blocks) blocks = '<div class="muted">No games found for this defense.</div>';
   var debugHtml = renderRawOddsSection(data.raw_odds);
-  var html = '<div style="margin-bottom:6px;"><strong>' + defense + '</strong> <span class="muted">games this week</span></div>' + blocks + debugHtml;
+  var html = '<div class="details-section"><div class="section-title">' + _escapeHtml(defense) + ' &middot; Games This Week</div>' + blocks + '</div>' + debugHtml;
   showDetails('Defense Details', html);
 }
 
@@ -220,7 +271,7 @@ function renderRawOddsSection(raw) {
     } else if (typeof raw === 'object') {
       events = Object.keys(raw).map(function(k){ return { id: k, obj: raw[k] }; });
     }
-    var out = ['<div class="predicted" style="margin-top: 10px;">', '<div class="predicted-title">Debug: Raw Odds</div>'];
+    var out = ['<div class="details-section">', '<div class="section-title">Debug: Raw Odds</div>'];
     if (!events.length) {
       out.push('<div class="muted">No raw odds available.</div>', '</div>');
       return out.join('');
@@ -231,29 +282,29 @@ function renderRawOddsSection(raw) {
         if (!ev) return;
         var eid = _escapeHtml(ev.id || item.id || (''+eidx+'_'+sub));
         var hdrTitle = (ev.home_team && ev.away_team) ? (_escapeHtml(ev.away_team) + ' @ ' + _escapeHtml(ev.home_team)) : ('Event ' + eid);
-        var meta = (ev.commence_time ? _escapeHtml(ev.commence_time) + ' Â· ' : '') + (ev.sport_key ? _escapeHtml(ev.sport_key) : '');
+        var meta = (ev.commence_time ? _escapeHtml(_formatISOToLocal(ev.commence_time)) + ' &middot; ' : '') + (ev.sport_key ? _escapeHtml(ev.sport_key) : '');
         var evHeader = '<div class="market-summary" aria-expanded="false" data-target="ev_' + eid + '">' +
                        '<div class="title">' + hdrTitle + '</div>' +
                        '<div class="meta">' + meta + '</div>' +
-                       '<div class="chev">â–¶</div></div>';
+                       '<div class="chev">&#9656;</div></div>';
         var bms = Array.isArray(ev.bookmakers) ? ev.bookmakers : [];
         var bmBlocks = bms.map(function(bm, bidx){
           var bid = eid + '_bm_' + bidx;
           var btitle = _escapeHtml(bm.title || bm.key || ('Book ' + bidx));
-          var bmeta = (bm.key ? _escapeHtml(bm.key) + ' Â· ' : '') + (bm.last_update ? _escapeHtml(bm.last_update) : '');
+          var bmeta = (bm.key ? _escapeHtml(bm.key) + ' &middot; ' : '') + (bm.last_update ? _escapeHtml(_formatISOToLocal(bm.last_update)) : '');
           var bmHeader = '<div class="market-summary" aria-expanded="false" data-target="' + bid + '">' +
                          '<div class="title">' + btitle + '</div>' +
                          '<div class="meta">' + bmeta + '</div>' +
-                         '<div class="chev">â–¶</div></div>';
+                         '<div class="chev">&#9656;</div></div>';
           var mkts = Array.isArray(bm.markets) ? bm.markets : [];
           var mBlocks = mkts.map(function(mkt, midx){
             var mid = bid + '_m_' + midx;
             var mtitle = _escapeHtml(mkt.key || ('Market ' + midx));
             var mmeta = 'outcomes: ' + ((mkt.outcomes && mkt.outcomes.length) || 0);
-            var mHeader = '<div class="market-summary" aria-expanded="false" data-target="' + mid + '">' +
-                          '<div class="title">' + mtitle + '</div>' +
-                          '<div class="meta">' + mmeta + '</div>' +
-                          '<div class="chev">â–¶</div></div>';
+          var mHeader = '<div class="market-summary" aria-expanded="false" data-target="' + mid + '">' +
+                        '<div class="title">' + mtitle + '</div>' +
+                        '<div class="meta">' + mmeta + '</div>' +
+                        '<div class="chev">&#9656;</div></div>';
             var outcomes = Array.isArray(mkt.outcomes) ? mkt.outcomes : [];
             var rows = outcomes.map(function(o){
               var name = _escapeHtml(o.name);
@@ -280,9 +331,7 @@ function renderRawOddsSection(raw) {
   } catch (e) {
     var safe = '';
     try { safe = _escapeHtml(JSON.stringify(raw, null, 2)); } catch (ee) { safe = _escapeHtml(String(ee)); }
-    return '<div class="predicted" style="margin-top: 10px;">' +
-           '<div class="predicted-title">Debug: Raw Odds (fallback)</div>' +
-           '<pre class="debug">' + safe + '</pre></div>';
+    return '<div class="details-section"><div class="section-title">Debug: Raw Odds (fallback)</div><pre class="debug">' + safe + '</pre></div>';
   }
 }
 
@@ -365,6 +414,37 @@ document.addEventListener('DOMContentLoaded', function(){
   attachDefenseHandler('defenses-next', 'next');
 });
 
+// Fix dropdown markup regression: override with correct HTML structure
+(function(){
+  function _fmtSafe(v){ return (v==null || Number.isNaN(Number(v))) ? '-' : Number(v).toFixed(2); }
+  window.renderMarketBlock = function(key, payload) {
+    if (!payload) return '';
+    var s = payload.summary || {}; var mean = payload.mean_stat; var impact = payload.impact_score || 0;
+    var safeKey = (key || '').replace(/[^a-z0-9_]/gi, '_');
+    var header = [
+      '<div class="market-summary" aria-expanded="false" data-target="mk_', safeKey, '">',
+        '<div class="title">', _prettyMarketLabel(key), '</div>',
+        '<div class="meta">predicted: ', (mean!=null ? _fmtSafe(mean) : '-'),
+        ' <span class="pill">impact ', _fmtSafe(impact), '</span>',
+        (s && s.samples!=null ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : ''),
+        '</div>',
+        '<div class="chev">&#9656;</div>',
+      '</div>'
+    ].join('');
+    var rows = (payload.books || []).map(function(b){
+      return '<tr>'
+        + '<td>' + (b.book||'') + '</td>'
+        + '<td>' + (b.over && b.over.odds!=null?_fmtSafe(b.over.odds):'-') + '</td>'
+        + '<td>' + (b.over && b.over.point!=null?_fmtSafe(b.over.point):'-') + '</td>'
+        + '<td>' + (b.under && b.under.odds!=null?_fmtSafe(b.under.odds):'-') + '</td>'
+        + '<td>' + (b.under && b.under.point!=null?_fmtSafe(b.under.point):'-') + '</td>'
+        + '</tr>';
+    }).join('');
+    var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    return '<div class="market">' + header + '<div id="mk_' + safeKey + '" class="market-details hidden">' + table + '</div></div>';
+  };
+})();
+
 // ---- UI overrides to highlight incomplete players and avoid zero placeholders ----
 // We override rendering helpers defined in script.js to add badges and dashes for missing stats.
 (function(){
@@ -383,9 +463,9 @@ document.addEventListener('DOMContentLoaded', function(){
         rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
         const body = rows.map(r => {
           const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
-          const nameHtml = inc ? (r.name + ' <span class="pill pill-warn" title="Odds missing; stats incomplete">incomplete</span>') : r.name;
+          const nameHtml = inc ? (r.name + ' <span class="pill pill"warn- title="Odds missing; stats incomplete">incomplete</span>') : r.name;
           return '<tr>'
-            + '<td>' + (inc ? ('<span class="incomplete-name">' + nameHtml + '</span>') : nameHtml) + '</td>'
+            + '<td>' + (inc ? ('<span class="incomplete"name->' + nameHtml + '</span>') : nameHtml) + '</td>'
             + '<td>' + (r.pos || '') + '</td>'
             + '<td>' + fmtCell(r.floor, inc) + '</td>'
             + '<td>' + fmtCell(r.mid, inc) + '</td>'
@@ -457,11 +537,11 @@ document.addEventListener('DOMContentLoaded', function(){
         const headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th>';
         const body = rows.map(r => {
           const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
-          const nameHtml = inc ? (r.name + ' <span class="pill pill-warn" title="Odds missing; stats incomplete">incomplete</span>') : r.name;
+          const nameHtml = inc ? (r.name + ' <span class="pill pill"warn- title="Odds missing; stats incomplete">incomplete</span>') : r.name;
           const fmt = (v) => inc ? 'â€”' : Number(v||0).toFixed(2);
           return '<tr>'
             + '<td>' + (r.slot||'') + '</td>'
-            + '<td>' + (inc ? ('<span class="incomplete-name">' + nameHtml + '</span>') : nameHtml) + '</td>'
+            + '<td>' + (inc ? ('<span class="incomplete"name->' + nameHtml + '</span>') : nameHtml) + '</td>'
             + '<td>' + (r.pos||'') + '</td>'
             + '<td>' + fmt(r.floor) + '</td>'
             + '<td>' + fmt(r.mid) + '</td>'
@@ -490,6 +570,7 @@ try {
     } catch (e) { /* ignore */ }
   });
 } catch (e) { /* ignore */ }
+
 
 
 

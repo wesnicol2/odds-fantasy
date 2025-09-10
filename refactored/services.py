@@ -119,6 +119,54 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         # Focus on primary markets used for fantasy conversion
         return {m for m in exp if m in PRIMARY_MARKET_WHITELIST}
 
+    def _is_ppr(scoring: dict) -> bool:
+        try:
+            v = float(scoring.get("rec", 0) or 0)
+            return v > 0
+        except Exception:
+            return False
+
+    def _importance_for_pos(pos: Optional[str], scoring: dict) -> tuple[set[str], set[str]]:
+        """Return (vital_markets, minor_markets) for a given position.
+
+        Applies PPR gating for receptions where requested.
+        """
+        p = (pos or "").upper()
+        ppr = _is_ppr(scoring)
+        vital: set[str] = set()
+        minor: set[str] = set()
+        if p == "QB":
+            vital = {"player_pass_yds", "player_pass_tds", "player_rush_yds", "player_anytime_td"}
+            minor = {"player_pass_interceptions"}
+        elif p == "RB":
+            vital = {"player_rush_yds", "player_anytime_td"}
+            if ppr:
+                vital.add("player_receptions")
+            else:
+                minor.add("player_receptions")
+            minor.add("player_reception_yds")
+        elif p == "WR":
+            vital = {"player_reception_yds", "player_anytime_td"}
+            if ppr:
+                vital.add("player_receptions")
+            else:
+                minor.add("player_receptions")
+            minor.add("player_rush_yds")
+        elif p == "TE":
+            vital = {"player_reception_yds", "player_anytime_td"}
+            if ppr:
+                vital.add("player_receptions")
+            else:
+                minor.add("player_receptions")
+            minor.add("player_rush_yds")
+        else:
+            vital = {"player_anytime_td"}
+            minor = set()
+        # Constrain to whitelisted markets we actually consider
+        vital &= PRIMARY_MARKET_WHITELIST
+        minor &= PRIMARY_MARKET_WHITELIST
+        return vital, minor
+
     present_aliases = set(per_player_odds.keys())
     for alias, by_book in per_player_odds.items():
         pinfo = info_by_alias.get(alias, {})
@@ -129,15 +177,23 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         for _bk, mkts in (by_book or {}).items():
             for mkey in (mkts or {}).keys():
                 available.add(_norm_market_key(mkey))
-        expected = _expected_markets_for_pos(pinfo.get("primary_position"))
-        missing = sorted(list(expected - available))
+        pos = pinfo.get("primary_position")
+        vital_exp, minor_exp = _importance_for_pos(pos, scoring_rules)
+        expected = vital_exp | minor_exp
+        missing_set = (expected - available)
+        missing = sorted(list(missing_set))
+        missing_vital = sorted(list(missing_set & vital_exp))
+        missing_minor = sorted(list(missing_set & minor_exp))
         # Summary keys; if absent, we used fallback band
         summ_keys = {_norm_market_key(k) for k in (per_player_summaries.get(alias, {}) or {}).keys()}
-        fallback = sorted(list({k for k in available if k not in summ_keys}))
+        fallback_set = {k for k in available if k not in summ_keys}
+        fallback = sorted(list(fallback_set))
+        fallback_vital = sorted(list(fallback_set & vital_exp))
+        fallback_minor = sorted(list(fallback_set & minor_exp))
 
         players_out.append({
             "name": pinfo.get("full_name", alias),
-            "pos": pinfo.get("primary_position"),
+            "pos": pos,
             "team": pinfo.get("editorial_team_full_name"),
             "floor": round(floor, 2),
             "mid": round(mid, 2),
@@ -147,16 +203,25 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "incomplete": bool(missing),
             "missing_markets": missing,
             "fallback_markets": fallback,
+            # Importance-aware diagnostics
+            "missing_vital": missing_vital,
+            "missing_minor": missing_minor,
+            "fallback_vital": fallback_vital,
+            "fallback_minor": fallback_minor,
+            "is_critical": (len(missing_vital) > 0 or len(fallback_vital) > 0),
         })
 
     # Add planned roster players with no odds as incomplete entries
     for alias, pinfo in info_by_alias.items():
         if alias in present_aliases:
             continue
-        # For players with no odds, mark all expected primary markets as missing
+        # For players with no odds, mark expected markets as missing with importance split
+        pos = pinfo.get("primary_position")
+        vital_exp, minor_exp = _importance_for_pos(pos, scoring_rules)
+        exp_all = sorted(list(vital_exp | minor_exp))
         players_out.append({
             "name": pinfo.get("full_name", alias),
-            "pos": pinfo.get("primary_position"),
+            "pos": pos,
             "team": pinfo.get("editorial_team_full_name"),
             "floor": None,
             "mid": None,
@@ -164,8 +229,13 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "books_used": 0,
             "markets_used": 0,
             "incomplete": True,
-            "missing_markets": sorted(list(_expected_markets_for_pos(pinfo.get("primary_position")))),
+            "missing_markets": exp_all,
             "fallback_markets": [],
+            "missing_vital": sorted(list(vital_exp)),
+            "missing_minor": sorted(list(minor_exp)),
+            "fallback_vital": [],
+            "fallback_minor": [],
+            "is_critical": bool(vital_exp),
         })
 
         # Include roster players without scheduled events as incomplete
@@ -188,8 +258,13 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
                     "books_used": 0,
                     "markets_used": 0,
                     "incomplete": True,
-                    "missing_markets": sorted(list(_expected_markets_for_pos(pos))),
+                    "missing_markets": exp_all,
                     "fallback_markets": [],
+                    "missing_vital": sorted(list(vital_exp)),
+                    "missing_minor": sorted(list(minor_exp)),
+                    "fallback_vital": [],
+                    "fallback_minor": [],
+                    "is_critical": bool(vital_exp),
                 })
             except Exception:
                 continue

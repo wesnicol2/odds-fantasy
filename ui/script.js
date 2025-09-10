@@ -115,7 +115,7 @@ function renderLineupFromPlayers(week) {
 async function showLineup(week) {
   if (!appCache.lineupPlayers[week]) {
     const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
-    showContainerLoading(containerId, 'Loading lineupâ€¦');
+    showContainerLoading(containerId, 'Loading lineup...');
     const mode = getDataMode();
     const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode });
     const { ok, data } = await fetchJSON(url);
@@ -136,7 +136,7 @@ function showGlobalLoading(msg) {
   const overlay = $('globalLoading');
   if (!overlay) return;
   const txt = $('globalLoadingText');
-  if (txt) txt.textContent = msg || 'Loadingâ€¦';
+  if (txt) txt.textContent = msg || 'Loading...';
   overlay.classList.remove('hidden');
 }
 function hideGlobalLoading() {
@@ -147,7 +147,7 @@ function hideGlobalLoading() {
 function showContainerLoading(containerId, msg) {
   const c = $(containerId);
   if (!c) return;
-  c.innerHTML = `<div class="status"><md-circular-progress indeterminate aria-label="Loading"></md-circular-progress> ${msg || 'Loadingâ€¦'}</div>`;
+  c.innerHTML = `<div class="status"><md-circular-progress indeterminate aria-label="Loading"></md-circular-progress> ${msg || 'Loading...'}</div>`;
 }
 
 async function fetchJSON(url) {
@@ -227,7 +227,7 @@ async function loadLineup(week, target) {
   const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
   if (!cached) {
     dbg('loadLineup:no-cache', { week, target });
-    showContainerLoading(containerId, 'Loading lineupâ€¦');
+    showContainerLoading(containerId, 'Loading lineup...');
   const mode = getDataMode();
   const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, mode });
     const { ok, data } = await fetchJSON(url);
@@ -309,7 +309,7 @@ async function showPlayers(week) {
   const containerId = week === 'this' ? 'players-this' : 'players-next';
   if (!cached) {
     dbg('showPlayers:no-cache', { week });
-    showContainerLoading(containerId, 'Loading playersâ€¦');
+    showContainerLoading(containerId, 'Loading players...');
   const mode = getDataMode();
   const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode });
     const { ok, data } = await fetchJSON(url);
@@ -328,7 +328,7 @@ async function loadDefenses(week) {
   const containerId = week === 'this' ? 'defenses-this' : 'defenses-next';
   if (!cached) {
     dbg('loadDefenses:no-cache', { week });
-    showContainerLoading(containerId, 'Loading defensesâ€¦');
+    showContainerLoading(containerId, 'Loading defenses...');
   const mode = getDataMode();
   const url = apiUrl('/defenses', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, scope: 'both', mode });
     const { ok, data } = await fetchJSON(url);
@@ -349,7 +349,7 @@ async function refreshAll() {
   const url = apiUrl('/dashboard', { username, season, mode, weeks: 'this', def_scope: 'owned', include_players: '1' });
   dbg('refreshAll:start', { url, username, season });
   setStatus($('pingStatus'), 'Refreshing...');
-  showGlobalLoading('Refreshing dashboardâ€¦');
+  showGlobalLoading('Refreshing dashboard...');
   disableAllButtons(true);
   try {
     const { ok, data } = await fetchJSON(url);
@@ -395,7 +395,7 @@ async function dbgProjections(week) {
     week,
     mode: getDataMode()
   });
-  showContainerLoading('projectionsDebug', 'Loading projectionsâ€¦');
+  showContainerLoading('projectionsDebug', 'Loading projections...');
   const { ok, data } = await fetchJSON(url);
   if (!ok) { dbg('dbgProjections:fail', { week, url }); return alert('Failed to load projections'); }
   $('projectionsDebug').textContent = JSON.stringify(data, null, 2);
@@ -426,6 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[ui] unhandledrejection', e?.reason || e);
   });
 });
+
 
 
 
