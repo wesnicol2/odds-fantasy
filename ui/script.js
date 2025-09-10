@@ -271,7 +271,7 @@ async function dbgProjections(week) {
 
 // Wire handlers
 document.addEventListener('DOMContentLoaded', () => {
-  $('btnRefresh').addEventListener('click', refreshAll);
+  
   document.querySelectorAll('.btn-lineup').forEach(btn => {
     btn.addEventListener('click', () => loadLineup(btn.dataset.week, btn.dataset.target));
   });
@@ -293,3 +293,4 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[ui] unhandledrejection', e?.reason || e);
   });
 });
+
