@@ -200,10 +200,11 @@ def application(environ, start_response):
             season = q("season", "2025")
             week = q("week", "this")
             defense = q("defense", "")
+            region = q("region", "us")
             mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] defense/odds user={username} season={season} week={week} defense={defense} mode={mode}")
-            data = services.get_defense_odds_details(username=username, season=season, week=week, defense=defense, cache_mode=mode)
+            _dprint(f"[api] defense/odds user={username} season={season} week={week} defense={defense} region={region} mode={mode}")
+            data = services.get_defense_odds_details(username=username, season=season, week=week, defense=defense, cache_mode=mode, region=region)
             _dprint(f"[api] defense/odds done games={len(data.get('games', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 

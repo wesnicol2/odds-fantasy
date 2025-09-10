@@ -15,6 +15,11 @@ table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e5e7eb; }
 th { background: #f1f5f9; }
 .status { margin-left: 10px; font-size: 13px; color: #334155; }
+/* Improve contrast for status text on dark backgrounds */
+header .status { color: #cbd5e1; }
+header #rlHeader { color: #93c5fd; font-weight: 600; }
+.details-body .status { color: #e5e7eb; }
+.overlay-box .status { color: #e5e7eb; }
 .debug { background: #0b1020; color: #e2e8f0; padding: 10px; border-radius: 6px; max-height: 300px; overflow: auto; }
 
 /* Loading helpers */
@@ -35,6 +40,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .details-body { background: #0b1020; color: #e2e8f0; padding: 8px; border-radius: 6px; overflow: auto; max-height: calc(90vh - 60px); }
 .details-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .details-body th, .details-body td { border-bottom: 1px solid #233; padding: 6px 8px; text-align: left; }
+.details-body th { background: #111827; color: #e5e7eb; }
 .pill { display: inline-block; padding: 2px 6px; border-radius: 999px; background: #1e293b; color: #cbd5e1; font-size: 12px; margin-left: 6px; }
 .muted { color: #94a3b8; }
 

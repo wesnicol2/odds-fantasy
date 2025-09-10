@@ -23,7 +23,7 @@ def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
     return (this_start, this_end) if which == "this" else (next_start, next_end)
 
 
-def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str) -> Dict[str, Dict[str, list]]:
+def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, regions: str = "us") -> Dict[str, Dict[str, list]]:
     """Fetch event odds concurrently per week for planned games.
 
     Uses a small thread pool to parallelize network calls when cache misses occur.
@@ -40,8 +40,8 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str) -> 
         def task(pair):
             gid, g = pair
             markets_str = ",".join(sorted(set(g.markets)))
-            print(f"[services] fetch odds week={w} game={gid} markets={len(g.markets)} mode={cache_mode}")
-            data = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, mode=cache_mode)
+            print(f"[services] fetch odds week={w} game={gid} markets={len(g.markets)} regions={regions} mode={cache_mode}")
+            data = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, regions=regions, mode=cache_mode)
             return gid, data
 
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -78,7 +78,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
     plan = {week: plan_all.get(week, {})}
 
-    odds_by_week = _fetch_odds(plan, cache_mode=eff_mode)
+    odds_by_week = _fetch_odds(plan, cache_mode=eff_mode, regions=region)
     planned = plan[week]
     ev_odds = odds_by_week.get(week, {})
     # Debug: print planned vs matched counts
@@ -442,7 +442,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
     planned = plan_all.get(week, {})
     # Fetch odds for planned games
-    odds_by_week = _fetch_odds({week: planned}, cache_mode=eff_mode)
+    odds_by_week = _fetch_odds({week: planned}, cache_mode=eff_mode, regions=region)
     ev_odds = odds_by_week.get(week, {})
     # Aggregate
     per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, planned)
@@ -525,13 +525,15 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         "markets": markets_out,
         "primary_order": primary,
         "all_order": order,
+        # Attach raw event odds for debugging/verification
+        "raw_odds": ev_odds,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }
     return payload
 
 
-def get_defense_odds_details(username: str, season: str, week: str = "this", defense: str = "", cache_mode: str = "auto") -> Dict:
+def get_defense_odds_details(username: str, season: str, week: str = "this", defense: str = "", cache_mode: str = "auto", region: str = "us") -> Dict:
     """Return per-book totals/spreads and implied totals for opponent against this defense.
 
     Sorted by implied total ascending per game, includes medians.
@@ -540,19 +542,21 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
     eff_mode = cache_mode
     # Window and events
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
-    events = odds_client.get_nfl_events(mode=eff_mode)
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
     # Find games with this defense
     games = [e for e in window_events if defense in (e.get("home_team"), e.get("away_team"))]
     details = []
+    raw_map: Dict[str, object] = {}
     for e in games:
         gid = e["id"]
         opp = e["away_team"] if e["home_team"] == defense else e["home_team"]
-        ev_odds = odds_client.get_event_player_odds(gid, markets="spreads,totals", mode=eff_mode)
+        ev_odds = odds_client.get_event_player_odds(gid, markets="spreads,totals", regions=region, mode=eff_mode)
         # Normalize
         ev_obj = ev_odds[0] if isinstance(ev_odds, list) and ev_odds else (ev_odds if isinstance(ev_odds, dict) else None)
         if not ev_obj:
             continue
+        raw_map[gid] = ev_obj
         books_rows = []
         implieds = []
         for book in ev_obj.get("bookmakers", []):
@@ -597,6 +601,8 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
         "defense": defense,
         "week": week,
         "games": details,
+        # Attach raw event odds map keyed by game id
+        "raw_odds": raw_map,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }

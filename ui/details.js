@@ -18,6 +18,17 @@ function _fmt(val, digits=2) {
   return (val==null || Number.isNaN(Number(val))) ? '—' : Number(val).toFixed(digits);
 }
 
+function _escapeHtml(s) {
+  try {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  } catch (e) {
+    return '';
+  }
+}
+
 function _prettyMarketLabel(key) {
   // Basic prettifier for OddsAPI market keys
   const map = {
@@ -73,6 +84,7 @@ async function openPlayerDetails(name, week) {
     season: val('season') || '2025',
     week: week,
     name: name,
+    region: 'us,us2',
     mode: getDataMode()
   });
   var projUrl = apiUrl('/projections', {
@@ -116,7 +128,8 @@ async function openPlayerDetails(name, week) {
   var others = (data.all_order || []).filter(function(k){ return primary.indexOf(k) === -1; });
   var otherHtml = others.map(function(k){ return renderMarketBlock(k, markets[k]); }).join('');
   if (!otherHtml) otherHtml = '<div class="muted">No other markets.</div>';
-  var html = [head, predicted, '<h4>Primary Markets</h4>', primaryHtml, '<h4>Other Markets</h4>', otherHtml].join('');
+  var debugHtml = renderRawOddsSection(data.raw_odds);
+  var html = [head, predicted, '<h4>Primary Markets</h4>', primaryHtml, '<h4>Other Markets</h4>', otherHtml, debugHtml].join('');
   showDetails('Player Details', html);
 }
 
@@ -127,6 +140,7 @@ async function openDefenseDetails(defense, week) {
     season: val('season') || '2025',
     week: week,
     defense: defense,
+    region: 'us,us2',
     mode: getDataMode()
   });
   var resp = await fetchJSON(url);
@@ -154,8 +168,85 @@ async function openDefenseDetails(defense, week) {
     return '<div class="market">' + header + '<div id="' + id + '" class="market-details hidden">' + table + '</div></div>';
   }).join('');
   if (!blocks) blocks = '<div class="muted">No games found for this defense.</div>';
-  var html = '<div style="margin-bottom:6px;"><strong>' + defense + '</strong> <span class="muted">games this week</span></div>' + blocks;
+  var debugHtml = renderRawOddsSection(data.raw_odds);
+  var html = '<div style="margin-bottom:6px;"><strong>' + defense + '</strong> <span class="muted">games this week</span></div>' + blocks + debugHtml;
   showDetails('Defense Details', html);
+}
+
+// Render deeply nested, collapsible view of raw odds (events -> bookmakers -> markets -> outcomes)
+function renderRawOddsSection(raw) {
+  try {
+    var events = [];
+    if (!raw) raw = {};
+    if (Array.isArray(raw)) {
+      events = raw.map(function(ev){ return { id: ev && ev.id || '', obj: ev }; });
+    } else if (typeof raw === 'object') {
+      events = Object.keys(raw).map(function(k){ return { id: k, obj: raw[k] }; });
+    }
+    var out = ['<div class="predicted" style="margin-top: 10px;">', '<div class="predicted-title">Debug: Raw Odds</div>'];
+    if (!events.length) {
+      out.push('<div class="muted">No raw odds available.</div>', '</div>');
+      return out.join('');
+    }
+    events.forEach(function(item, eidx){
+      var arr = Array.isArray(item.obj) ? item.obj : [item.obj];
+      arr.forEach(function(ev, sub){
+        if (!ev) return;
+        var eid = _escapeHtml(ev.id || item.id || (''+eidx+'_'+sub));
+        var hdrTitle = (ev.home_team && ev.away_team) ? (_escapeHtml(ev.away_team) + ' @ ' + _escapeHtml(ev.home_team)) : ('Event ' + eid);
+        var meta = (ev.commence_time ? _escapeHtml(ev.commence_time) + ' · ' : '') + (ev.sport_key ? _escapeHtml(ev.sport_key) : '');
+        var evHeader = '<div class="market-summary" aria-expanded="false" data-target="ev_' + eid + '">' +
+                       '<div class="title">' + hdrTitle + '</div>' +
+                       '<div class="meta">' + meta + '</div>' +
+                       '<div class="chev">▶</div></div>';
+        var bms = Array.isArray(ev.bookmakers) ? ev.bookmakers : [];
+        var bmBlocks = bms.map(function(bm, bidx){
+          var bid = eid + '_bm_' + bidx;
+          var btitle = _escapeHtml(bm.title || bm.key || ('Book ' + bidx));
+          var bmeta = (bm.key ? _escapeHtml(bm.key) + ' · ' : '') + (bm.last_update ? _escapeHtml(bm.last_update) : '');
+          var bmHeader = '<div class="market-summary" aria-expanded="false" data-target="' + bid + '">' +
+                         '<div class="title">' + btitle + '</div>' +
+                         '<div class="meta">' + bmeta + '</div>' +
+                         '<div class="chev">▶</div></div>';
+          var mkts = Array.isArray(bm.markets) ? bm.markets : [];
+          var mBlocks = mkts.map(function(mkt, midx){
+            var mid = bid + '_m_' + midx;
+            var mtitle = _escapeHtml(mkt.key || ('Market ' + midx));
+            var mmeta = 'outcomes: ' + ((mkt.outcomes && mkt.outcomes.length) || 0);
+            var mHeader = '<div class="market-summary" aria-expanded="false" data-target="' + mid + '">' +
+                          '<div class="title">' + mtitle + '</div>' +
+                          '<div class="meta">' + mmeta + '</div>' +
+                          '<div class="chev">▶</div></div>';
+            var outcomes = Array.isArray(mkt.outcomes) ? mkt.outcomes : [];
+            var rows = outcomes.map(function(o){
+              var name = _escapeHtml(o.name);
+              var price = (o.price!=null? _escapeHtml(o.price) : (o.odds!=null? _escapeHtml(o.odds): '—'));
+              var point = (o.point!=null? _escapeHtml(o.point) : '—');
+              var other = {};
+              Object.keys(o||{}).forEach(function(k){ if (['name','price','odds','point'].indexOf(k)===-1) other[k]=o[k]; });
+              var otherStr = (Object.keys(other).length? _escapeHtml(JSON.stringify(other)) : '');
+              return '<tr><td>' + name + '</td><td>' + price + '</td><td>' + point + '</td><td>' + otherStr + '</td></tr>';
+            }).join('');
+            var table = '<table><thead><tr><th>Name</th><th>Price</th><th>Point</th><th>Other</th></tr></thead><tbody>' + rows + '</tbody></table>';
+            var mRaw = '<div class="muted" style="margin-top:6px;">Raw market: <code>' + _escapeHtml(JSON.stringify(mkt)) + '</code></div>';
+            return '<div class="market">' + mHeader + '<div id="' + mid + '" class="market-details hidden">' + table + mRaw + '</div></div>';
+          }).join('');
+          var bmRaw = '<div class="muted" style="margin-top:6px;">Raw bookmaker: <code>' + _escapeHtml(JSON.stringify(bm)) + '</code></div>';
+          return '<div class="market">' + bmHeader + '<div id="' + bid + '" class="market-details hidden">' + mBlocks + bmRaw + '</div></div>';
+        }).join('');
+        var evRaw = '<div class="muted" style="margin-top:6px;">Raw event: <code>' + _escapeHtml(JSON.stringify(ev)) + '</code></div>';
+        out.push('<div class="market">' + evHeader + '<div id="ev_' + eid + '" class="market-details hidden">' + bmBlocks + evRaw + '</div></div>');
+      });
+    });
+    out.push('</div>');
+    return out.join('');
+  } catch (e) {
+    var safe = '';
+    try { safe = _escapeHtml(JSON.stringify(raw, null, 2)); } catch (ee) { safe = _escapeHtml(String(ee)); }
+    return '<div class="predicted" style="margin-top: 10px;">' +
+           '<div class="predicted-title">Debug: Raw Odds (fallback)</div>' +
+           '<pre class="debug">' + safe + '</pre></div>';
+  }
 }
 
 // Event delegation to open details on click in tables and toggle panels
