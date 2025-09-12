@@ -1,0 +1,46 @@
+    setStatus($('pingStatus'), 'Error');
+  } finally {
+    hideGlobalLoading();
+    disableAllButtons(false);
+  }
+}
+
+async function dbgProjections(week) {
+  const url = apiUrl('/projections', {
+    username: val('username') || 'wesnicol',
+    season: val('season') || '2025',
+    week,
+    mode: getDataMode()
+  });
+  showContainerLoading('projectionsDebug', 'Loading projections…');
+  const { ok, data } = await fetchJSON(url);
+  if (!ok) { dbg('dbgProjections:fail', { week, url }); return alert('Failed to load projections'); }
+  $('projectionsDebug').textContent = JSON.stringify(data, null, 2);
+  updateRateLimitDisplays(data);
+}
+
+// Wire handlers
+document.addEventListener('DOMContentLoaded', () => {
+  
+  document.querySelectorAll('.btn-lineup').forEach(btn => {
+    btn.addEventListener('click', () => loadLineup(btn.dataset.week, btn.dataset.target));
+  });
+  document.querySelectorAll('.btn-defenses').forEach(btn => {
+    btn.addEventListener('click', () => loadDefenses(btn.dataset.week));
+  });
+  document.querySelectorAll('.btn-players').forEach(btn => {
+    btn.addEventListener('click', () => showPlayers(btn.dataset.week));
+  });
+  $('btnProjThis').addEventListener('click', () => dbgProjections('this'));
+  $('btnProjNext').addEventListener('click', () => dbgProjections('next'));
+  dbg('DOMContentLoaded');
+  // Click 'Refresh' to load dashboard data when you want to fetch.
+  // Global error surfacing for visibility
+  window.addEventListener('error', (e) => {
+    console.error('[ui] window.error', e?.error || e?.message || e);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('[ui] unhandledrejection', e?.reason || e);
+  });
+});
+

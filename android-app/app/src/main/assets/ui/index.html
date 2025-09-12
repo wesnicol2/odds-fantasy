@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Odds Fantasy Dashboard</title>
+  <link rel="stylesheet" href="/ui/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Odds Fantasy Dashboard</h1>
+    <div class="controls">
+      <label>
+        API Base:
+        <input id="apiBase" type="text" value="http://127.0.0.1:8000" />
+      </label>
+      <label>
+        Username:
+        <input id="username" type="text" value="wesnicol" />
+      </label>
+      <label>
+        Season:
+        <input id="season" type="text" value="2025" />
+      </label>
+      <span>Data:</span>
+      <label><input type="radio" name="dataMode" value="auto" checked /> Auto (TTL)</label>
+      <label><input type="radio" name="dataMode" value="cache" /> Cache</label>
+      <label><input type="radio" name="dataMode" value="fresh" /> Fresh</label>
+      <span id="pingStatus" class="status"></span>
+      <span id="rlHeader" class="status"></span>
+      <span id="netSpin" class="spinner hidden" title="Network activity"></span>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Lineups - This Week</h2><div class="btn-row"><button data-week="this" class="btn-show-lineup">Show Lineup</button><button data-week="this" class="btn-compare-curves">Compare Curves</button></div><div id="lineup-this" class="results"></div>
+    </section>
+
+    <section>
+      <h2>Lineups - Next Week</h2><div class="btn-row"><button data-week="next" class="btn-show-lineup">Show Lineup</button><button data-week="next" class="btn-compare-curves">Compare Curves</button></div><div id="lineup-next" class="results"></div>
+    </section>
+
+    <section>
+      <h2>Defenses - This Week</h2>
+      <div class="btn-row">
+        <button data-week="this" class="btn-defenses">Load Defenses (Owned + Available)</button>
+      </div>
+      <div id="defenses-this" class="results"></div>
+    </section>
+
+    <section>
+      <h2>Defenses - Next Week</h2>
+      <div class="btn-row">
+        <button data-week="next" class="btn-defenses">Load Defenses (Owned + Available)</button>
+      </div>
+      <div id="defenses-next" class="results"></div>
+    </section>
+
+    <section>
+      <h2>Raw Projections (Debug)</h2>
+      <div class="btn-row">
+        <button id="btnProjThis">Fetch Projections (This Week)</button>
+        <button id="btnProjNext">Fetch Projections (Next Week)</button>
+      </div>
+      <pre id="projectionsDebug" class="debug"></pre>
+    </section>
+
+    <section>
+      <h2>Players - This Week</h2>
+      <div class="btn-row">
+        <button data-week="this" class="btn-players">Show Players</button>
+      </div>
+      <div id="players-this" class="results"></div>
+    </section>
+
+    <section>
+      <h2>Players - Next Week</h2>
+      <div class="btn-row">
+        <button data-week="next" class="btn-players">Show Players</button>
+      </div>
+      <div id="players-next" class="results"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="rateLimit" class="status"></span>
+  </footer>
+
+  <!-- Global loading overlay -->
+  <div id="globalLoading" class="overlay hidden">
+    <div class="overlay-box">
+      <md-circular-progress indeterminate aria-label="Loading"></md-circular-progress>
+      <span id="globalLoadingText">Loading...</span>
+    </div>
+  </div>
+
+  
+  <!-- Details modal overlay -->
+  <div id="detailsOverlay" class="overlay hidden">
+    <div class="overlay-box details-box">
+      <div class="details-header">
+        <div id="detailsTitle" class="details-title">Details</div>
+      </div>
+      <div id="detailsBody" class="details-body"></div>
+    </div>
+  </div>
+<script src="/ui/script.js"></script>
+  <script src="/ui/details.js"></script>
+</body>
+  
+</html>
+
