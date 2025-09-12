@@ -24,6 +24,7 @@ _META_FILE = os.path.join(DATA_DIR, "odds_api_cache_meta.json")
 _CACHE_LOCK = threading.RLock()
 _MEM_CACHE: dict | None = None
 _META: dict | None = None
+_INFLIGHT: dict[str, threading.Event] = {}
 
 # TTL (seconds) for auto mode
 ODDS_TTL = int(os.getenv("ODDS_TTL", "43200"))  # 12h default
@@ -34,6 +35,52 @@ _DBG = os.getenv("CACHE_DEBUG") in ("1", "true", "True") or os.getenv("API_DEBUG
 def _log(msg: str):
     if _DBG:
         print(f"[cache] {msg}", flush=True)
+
+
+def _fetch_json_coalesced(url: str, empty_result):
+    """Fetch URL with simple in-process request coalescing.
+
+    If another thread is already fetching this URL, wait for it to complete and
+    then return the cached result instead of issuing a duplicate network call.
+    """
+    leader = False
+    ev: threading.Event
+    with _CACHE_LOCK:
+        ev = _INFLIGHT.get(url)
+        if ev is None:
+            ev = threading.Event()
+            _INFLIGHT[url] = ev
+            leader = True
+    if leader:
+        try:
+            resp = _SESSION.get(url, timeout=REQ_TIMEOUT)
+            resp.raise_for_status()
+            data = resp.json()
+            # Save directly to cache; caller updates ratelimit and logs
+            cache = _load_cache()
+            cache[url] = data
+            _save_cache(cache, url)
+            return data, resp.headers
+        except Exception as e:
+            # Ensure waiters do not hang
+            _log(f"coalesce leader error for {url}: {e}")
+            return empty_result, {}
+        finally:
+            with _CACHE_LOCK:
+                ev = _INFLIGHT.pop(url, ev)
+                try:
+                    ev.set()
+                except Exception:
+                    pass
+    else:
+        # Follower waits for leader, then returns cached value
+        _log(f"coalesce wait for {url}")
+        try:
+            ev.wait(timeout=REQ_TIMEOUT[1] + 5)
+        except Exception:
+            pass
+        cache = _load_cache()
+        return cache.get(url, empty_result), {}
 
 
 def _load_cache() -> dict:
@@ -141,13 +188,12 @@ def get_nfl_events(regions: str = "us", mode: str = "auto", use_saved_data: bool
         _log("events: TTL_EXPIRED or MISS; fetching")
 
     # Fresh mode: bypass cache and hit network
-    resp = _SESSION.get(url, timeout=REQ_TIMEOUT)
-    resp.raise_for_status()
-    data = resp.json()
-    ratelimit.update_from_response(resp.headers, "events")
-    cache[url] = data
-    _save_cache(cache, url)
-    _log(f"events: NETWORK dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
+    data, hdrs = _fetch_json_coalesced(url, [])
+    if hdrs:
+        ratelimit.update_from_response(hdrs, "events")
+    else:
+        ratelimit.update_cached("events")
+    _log(f"events: NETWORK/COALESCE dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
     return data
 
 
@@ -171,11 +217,10 @@ def get_event_player_odds(event_id: str, regions: str = "us", markets: str = "",
             ratelimit.update_cached(f"event_odds:{event_id}")
             return cache[url]
 
-    resp = _SESSION.get(url, timeout=REQ_TIMEOUT)
-    resp.raise_for_status()
-    data = resp.json()
-    ratelimit.update_from_response(resp.headers, f"event_odds:{event_id}")
-    cache[url] = data
-    _save_cache(cache, url)
-    _log(f"event:{event_id} NETWORK dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
+    data, hdrs = _fetch_json_coalesced(url, {})
+    if hdrs:
+        ratelimit.update_from_response(hdrs, f"event_odds:{event_id}")
+    else:
+        ratelimit.update_cached(f"event_odds:{event_id}")
+    _log(f"event:{event_id} NETWORK/COALESCE dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
     return data
