@@ -14,6 +14,17 @@ android {
         versionName "1.0"
 
         vectorDrawables.useSupportLibrary = true
+
+        python {
+            // If you have a specific local Python to build with, set it here.
+            // buildPython "/usr/bin/python3"
+            pip {
+                install "requests==2.31.0"
+                install "python-dotenv==1.0.1"
+                install "requests-oauthlib==1.3.1"
+                install "xmltodict==0.13.0"
+            }
+        }
     }
 
     buildTypes {
@@ -42,15 +53,4 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.webkit:webkit:1.8.0'
     implementation 'com.chaquo.python:android:14.0.2'
-}
-
-python {
-    // If you have a specific local Python to build with, set it here.
-    // buildPython "/usr/bin/python3"
-    pip {
-        install "requests==2.31.0"
-        install "python-dotenv==1.0.1"
-        install "requests-oauthlib==1.3.1"
-        install "xmltodict==0.13.0"
-    }
 }
