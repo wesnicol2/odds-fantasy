@@ -43,13 +43,15 @@
       var origBy = function(t){ return function(a,b){ return Number(b[t]||0) - Number(a[t]||0); }; };
       window.computeLineupFromPlayers = function(players, target){
         var buckets = { QB: [], RB: [], WR: [], TE: [] };
+        function nameKey(s){ try { return String(s||'').toLowerCase().replace(/[\.'`-]/g,'').replace(/\s+/g,' ').trim(); } catch(e){ return String(s||''); } }
         (players||[]).forEach(function(p){ if (buckets[p.pos]) buckets[p.pos].push(p); });
         Object.keys(buckets).forEach(function(pos){ buckets[pos].sort(origBy(target)); });
         var used = new Set();
-        function take(pos, n){ var out=[]; for (var i=0;i<buckets[pos].length;i++){ var p=buckets[pos][i]; if(!used.has(p.name)){ out.push(p); used.add(p.name); if(out.length===n) break; } } return out; }
+        function take(pos, n){ var out=[]; for (var i=0;i<buckets[pos].length;i++){ var p=buckets[pos][i]; var k=nameKey(p.name); if(!used.has(k)){ out.push(p); used.add(k); if(out.length===n) break; } } return out; }
         var lineup = { QB: take('QB',1), RB: take('RB',2), WR: take('WR',2), TE: take('TE',1) };
-        var flexPool = []; ['WR','RB','TE'].forEach(function(pos){ buckets[pos].forEach(function(p){ if(!used.has(p.name)) flexPool.push(p); }); });
+        var flexPool = []; ['WR','RB','TE'].forEach(function(pos){ buckets[pos].forEach(function(p){ var k=nameKey(p.name); if(!used.has(k)) flexPool.push(p); }); });
         flexPool.sort(origBy(target)); lineup.FLEX = flexPool.slice(0,1);
+        lineup.FLEX.forEach(function(p){ used.add(nameKey(p.name)); });
         var rows=[]; var total=0;
         function add(slot,p,countTotal){ if(countTotal===undefined) countTotal=true; var pts=Number(p[target]||0); if(countTotal) total+=pts; rows.push({ slot:slot,name:p.name,pos:p.pos,floor:(p.floor!=null?Number(p.floor):null),mid:(p.mid!=null?Number(p.mid):null),ceiling:(p.ceiling!=null?Number(p.ceiling):null), incomplete: !!p.incomplete, missing_markets:(p.missing_markets||[]), fallback_markets:(p.fallback_markets||[]) }); }
         lineup.QB.forEach(function(p){ add('QB',p); });
@@ -57,7 +59,7 @@
         lineup.WR.forEach(function(p){ add('WR',p); });
         lineup.TE.forEach(function(p){ add('TE',p); });
         lineup.FLEX.forEach(function(p){ add('FLEX',p); });
-        var bench=[]; ['QB','RB','WR','TE'].forEach(function(pos){ buckets[pos].forEach(function(p){ if(!used.has(p.name)) bench.push(p); }); });
+        var bench=[]; ['QB','RB','WR','TE'].forEach(function(pos){ buckets[pos].forEach(function(p){ var k=nameKey(p.name); if(!used.has(k)) bench.push(p); }); });
         bench.sort(origBy(target)); bench.forEach(function(p){ add('BENCH',p,false); });
         return { target:target, lineup:rows, total_points:Number(total.toFixed(2)) };
       };

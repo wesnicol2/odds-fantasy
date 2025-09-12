@@ -671,8 +671,29 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     primary = order[:5]
 
     # Build per-market details
+    # Also compute per-market stat quantiles and fantasy point contributions
+    try:
+        _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range(by_book, market_summaries, scoring_rules)
+    except Exception:
+        per_market_ranges = {}
+
+    def _fp_triplet_for_market(mkey: str) -> tuple[float, float, float]:
+        try:
+            rng = per_market_ranges.get(mkey)
+            if rng is None:
+                return 0.0, 0.0, 0.0
+            q10, q50, q90 = rng
+            rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
+            if not rule or rule not in scoring_rules:
+                return 0.0, 0.0, 0.0
+            mult = float(scoring_rules.get(rule, 0.0) or 0.0)
+            if mkey == "player_pass_interceptions":
+                mult = -abs(mult)
+            return round(q10 * mult, 2), round(q50 * mult, 2), round(q90 * mult, 2)
+        except Exception:
+            return 0.0, 0.0, 0.0
     markets_out: Dict[str, dict] = {}
-    for mkey in set(list(by_book.keys()) + list(market_summaries.keys()) + list(mean_stats.keys())):
+    for mkey in set(list(by_book.keys()) + list(market_summaries.keys()) + list(mean_stats.keys()) + list(per_market_ranges.keys())):
         # Per-book rows
         books = []
         for book_key, mkts in by_book.items():
@@ -691,10 +712,15 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
                 "avg_under_prob": getattr(summ, "avg_under_prob", 0.0),
                 "samples": getattr(summ, "samples", 0),
             }
+        f_floor, f_mid, f_ceil = _fp_triplet_for_market(mkey)
         markets_out[mkey] = {
             "summary": m_summ,
             "mean_stat": mean_stats.get(mkey),
             "impact_score": impacts.get(mkey, 0.0),
+            "range": (per_market_ranges.get(mkey) if m_summ is not None or mkey in per_market_ranges else None),
+            "fp_floor": f_floor,
+            "fp_mid": f_mid,
+            "fp_ceiling": f_ceil,
             "books": books,
         }
 

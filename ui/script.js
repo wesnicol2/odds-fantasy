@@ -52,11 +52,13 @@ function computeLineupFromPlayers(players, target) {
   }
   const by = (t) => (a, b) => Number(b[t] || 0) - Number(a[t] || 0);
   Object.keys(buckets).forEach(pos => buckets[pos].sort(by(target)));
+  const nameKey = (s) => String(s||'').toLowerCase().replace(/[\.'`-]/g,'').replace(/\s+/g,' ').trim();
   const used = new Set();
   const take = (pos, n) => {
     const out = [];
     for (const p of buckets[pos]) {
-      if (!used.has(p.name)) { out.push(p); used.add(p.name); if (out.length === n) break; }
+      const key = nameKey(p.name);
+      if (!used.has(key)) { out.push(p); used.add(key); if (out.length === n) break; }
     }
     return out;
   };
@@ -68,10 +70,12 @@ function computeLineupFromPlayers(players, target) {
   };
   const flexPool = [];
   for (const pos of ['WR','RB','TE']) {
-    for (const p of buckets[pos]) if (!used.has(p.name)) flexPool.push(p);
+    for (const p of buckets[pos]) { const key=nameKey(p.name); if (!used.has(key)) flexPool.push(p); }
   }
   flexPool.sort(by(target));
   lineup.FLEX = flexPool.slice(0, 1);
+  // Mark FLEX selection as used to prevent duplicate in bench
+  lineup.FLEX.forEach(p => used.add(nameKey(p.name)));
   const rows = [];
   let total = 0;
   const add = (slot, p) => {
@@ -84,6 +88,13 @@ function computeLineupFromPlayers(players, target) {
   lineup.WR.forEach(p => add('WR', p));
   lineup.TE.forEach(p => add('TE', p));
   lineup.FLEX.forEach(p => add('FLEX', p));
+  // Append bench (remaining sorted by target)
+  const bench = [];
+  for (const pos of ['QB','RB','WR','TE']) {
+    for (const p of buckets[pos]) { const key=nameKey(p.name); if (!used.has(key)) bench.push(p); }
+  }
+  bench.sort(by(target));
+  bench.forEach(p => rows.push({ slot: 'BENCH', name: p.name, pos: p.pos, floor: Number(p.floor||0), mid: Number(p.mid||0), ceiling: Number(p.ceiling||0) }));
   return { target, lineup: rows, total_points: Number(total.toFixed(2)) };
 }
 

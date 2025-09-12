@@ -84,6 +84,31 @@ def _fantasy_points(stats: Dict[str, float], scoring_rules: Dict[str, float]) ->
             if market_key == "player_pass_interceptions":
                 mult = -abs(mult)
             total += value * mult
+    # Threshold bonuses for yardage milestones using available stat values
+    try:
+        rec_yd = float(stats.get("player_reception_yds", 0.0) or 0.0)
+        if rec_yd >= 200 and ("bonus_rec_yd_200" in scoring_rules):
+            total += float(scoring_rules["bonus_rec_yd_200"]) or 0.0
+        elif rec_yd >= 100 and ("bonus_rec_yd_100" in scoring_rules):
+            total += float(scoring_rules["bonus_rec_yd_100"]) or 0.0
+    except Exception:
+        pass
+    try:
+        rush_yd = float(stats.get("player_rush_yds", 0.0) or 0.0)
+        if rush_yd >= 200 and ("bonus_rush_yd_200" in scoring_rules):
+            total += float(scoring_rules["bonus_rush_yd_200"]) or 0.0
+        elif rush_yd >= 100 and ("bonus_rush_yd_100" in scoring_rules):
+            total += float(scoring_rules["bonus_rush_yd_100"]) or 0.0
+    except Exception:
+        pass
+    try:
+        pass_yd = float(stats.get("player_pass_yds", 0.0) or 0.0)
+        if pass_yd >= 400 and ("bonus_pass_yd_400" in scoring_rules):
+            total += float(scoring_rules["bonus_pass_yd_400"]) or 0.0
+        elif pass_yd >= 300 and ("bonus_pass_yd_300" in scoring_rules):
+            total += float(scoring_rules["bonus_pass_yd_300"]) or 0.0
+    except Exception:
+        pass
     return total
 
 

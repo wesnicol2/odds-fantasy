@@ -29,6 +29,18 @@ function _escapeHtml(s) {
   }
 }
 
+function _formatISOToLocal(iso) {
+  try {
+    var d = new Date(iso);
+    if (String(d) === 'Invalid Date') return iso || '';
+    return d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch (e) { return iso || ''; }
+}
+
+function _weekdayKey(iso) {
+  try { var d = new Date(iso); return d.toLocaleDateString([], { weekday: 'long' }); } catch (e) { return ''; }
+}
+
 function _prettyMarketLabel(key) {
   // Basic prettifier for OddsAPI market keys
   const map = {
@@ -86,7 +98,7 @@ function renderMarketBlock2(key, payload) {
       '<div class="title">', _prettyMarketLabel(key), '</div>',
       '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : '-'),
       (s && (s.samples!=null) ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : ''),
-      ' <span class="pill">impact ', _fmt(impact), '</span>',
+      ' <span class="pill impact-pill" data-mkey="', _escapeHtml(key), '" data-safe="', safeKey, '" title="Click to show FP impact">impact ', _fmt(impact), '</span>',
       '</div>',
       '<div class="chev">&#9656;</div>',
     '</div>'
@@ -101,7 +113,9 @@ function renderMarketBlock2(key, payload) {
       + '</tr>';
   }).join('');
   var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
-  return '<div class="market">' + header + '<div id="mk_' + safeKey + '" class="market-details hidden">' + table + '</div></div>';
+  var fp = payload || {};
+  var fpStrip = '<div id="imp_' + safeKey + '" class="impact-strip hidden">FP impact — Floor: <strong>' + _fmt(fp.fp_floor) + '</strong> · Mid: <strong>' + _fmt(fp.fp_mid) + '</strong> · Ceiling: <strong>' + _fmt(fp.fp_ceiling) + '</strong></div>';
+  return '<div class="market">' + header + fpStrip + '<div id="mk_' + safeKey + '" class="market-details hidden">' + table + '</div></div>';
 }
 
 async function openPlayerDetails(name, week) {
@@ -235,12 +249,19 @@ async function openDefenseDetails(defense, week) {
   if (!resp.ok) { showDetails('Defense Details', '<div class="status">Failed to load.</div>'); return; }
   var data = resp.data || {};
   var games = data.games || [];
+  // Build day-of-week index counters
+  var dayCounts = {};
+  games.forEach(function(g){ var k=_weekdayKey(g.commence_time||''); dayCounts[k] = (dayCounts[k]||0)+1; });
+  var daySeen = {};
   var blocks = games.map(function(g, idx){
     var id = 'def_' + idx;
+    var dow = _weekdayKey(g.commence_time||'');
+    daySeen[dow] = (daySeen[dow]||0) + 1;
+    var label = dow + (dayCounts[dow] > 1 ? (' ' + daySeen[dow]) : '');
     var header = [
       '<div class="market-summary" aria-expanded="false" data-target="', id, '">',
         '<div class="title">', _escapeHtml(defense), ' vs ', _escapeHtml(g.opponent||''), '</div>',
-        '<div class="meta">', _escapeHtml(_formatISOToLocal(g.commence_time||'')), ' &middot; Opp Implied Median: <strong>', _fmt(g.implied_total_median), '</strong></div>',
+        '<div class="meta">', _escapeHtml(label), ' &middot; ', _escapeHtml(_formatISOToLocal(g.commence_time||'')), ' &middot; Opp Implied Median: <strong>', _fmt(g.implied_total_median), '</strong></div>',
         '<div class="chev">&#9656;</div>',
       '</div>'
     ].join('');
@@ -352,6 +373,14 @@ document.addEventListener('DOMContentLoaded', function(){
   var body = document.getElementById('detailsBody');
   if (body) {
     body.addEventListener('click', function(e){
+      var pill = e.target.closest('.impact-pill');
+      if (pill) {
+        e.stopPropagation();
+        var safe = pill.getAttribute('data-safe');
+        var panel = document.getElementById('imp_' + safe);
+        if (panel) panel.classList.toggle('hidden');
+        return;
+      }
       var hdr = e.target.closest('.market-summary');
       if (!hdr) return;
       var tid = hdr.getAttribute('data-target');
