@@ -416,6 +416,8 @@ async function dbgProjections(week) {
 
 // Wire handlers
 document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  attachSettingsListeners();
   
   document.querySelectorAll('.btn-show-lineup').forEach(btn => {
     btn.addEventListener('click', () => showLineup(btn.dataset.week));
@@ -448,5 +450,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+// Persist basic settings in localStorage
+function saveSettings() {
+  try {
+    const data = {
+      apiBase: ($('apiBase')||{}).value || '',
+      username: ($('username')||{}).value || '',
+      season: ($('season')||{}).value || '',
+      dataMode: (document.querySelector('input[name="dataMode"]:checked')||{}).value || 'auto',
+    };
+    localStorage.setItem('ofdash.settings', JSON.stringify(data));
+  } catch (e) { /* ignore */ }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem('ofdash.settings');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (s.apiBase && $('apiBase')) $('apiBase').value = s.apiBase;
+    if (s.username && $('username')) $('username').value = s.username;
+    if (s.season && $('season')) $('season').value = s.season;
+    if (s.dataMode) {
+      const radio = document.querySelector('input[name="dataMode"][value="'+s.dataMode+'"]');
+      if (radio) radio.checked = true;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function attachSettingsListeners() {
+  ['apiBase','username','season'].forEach(id => { const el=$(id); if (el) el.addEventListener('change', saveSettings); });
+  document.querySelectorAll('input[name="dataMode"]').forEach(r => r.addEventListener('change', saveSettings));
+}
+
+// Enable simple table sorting on click
+function enableTableSort(table) {
+  try {
+    if (!table) return;
+    const ths = table.querySelectorAll('thead th');
+    ths.forEach((th, colIdx) => {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', () => {
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const dir = (th.getAttribute('data-sort') === 'asc') ? 'desc' : 'asc';
+        ths.forEach(h => h.removeAttribute('data-sort'));
+        th.setAttribute('data-sort', dir);
+        const isNumCol = (colIdx >= 3); // Floor/Mid/Ceiling typically numeric
+        rows.sort((a,b) => {
+          const av = (a.cells[colIdx] && a.cells[colIdx].textContent || '').trim();
+          const bv = (b.cells[colIdx] && b.cells[colIdx].textContent || '').trim();
+          const aN = parseFloat(av); const bN = parseFloat(bv);
+          let cmp;
+          if (isNumCol && !Number.isNaN(aN) && !Number.isNaN(bN)) cmp = aN - bN; else cmp = av.localeCompare(bv);
+          return dir === 'asc' ? cmp : -cmp;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+      });
+    });
+  } catch (e) { /* ignore */ }
+}
 
 

@@ -96,6 +96,7 @@
             return '<tr><td>'+ (r.slot||'') +'</td><td>'+ nameHtml +'</td><td>'+ (r.pos||'') +'</td><td>'+ fmt(r.floor) +'</td><td>'+ fmt(r.mid) +'</td><td>'+ fmt(r.ceiling) +'</td></tr>';
           }).join('');
           c.innerHTML=['<h3>'+title+' - target: '+target+' (total: '+total.toFixed(2)+')</h3>','<table><thead><tr>'+header+'</tr></thead><tbody>',body,'</tbody></table>','<div class="status">RateLimit: '+rl+'</div>'].join('\n');
+          try { if (window.enableTableSort) { window.enableTableSort(c.querySelector('table')); } } catch(e) {}
         }catch(e){ try{ _origRL(containerId,title,payload); }catch(_){} }
       };
     }
@@ -130,6 +131,7 @@
             return '<tr><td>'+ nameHtml +'</td><td>'+ (r.pos||'') +'</td><td>'+ fmtCell(r.floor) +'</td><td>'+ fmtCell(r.mid) +'</td><td>'+ fmtCell(r.ceiling) +'</td></tr>';
           }).join('');
           c.innerHTML='<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>'+body+'</tbody></table>';
+          try { if (window.enableTableSort) { window.enableTableSort(c.querySelector('table')); } } catch(e) {}
         }catch(e){ try{ _orig(containerId,players); }catch(_){} }
       };
     }

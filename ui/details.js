@@ -7,6 +7,25 @@ function showDetails(title, html) {
   if (ttl) ttl.textContent = title || 'Details';
   if (body) body.innerHTML = html || '';
   if (overlay) overlay.classList.remove('hidden');
+  try { history.pushState({ detailsOpen: true }, '', '#details'); } catch (e) {}
+  // Focus trap and a11y
+  try {
+    var dialog = overlay && overlay.querySelector('.details-box');
+    if (dialog) {
+      dialog.setAttribute('role','dialog');
+      dialog.setAttribute('aria-modal','true');
+      dialog.setAttribute('aria-labelledby','detailsTitle');
+      var focusables = dialog.querySelectorAll('a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      var first = focusables[0]; var last = focusables[focusables.length-1];
+      if (first) first.focus();
+      dialog.addEventListener('keydown', function(e){
+        if (e.key === 'Tab') {
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last && last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first && first.focus(); }
+        }
+      });
+    }
+  } catch (e) { /* ignore */ }
 }
 
 function hideDetails() {
@@ -60,10 +79,13 @@ function _renderFpVisual(floor, mid, ceil) {
     pts.forEach(function(p, i){ var X=p[0], Y=yScale((p[1]/(maxY||1))*0.9); path += (i?'L':'M') + X.toFixed(1) + ',' + Y.toFixed(1); });
     // close area to baseline
     var area = path + ' L ' + xScale(maxX).toFixed(1) + ',' + yScale(0).toFixed(1) + ' L ' + xScale(minX).toFixed(1) + ',' + yScale(0).toFixed(1) + ' Z';
+    // Build gridlines (x: 5 ticks)
+    var grid = (function(){ var parts=[]; for (var i=1;i<=5;i++){ var xv=minX + (maxX-minX)*i/6; parts.push('<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'); } return parts.join(''); })();
     var svg = [
       '<div class="fp-visual" data-min="', minX.toFixed(6),'" data-max="',maxX.toFixed(6),'" data-pad="',PAD,'" data-w="',W,'" data-h="',H,'" data-floor="',f,'" data-mid="',m,'" data-ceil="',c,'">',
         '<div class="vis-title">Fantasy Points (visual)</div>',
         '<div class="svg-wrap"><svg viewBox="0 0 ', W, ' ', H, '" preserveAspectRatio="none">',
+          grid,
           '<line class="axis" x1="', xScale(minX), '" y1="', yScale(0), '" x2="', xScale(maxX), '" y2="', yScale(0), '" />',
           '<text class="axis-label" x="', xScale(maxX)-2, '" y="', yScale(0)+14, '" text-anchor="end">Fantasy Points (pts)</text>',
           '<text class="axis-label" transform="translate(12,', (H/2).toFixed(1), ') rotate(-90)" text-anchor="middle">Density</text>',
@@ -101,7 +123,8 @@ function openCompareCurves(week) {
       var all = (res.data && res.data.players) || [];
       var posTabs = ['QB','RB','WR','TE','FLEX'];
       var tabsHtml = '<div class="details-section"><div class="section-title">Select Position (' + (week==='next'?'Next Week':'This Week') + ')</div>' + posTabs.map(function(p){ return '<button class="pill" data-pos="'+p+'">'+p+'</button>'; }).join(' ') + '</div>';
-      var grid = '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
+      var controls = '<div class="cmp-controls"><input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" /><label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label></div>';
+      var grid = controls + '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
       var body = document.getElementById('detailsBody');
       body.innerHTML = tabsHtml + grid;
       function renderForPos(pos){
@@ -118,19 +141,35 @@ function openCompareCurves(week) {
         // Keep curve params for hover density calculations
         var curves = pool.map(function(p){ var f=Number(p.floor||0), m=Number(p.mid||0), c=Number(p.ceiling||0); return { f:f, m:m, c:c, sigR: Math.max(0.1, Math.abs(c-m)/z85), sigL: Math.max(0.1, Math.abs(m-f)/z85) }; });
         function pdfAt(i, x){ var cur=curves[i]; var s=(x>=cur.m?cur.sigR:cur.sigL); return Math.exp(-0.5*Math.pow((x-cur.m)/s,2)); }
-        var mids = pool.map(function(p){ return Number(p.mid||0); }); var minM=Math.min.apply(null, mids.concat([0])), maxM=Math.max.apply(null, mids.concat([1]));
-        function colorFor(m){ var t=(Number(m)-minM)/((maxM-minM)||1); var hue=200-140*t; var sat=70; var light=60-20*t; return 'hsl('+hue.toFixed(0)+','+sat+'%,'+light+'%)'; }
-        var list = document.getElementById('cmpList'); list.innerHTML = pool.map(function(p,idx){ return '<div class="player" data-idx="'+idx+'"><span>'+_escapeHtml(p.name)+'</span><span class="muted">'+(Number(p.mid||0).toFixed(1))+'</span></div>'; }).join('');
+        // Build a palette with maximum visual spread given number of players
+        var palette = (function(){
+          var n = pool.length; var cols = [];
+          if (n <= 0) return cols;
+          if (n === 1) { cols.push('hsl(0,80%,60%)'); return cols; }
+          if (n === 2) { cols = ['hsl(0,80%,58%)','hsl(130,75%,52%)']; return cols; }
+          var sat = 72, light = 58;
+          for (var i=0;i<n;i++) { var hue = Math.round((360*i)/n) % 360; cols.push('hsl('+hue+','+sat+'%,'+light+'%)'); }
+          return cols;
+        })();
+        var list = document.getElementById('cmpList'); list.innerHTML = pool.map(function(p,idx){ var col=palette[idx]||'hsl(200,70%,55%)'; return '<div class="player" data-idx="'+idx+'" data-name="'+_escapeHtml(p.name.toLowerCase())+'"><span><span class="dot" style="background:'+col+'"></span>'+_escapeHtml(p.name)+'</span><span class="muted">'+(Number(p.mid||0).toFixed(1))+'</span></div>'; }).join('');
         var svg = document.getElementById('cmpSvg');
-        var ax = '<line class="axis" x1="'+xScale(minX)+'" y1="'+yScale(0)+'" x2="'+xScale(maxX)+'" y2="'+yScale(0)+'" />';
+        var grid=''; for (var gi=1; gi<=6; gi++){ var xv=minX+(maxX-minX)*gi/7; grid += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; }
+        var ax = grid + '<line class="axis" x1="'+xScale(minX)+'" y1="'+yScale(0)+'" x2="'+xScale(maxX)+'" y2="'+yScale(0)+'" />';
         var labels='<text class="axis-label" x="'+xScale(maxX)+'" y="'+(yScale(0)+16)+'" text-anchor="end">Fantasy Points (pts)</text>'+
                     '<text class="axis-label" transform="translate('+(xScale(minX)-12)+','+(H/2)+') rotate(-90)" text-anchor="middle">Density</text>';
-        svg.innerHTML = ax + labels + pool.map(function(p,idx){ var d=pathFor(p.floor,p.mid,p.ceiling); var col=colorFor(p.mid); return '<path class="curve-line" data-idx="'+idx+'" stroke="'+col+'" d="'+d+'" />'; }).join('') + '<line class="hover-x" x1="0" y1="'+yScale(1)+'" x2="0" y2="'+yScale(0)+'" style="display:none" />' + '<circle class="hover-dot" cx="0" cy="0" r="3" style="display:none" />';
+        svg.innerHTML = ax + labels + pool.map(function(p,idx){ var d=pathFor(p.floor,p.mid,p.ceiling); var col=palette[idx]||'hsl(200,70%,55%)'; return '<path class="curve-line" data-idx="'+idx+'" stroke="'+col+'" d="'+d+'" />'; }).join('') + '<line class="hover-x" x1="0" y1="'+yScale(1)+'" x2="0" y2="'+yScale(0)+'" style="display:none" />' + '<circle class="hover-dot" cx="0" cy="0" r="3" style="display:none" />';
         // Tooltip element inside graph
         var graph = svg.parentElement; var tip = graph.querySelector('.fp-tooltip'); if (!tip){ tip = document.createElement('div'); tip.className='fp-tooltip'; tip.style.display='none'; graph.appendChild(tip); }
-        var locked=null;
-        function setHighlight(idx){ var paths=svg.querySelectorAll('.curve-line'); paths.forEach(function(p){ p.classList.remove('highlight'); p.classList.remove('dim'); }); if (idx==null) return; paths.forEach(function(p){ if (p.getAttribute('data-idx')===String(idx)) p.classList.add('highlight'); else p.classList.add('dim'); }); var items=list.querySelectorAll('.player'); items.forEach(function(it){ it.classList.toggle('active', it.getAttribute('data-idx')===String(idx)); }); }
-        list.querySelectorAll('.player').forEach(function(it){ it.addEventListener('mouseenter', function(){ if (locked==null) setHighlight(it.getAttribute('data-idx')); }); it.addEventListener('mouseleave', function(){ if (locked==null) setHighlight(null); }); it.addEventListener('click', function(){ var idx=it.getAttribute('data-idx'); if (locked===idx){ locked=null; setHighlight(null);} else { locked=idx; setHighlight(idx);} }); });
+        var pinned=new Set(); var hoverIdx=null; var showPinnedOnly=false;
+        function applyHighlight(){ var paths=svg.querySelectorAll('.curve-line'); var items=list.querySelectorAll('.player'); var anyPinned = pinned.size>0; var focusSet = new Set(anyPinned ? Array.from(pinned) : (hoverIdx!=null?[String(hoverIdx)]:[])); paths.forEach(function(p){ var idx=p.getAttribute('data-idx'); p.classList.remove('highlight'); p.classList.remove('dim'); var show=true; if (showPinnedOnly && anyPinned && !focusSet.has(idx)) show=false; if (!show) { p.style.display='none'; return; } p.style.display=''; if (focusSet.size===0) return; if (focusSet.has(idx)) p.classList.add('highlight'); else p.classList.add('dim'); }); items.forEach(function(it){ var idx=it.getAttribute('data-idx'); it.classList.toggle('active', focusSet.has(idx)); if (showPinnedOnly && anyPinned && !focusSet.has(idx)) it.style.display='none'; else it.style.display=''; }); }
+        list.querySelectorAll('.player').forEach(function(it){
+          it.addEventListener('mouseenter', function(){ hoverIdx = it.getAttribute('data-idx'); if (pinned.size===0) applyHighlight(); });
+          it.addEventListener('mouseleave', function(){ hoverIdx = null; if (pinned.size===0) applyHighlight(); });
+          it.addEventListener('click', function(){ var idx=it.getAttribute('data-idx'); if (pinned.has(idx)) pinned.delete(idx); else pinned.add(idx); applyHighlight(); });
+        });
+        var search = document.getElementById('cmpSearch'); if (search){ search.value=''; search.oninput = function(){ var q=(search.value||'').toLowerCase().trim(); list.querySelectorAll('.player').forEach(function(it){ var name=(it.getAttribute('data-name')||''); it.style.display = (q==='' || name.indexOf(q)>=0) ? '' : 'none'; }); }; }
+        var chk = document.getElementById('cmpShowPinned'); if (chk){ chk.checked=false; chk.onchange = function(){ showPinnedOnly = !!chk.checked; applyHighlight(); }; }
+        applyHighlight();
         // Hover over SVG to show nearest curve values
         var hoverX = svg.querySelector('.hover-x'); var hoverDot = svg.querySelector('.hover-dot');
         function onMove(evt){
@@ -162,9 +201,11 @@ function openCompareCurves(week) {
         function onLeave(){ if (locked==null) setHighlight(null); if (hoverX) hoverX.style.display='none'; if (hoverDot) hoverDot.style.display='none'; if (tip) tip.style.display='none'; }
         svg.addEventListener('mousemove', onMove); svg.addEventListener('mouseleave', onLeave);
       }
-      function activateTab(pos){ var pills = body.querySelectorAll('.details-section .pill[data-pos]'); pills.forEach(function(b){ b.classList.toggle('pill-active', b.getAttribute('data-pos')===pos); }); renderForPos(pos); }
+      function saveLastPos(pos){ try{ localStorage.setItem('ofdash.cmp.lastPos.'+week, pos);}catch(e){} }
+      function loadLastPos(){ try{ return localStorage.getItem('ofdash.cmp.lastPos.'+week) || 'WR'; }catch(e){ return 'WR'; } }
+      function activateTab(pos){ var pills = body.querySelectorAll('.details-section .pill[data-pos]'); pills.forEach(function(b){ b.classList.toggle('pill-active', b.getAttribute('data-pos')===pos); }); saveLastPos(pos); renderForPos(pos); }
       body.querySelectorAll('.details-section .pill[data-pos]').forEach(function(btn){ btn.addEventListener('click', function(){ activateTab(btn.getAttribute('data-pos')); }); });
-      activateTab('WR');
+      activateTab(loadLastPos());
     }).catch(function(){ hideDetails(); alert('Failed to load data'); });
   } catch (e) { try { hideDetails(); } catch(_){} }
 }
@@ -597,6 +638,13 @@ document.addEventListener('DOMContentLoaded', function(){
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape') hideDetails();
   });
+  // Mobile back button: close modal via history pop
+  try {
+    window.addEventListener('popstate', function(){
+      var overlay = document.getElementById('detailsOverlay');
+      if (overlay && !overlay.classList.contains('hidden')) hideDetails();
+    });
+  } catch (e) {}
 
   // Toggle collapsible market blocks inside details modal
   var body = document.getElementById('detailsBody');
