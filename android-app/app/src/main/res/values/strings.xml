@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">Odds Fantasy</string>
     <!-- Replace with your real Odds API key before building a release APK -->
-    <string name="odds_api_key">932c2aceae37c9e99787fbd4abaa7f94</string>
+    <string name="odds_api_key">REPLACE_WITH_YOUR_API_KEY</string>
 </resources>
