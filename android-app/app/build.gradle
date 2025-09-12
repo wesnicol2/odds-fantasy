@@ -15,6 +15,11 @@ android {
 
         vectorDrawables.useSupportLibrary = true
 
+        ndk {
+            // Include only the ABIs you need. For most real devices, arm64-v8a is sufficient.
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+        }
+
         python {
             // If you have a specific local Python to build with, set it here.
             // buildPython "/usr/bin/python3"
