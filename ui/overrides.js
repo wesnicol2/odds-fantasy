@@ -76,15 +76,24 @@
             var inc=!!r.incomplete||(r.mid==null&&r.floor==null&&r.ceiling==null);
             var miss=r.missing_markets||[]; var fb=r.fallback_markets||[];
             var missV=(r.missing_vital||[]), fbV=(r.fallback_vital||[]);
-            var isCrit=(missV.length>0 || fbV.length>0);
+            var isCrit=(Array.isArray(missV)&&missV.length>0) || (Array.isArray(fbV)&&fbV.length>0);
             if (missV==null && fbV==null) { isCrit = inc && (!fb.length) && (r.mid==null && r.floor==null && r.ceiling==null); }
             var pillCls=isCrit?'pill-crit':'pill-warn';
-            var missTxt=miss.map(shortLabel).join(', ');
-            var tip='Missing: '+(missTxt||'-') + (fb.length? (' | Fallback: '+fb.map(shortLabel).join(', ')):'');
+            var crit = [];
+            if (Array.isArray(missV)) crit = crit.concat(missV);
+            if (Array.isArray(fbV)) crit = crit.concat(fbV);
+            var showList = isCrit ? crit : miss;
+            var missTxt=showList.map(shortLabel).join(', ');
+            var tipParts=[];
+            if (isCrit) tipParts.push('Vital: '+(crit.map(shortLabel).join(', ')||'-'));
+            if (fb.length||miss.length) tipParts.push('All missing: '+(miss.map(shortLabel).join(', ')||'-')+(fb.length?(' | Fallback: '+fb.map(shortLabel).join(', ')) : ''));
+            var tip=tipParts.join(' | ');
             var indicator=inc?(' <span class="pill '+pillCls+'" title="'+esc(tip)+'">'+esc(missTxt||'incomplete')+'</span>'):'';
             var displayName = '<span class="player-name" data-player="'+esc(r.name)+'">'+esc(r.name)+'</span>';
-            var nameHtml=inc? (displayName+indicator) : displayName; var fmt=function(v){ return (v==null ? '-' : Number(v).toFixed(2)); };
-            return '<tr><td>'+ (r.slot||'') +'</td><td>'+ (inc?('<span class="incomplete-name">'+nameHtml+'</span>'):nameHtml) +'</td><td>'+ (r.pos||'') +'</td><td>'+ fmt(r.floor) +'</td><td>'+ fmt(r.mid) +'</td><td>'+ fmt(r.ceiling) +'</td></tr>';
+            var nameHtml = displayName + indicator;
+            if (isCrit) nameHtml = '<span class="incomplete-name">'+nameHtml+'</span>';
+            var fmt=function(v){ return (v==null ? '-' : Number(v).toFixed(2)); };
+            return '<tr><td>'+ (r.slot||'') +'</td><td>'+ nameHtml +'</td><td>'+ (r.pos||'') +'</td><td>'+ fmt(r.floor) +'</td><td>'+ fmt(r.mid) +'</td><td>'+ fmt(r.ceiling) +'</td></tr>';
           }).join('');
           c.innerHTML=['<h3>'+title+' - target: '+target+' (total: '+total.toFixed(2)+')</h3>','<table><thead><tr>'+header+'</tr></thead><tbody>',body,'</tbody></table>','<div class="status">RateLimit: '+rl+'</div>'].join('\n');
         }catch(e){ try{ _origRL(containerId,title,payload); }catch(_){} }
@@ -105,12 +114,20 @@
             var isCrit=(missV.length>0 || fbV.length>0);
             if (missV==null && fbV==null) { isCrit = inc && (!fb.length) && ((r.markets_used||0)===0); }
             var pillCls=isCrit?'pill-crit':'pill-warn';
-            var missTxt=miss.map(shortLabel).join(', ');
-            var tip='Missing: '+(missTxt||'-') + (fb.length? (' | Fallback: '+fb.map(shortLabel).join(', ')):'');
+            var crit = [];
+            if (Array.isArray(missV)) crit = crit.concat(missV);
+            if (Array.isArray(fbV)) crit = crit.concat(fbV);
+            var showList = isCrit ? crit : miss;
+            var missTxt=showList.map(shortLabel).join(', ');
+            var tipParts=[];
+            if (isCrit) tipParts.push('Vital: '+(crit.map(shortLabel).join(', ')||'-'));
+            if (fb.length||miss.length) tipParts.push('All missing: '+(miss.map(shortLabel).join(', ')||'-')+(fb.length?(' | Fallback: '+fb.map(shortLabel).join(', ')) : ''));
+            var tip=tipParts.join(' | ');
             var indicator=inc?(' <span class="pill '+pillCls+'" title="'+esc(tip)+'">'+esc(missTxt||'incomplete')+'</span>'):'';
             var displayName = '<span class="player-name" data-player="'+esc(r.name)+'">'+esc(r.name)+'</span>';
-            var nameHtml=inc? (displayName+indicator) : displayName;
-            return '<tr><td>'+ (inc?('<span class="incomplete-name">'+nameHtml+'</span>'):nameHtml) +'</td><td>'+ (r.pos||'') +'</td><td>'+ fmtCell(r.floor) +'</td><td>'+ fmtCell(r.mid) +'</td><td>'+ fmtCell(r.ceiling) +'</td></tr>';
+            var nameHtml = displayName + indicator;
+            if (isCrit) nameHtml = '<span class="incomplete-name">'+nameHtml+'</span>';
+            return '<tr><td>'+ nameHtml +'</td><td>'+ (r.pos||'') +'</td><td>'+ fmtCell(r.floor) +'</td><td>'+ fmtCell(r.mid) +'</td><td>'+ fmtCell(r.ceiling) +'</td></tr>';
           }).join('');
           c.innerHTML='<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>'+body+'</tbody></table>';
         }catch(e){ try{ _orig(containerId,players); }catch(_){} }

@@ -187,6 +187,7 @@ function getDataMode() {
   return el.value || el.getAttribute('value') || 'auto';
 }
 
+
 function renderLineup(containerId, title, payload) {
   const c = $(containerId);
   const rows = payload?.lineup || [];
@@ -421,6 +422,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.querySelectorAll('.btn-defenses').forEach(btn => {
     btn.addEventListener('click', () => loadDefenses(btn.dataset.week));
+  });
+  document.querySelectorAll('.btn-compare-curves').forEach(btn => {
+    btn.addEventListener('click', () => {
+      try { if (typeof openCompareCurves === 'function') openCompareCurves(btn.dataset.week || 'this'); } catch (e) { console.error(e); }
+    });
   });
   document.querySelectorAll('.btn-players').forEach(btn => {
     btn.addEventListener('click', () => showPlayers(btn.dataset.week));

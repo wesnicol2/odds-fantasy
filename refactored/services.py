@@ -725,6 +725,39 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         }
 
     pinfo = info_by_alias.get(target_alias, {})
+    # Importance classification (vital vs minor) with PPR gating
+    def _is_ppr(sc: dict) -> bool:
+        try:
+            return float(sc.get("rec", 0) or 0) > 0
+        except Exception:
+            return False
+    def _importance_for_pos(pos: Optional[str], scoring: dict) -> tuple[set[str], set[str]]:
+        p = (pos or "").upper()
+        ppr = _is_ppr(scoring)
+        vital: set[str] = set()
+        minor: set[str] = set()
+        if p == "QB":
+            vital = {"player_pass_yds", "player_pass_tds", "player_rush_yds", "player_anytime_td"}
+            minor = {"player_pass_interceptions"}
+        elif p == "RB":
+            vital = {"player_rush_yds", "player_anytime_td"}
+            (vital.add("player_receptions") if ppr else minor.add("player_receptions"))
+            minor.add("player_reception_yds")
+        elif p == "WR":
+            vital = {"player_reception_yds", "player_anytime_td"}
+            (vital.add("player_receptions") if ppr else minor.add("player_receptions"))
+            minor.add("player_rush_yds")
+        elif p == "TE":
+            vital = {"player_reception_yds", "player_anytime_td"}
+            (vital.add("player_receptions") if ppr else minor.add("player_receptions"))
+            minor.add("player_rush_yds")
+        else:
+            vital = {"player_anytime_td"}
+        # Constrain to whitelist
+        vital &= PRIMARY_MARKET_WHITELIST
+        minor &= PRIMARY_MARKET_WHITELIST
+        return vital, minor
+    vital_keys, minor_keys = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
     payload = {
         "player": {
             "name": pinfo.get("full_name", name or target_alias),
@@ -734,6 +767,8 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         "markets": markets_out,
         "primary_order": primary,
         "all_order": order,
+        "vital_keys": sorted(list(vital_keys)),
+        "minor_keys": sorted(list(minor_keys)),
         # Attach raw event odds for debugging/verification
         "raw_odds": ev_odds,
         "ratelimit": ratelimit.format_status(),
