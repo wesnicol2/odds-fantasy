@@ -38,6 +38,8 @@ def _normalize_market(stat_key: str) -> str | None:
             return "player_receptions_alternate"
         if stat_key.startswith("player_rush_yds"):
             return "player_rush_yds_alternate"
+        if stat_key.startswith("player_reception_yds"):
+            return "player_reception_yds_alternate"
         return None
 
     # Pass-through if already an Odds API key
@@ -51,6 +53,14 @@ def _markets_for_positions(positions: Iterable[str]) -> List[str]:
             norm = _normalize_market(raw)
             if norm:
                 seen.add(norm)
+            # Include alternates for key yardage/reception markets to broaden coverage
+            try:
+                if raw in ("player_receptions", "player_reception_yds", "player_rush_yds"):
+                    alt = _normalize_market(raw + "_alternate")
+                    if alt:
+                        seen.add(alt)
+            except Exception:
+                pass
     return sorted(seen)
 
 

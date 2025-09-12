@@ -34,27 +34,15 @@
 
   <main>
     <section>
-      <h2>Lineups — This Week</h2>
-      <div class="btn-row">
-        <button data-week="this" data-target="mid" class="btn-lineup">Ideal (Mid)</button>
-        <button data-week="this" data-target="floor" class="btn-lineup">Floor</button>
-        <button data-week="this" data-target="ceiling" class="btn-lineup">Ceiling</button>
-      </div>
-      <div id="lineup-this" class="results"></div>
+      <h2>Lineups - This Week</h2><div class="btn-row"><button data-week="this" class="btn-show-lineup">Show Lineup</button><button data-week="this" class="btn-compare-curves">Compare Curves</button></div><div id="lineup-this" class="results"></div>
     </section>
 
     <section>
-      <h2>Lineups — Next Week</h2>
-      <div class="btn-row">
-        <button data-week="next" data-target="mid" class="btn-lineup">Ideal (Mid)</button>
-        <button data-week="next" data-target="floor" class="btn-lineup">Floor</button>
-        <button data-week="next" data-target="ceiling" class="btn-lineup">Ceiling</button>
-      </div>
-      <div id="lineup-next" class="results"></div>
+      <h2>Lineups - Next Week</h2><div class="btn-row"><button data-week="next" class="btn-show-lineup">Show Lineup</button><button data-week="next" class="btn-compare-curves">Compare Curves</button></div><div id="lineup-next" class="results"></div>
     </section>
 
     <section>
-      <h2>Defenses — This Week</h2>
+      <h2>Defenses - This Week</h2>
       <div class="btn-row">
         <button data-week="this" class="btn-defenses">Load Defenses (Owned + Available)</button>
       </div>
@@ -62,7 +50,7 @@
     </section>
 
     <section>
-      <h2>Defenses — Next Week</h2>
+      <h2>Defenses - Next Week</h2>
       <div class="btn-row">
         <button data-week="next" class="btn-defenses">Load Defenses (Owned + Available)</button>
       </div>
@@ -79,7 +67,7 @@
     </section>
 
     <section>
-      <h2>Players — This Week</h2>
+      <h2>Players - This Week</h2>
       <div class="btn-row">
         <button data-week="this" class="btn-players">Show Players</button>
       </div>
@@ -87,7 +75,7 @@
     </section>
 
     <section>
-      <h2>Players — Next Week</h2>
+      <h2>Players - Next Week</h2>
       <div class="btn-row">
         <button data-week="next" class="btn-players">Show Players</button>
       </div>
@@ -102,12 +90,28 @@
   <!-- Global loading overlay -->
   <div id="globalLoading" class="overlay hidden">
     <div class="overlay-box">
-      <span class="spinner"></span>
-      <span id="globalLoadingText">Loading…</span>
+      <md-circular-progress indeterminate aria-label="Loading"></md-circular-progress>
+      <span id="globalLoadingText">Loading...</span>
     </div>
   </div>
 
-  <script src="/ui/script.js"></script>
+  
+  <!-- Details modal overlay -->
+  <div id="detailsOverlay" class="overlay hidden">
+    <div class="overlay-box details-box">
+      <div class="details-header">
+        <div id="detailsTitle" class="details-title">Details</div>
+      </div>
+      <div id="detailsBody" class="details-body"></div>
+    </div>
+  </div>
+<script src="/ui/script.js"></script>
+  <script src="/ui/details.js"></script>
 </body>
   
 </html>
+
+
+
+
+

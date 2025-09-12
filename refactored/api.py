@@ -18,6 +18,7 @@ from socketserver import ThreadingMixIn
 from typing import Callable
 
 from . import ratelimit
+from . import services  # for detail endpoints
 from .services import compute_projections, build_lineup, build_lineup_diffs, list_defenses, build_dashboard
 
 # Module-level debug flag (defaults to False). Can be enabled via --debug CLI.
@@ -90,6 +91,10 @@ def _serve_static(environ, start_response: Callable, rel_path: str):
         return _json_response(start_response, '404 Not Found', {"error": "not_found", "path": f"/ui/{rel_path}"})
     ctype, _ = mimetypes.guess_type(str(target))
     ctype = ctype or 'application/octet-stream'
+    # Ensure UTF-8 charset for textual types to avoid replacement characters (�)
+    if ctype.startswith('text/') or ctype in ('application/javascript', 'application/json'):
+        if 'charset' not in ctype:
+            ctype = f"{ctype}; charset=utf-8"
     data = target.read_bytes()
     headers = [("Content-Type", ctype), ("Content-Length", str(len(data))), ("Access-Control-Allow-Origin", "*")]
     _dprint(f"[api] static 200 /ui/{rel_path or 'index.html'} bytes={len(data)} type={ctype}")
@@ -138,11 +143,12 @@ def application(environ, start_response):
             season = q("season", "2025")
             week = q("week", "this")
             target = q("target", "mid")
+            region = q("region", "us")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] lineup user={username} season={season} week={week} target={target} mode={mode} fresh={fresh}")
-            proj = compute_projections(username=username, season=season, week=week, fresh=fresh, cache_mode=('fresh' if fresh else mode))
+            _dprint(f"[api] lineup user={username} season={season} week={week} target={target} region={region} mode={mode} fresh={fresh}")
+            proj = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode))
             lineup = build_lineup(proj.get("players", []), target=target)
             lineup["ratelimit"] = ratelimit.format_status()
             lineup["ratelimit_info"] = ratelimit.get_details()
@@ -153,11 +159,12 @@ def application(environ, start_response):
             username = q("username", "wesnicol")
             season = q("season", "2025")
             week = q("week", "this")
+            region = q("region", "us")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] lineup/diffs user={username} season={season} week={week} mode={mode} fresh={fresh}")
-            proj = compute_projections(username=username, season=season, week=week, fresh=fresh, cache_mode=('fresh' if fresh else mode))
+            _dprint(f"[api] lineup/diffs user={username} season={season} week={week} region={region} mode={mode} fresh={fresh}")
+            proj = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode))
             diffs = build_lineup_diffs(proj.get("players", []))
             diffs["ratelimit"] = ratelimit.format_status()
             diffs["ratelimit_info"] = ratelimit.get_details()
@@ -169,12 +176,39 @@ def application(environ, start_response):
             season = q("season", "2025")
             week = q("week", "this")
             scope = q("scope", "both")
+            region = q("region", "us")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             t0 = time.time()
-            _dprint(f"[api] defenses user={username} season={season} week={week} scope={scope} mode={mode} fresh={fresh}")
-            data = list_defenses(username=username, season=season, week=week, scope=scope, fresh=fresh, cache_mode=('fresh' if fresh else mode))
+            _dprint(f"[api] defenses user={username} season={season} week={week} scope={scope} region={region} mode={mode} fresh={fresh}")
+            data = list_defenses(username=username, season=season, week=week, scope=scope, fresh=fresh, cache_mode=('fresh' if fresh else mode), region=region)
             _dprint(f"[api] defenses done rows={len(data.get('defenses', []))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, "200 OK", data)
+
+        if path == "/player/odds":
+            username = q("username", "wesnicol")
+            season = q("season", "2025")
+            week = q("week", "this")
+            region = q("region", "us")
+            name = q("name", "")
+            mode = q("mode", "auto")
+            t0 = time.time()
+            _dprint(f"[api] player/odds user={username} season={season} week={week} name={name} mode={mode}")
+            data = services.get_player_odds_details(username=username, season=season, week=week, region=region, name=name, cache_mode=mode)
+            _dprint(f"[api] player/odds done markets={len(data.get('markets', {}))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, "200 OK", data)
+
+        if path == "/defense/odds":
+            username = q("username", "wesnicol")
+            season = q("season", "2025")
+            week = q("week", "this")
+            defense = q("defense", "")
+            region = q("region", "us")
+            mode = q("mode", "auto")
+            t0 = time.time()
+            _dprint(f"[api] defense/odds user={username} season={season} week={week} defense={defense} region={region} mode={mode}")
+            data = services.get_defense_odds_details(username=username, season=season, week=week, defense=defense, cache_mode=mode, region=region)
+            _dprint(f"[api] defense/odds done games={len(data.get('games', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
         if path == "/dashboard":

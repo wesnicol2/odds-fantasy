@@ -1,0 +1,20 @@
+function renderLineup(containerId, title, payload) {
+  const c = $(containerId);
+  dbg('renderLineup', { containerId, title, count: (payload.lineup||[]).length, target: payload.target, total: payload.total_points });
+  const rows = payload.lineup || [];
+  const target = payload.target || 'mid';
+  const total = payload.total_points ?? 0;
+  const ratelimit = payload.ratelimit || '';
+  let headerCols = '';
+  let rowHtml = [];
+  if (target === 'mid') {
+    headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th>';
+    rowHtml = rows.map(r => `<tr><td>${r.slot}</td><td>${r.name}</td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`);
+  } else {
+    headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Ceiling</th>';
+    rowHtml = rows.map(r => `<tr><td>${r.slot}</td><td>${r.name}</td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`);
+  }
+
+  const table = [
+    `<h3>${title} — target: ${target} (total: ${total.toFixed(2)})</h3>`,
+    `<table><thead><tr>${headerCols}</tr></the

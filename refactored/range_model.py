@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Dict, Tuple
 from dataclasses import dataclass
@@ -80,7 +80,35 @@ def _fantasy_points(stats: Dict[str, float], scoring_rules: Dict[str, float]) ->
                 mult = float(scoring_rules[rule_key])
             except Exception:
                 continue
+            # Ensure interceptions subtract points, regardless of league sign convention
+            if market_key == "player_pass_interceptions":
+                mult = -abs(mult)
             total += value * mult
+    # Threshold bonuses for yardage milestones using available stat values
+    try:
+        rec_yd = float(stats.get("player_reception_yds", 0.0) or 0.0)
+        if rec_yd >= 200 and ("bonus_rec_yd_200" in scoring_rules):
+            total += float(scoring_rules["bonus_rec_yd_200"]) or 0.0
+        elif rec_yd >= 100 and ("bonus_rec_yd_100" in scoring_rules):
+            total += float(scoring_rules["bonus_rec_yd_100"]) or 0.0
+    except Exception:
+        pass
+    try:
+        rush_yd = float(stats.get("player_rush_yds", 0.0) or 0.0)
+        if rush_yd >= 200 and ("bonus_rush_yd_200" in scoring_rules):
+            total += float(scoring_rules["bonus_rush_yd_200"]) or 0.0
+        elif rush_yd >= 100 and ("bonus_rush_yd_100" in scoring_rules):
+            total += float(scoring_rules["bonus_rush_yd_100"]) or 0.0
+    except Exception:
+        pass
+    try:
+        pass_yd = float(stats.get("player_pass_yds", 0.0) or 0.0)
+        if pass_yd >= 400 and ("bonus_pass_yd_400" in scoring_rules):
+            total += float(scoring_rules["bonus_pass_yd_400"]) or 0.0
+        elif pass_yd >= 300 and ("bonus_pass_yd_300" in scoring_rules):
+            total += float(scoring_rules["bonus_pass_yd_300"]) or 0.0
+    except Exception:
+        pass
     return total
 
 
@@ -100,26 +128,29 @@ def compute_fantasy_range(
     # 2) Build per-market ranges, focusing on primary markets only
     per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
     for key, mean_val in mean_stats_all.items():
+        use_key = key
         if key not in PRIMARY_MARKET_WHITELIST:
-            # use alternates only if the base isn’t present at all
+            # use alternates only if the base isnâ€™t present at all
             base_key = key.replace("_alternate", "")
             if base_key in mean_stats_all:
                 continue
-        summ = market_summaries.get(key)
+            if base_key != key:
+                use_key = base_key
+        summ = market_summaries.get(key) or market_summaries.get(use_key)
         if summ is None:
-            # Fallback: ±20% band around mean
+            # Fallback: Â±20% band around mean
             q10 = max(0.0, mean_val * 0.8)
             q50 = max(0.0, mean_val)
             q90 = max(0.0, mean_val * 1.2)
         else:
             q10, q50, q90 = _market_quantiles(
-                key,
+                use_key,
                 mean=mean_val,
                 threshold=getattr(summ, "avg_threshold", 0.0),
                 p_over=getattr(summ, "avg_over_prob", 0.0),
                 p_under=getattr(summ, "avg_under_prob", 0.0),
             )
-        per_market_ranges[key] = (q10, q50, q90)
+        per_market_ranges[use_key] = (q10, q50, q90)
 
     # 3) Convert ranges to fantasy points
     floor_stats = {k: v[0] for k, v in per_market_ranges.items()}
@@ -133,3 +164,4 @@ def compute_fantasy_range(
     mid_fp = _fantasy_points(mid_stats, scoring_rules)
     ceil_fp = _fantasy_points(ceil_stats, scoring_rules)
     return floor_fp, mid_fp, ceil_fp, per_market_ranges
+

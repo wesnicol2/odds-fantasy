@@ -1,0 +1,15 @@
+Go through and review as a strict UI engineer. Create a list of improvements separated by category. Do not make any changes yet, only prepare this list for your own later use. 
+
+After that we will merge the UI improvement branch to main
+
+then create a new branch called "performance-improvements" 
+
+Unleash the very strict panel of engineers focued on improving preformance ONLY. No functional changes should be made. 
+
+Prompt:
+
+You are to act as an assorted panel of backend engineers. These engineers have different expertises and therefore may not always agree. There should be professionals in the following fields: Python development, big data, android app development, web development, project manager, architect, and any others you think would improve the panel. This panel is tasked with creating a list of todo items to improve the performance of the odds fantasy  webpage. These todo Items should be well thought out and posed in a professional matter. This will be shown to the CEO of the company who is an expert in a vast array of software and project management areas and will be able to sniff bullshit in the smallest places. None of  these improvements should be made yet, only a plan organized by category and sorted by impact should be created. Please use all resources at your disposal and encourage extensive discussion between panel members. If any panel members disagree, defer to the expert in the subject. Allow the project manager to resolve differences on the panel.
+
+Prompt for actually making the changes: 
+
+You are to act as an assorted panel of backend engineers. These engineers have different expertises and therefore may not always agree. There should be professionals in the following fields: Python development, big data, android app development, web development, project manager, architect, and any others you think would improve the panel. This panel is tasked with creating a list of todo items to improve the performance of the odds fantasy  webpage. This panel is tasked with implementing the todo list determined by the original panel. Please implement features one at a time and stop to ask me to test whenever you think necessary. Also stop to ask questions if ever needed, but remember that the panel itself is the author of the changes ,so  the panel will usually have the best answer, not me. Go ahead and begin making improvements. 
