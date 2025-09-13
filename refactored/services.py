@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from typing import Dict, List, Tuple, Optional
+from statistics import NormalDist
 import datetime as dt
 import time
 import os
@@ -69,7 +70,12 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         if now - ts < ttl:
             print(f"[services] compute_projections cache hit key={key} age={int(now-ts)}s")
             return payload
-    roster = sleeper_api.get_user_sleeper_data(username, season)
+    try:
+        roster = sleeper_api.get_user_sleeper_data(username, season)
+    except Exception as e:
+        print(f"[services] sleeper error: {e}")
+        # Graceful fallback: continue with empty roster so UI can load
+        return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "error": "sleeper_timeout"}
     if not roster:
         return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
 
@@ -317,7 +323,8 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
         if p.get("pos") in buckets:
             buckets[p["pos"]].append(p)
     for pos in buckets:
-        buckets[pos].sort(key=lambda x: x.get(target, 0.0), reverse=True)
+        # Ensure None values do not break sort comparisons
+        buckets[pos].sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
 
     used = set()
     def take(pos: str, n: int) -> List[dict]:
@@ -342,14 +349,21 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
         for item in buckets.get(pos, []):
             if item["name"] not in used:
                 flex_pool.append(item)
-    flex_pool.sort(key=lambda x: x.get(target, 0.0), reverse=True)
+    flex_pool.sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
     lineup["FLEX"] = flex_pool[:1]
 
     rows = []
     total = 0.0
     def add_slot(slot: str, p: dict):
         nonlocal total
-        pts = float(p.get(target, 0.0))
+        def _num(v):
+            try:
+                if v is None:
+                    return 0.0
+                return float(v)
+            except Exception:
+                return 0.0
+        pts = _num(p.get(target, 0.0))
         total += pts
         rows.append({
             "slot": slot,
@@ -359,9 +373,9 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
             "team": p.get("team"),
             "points": round(pts, 2),
             # include full trio for UI rendering
-            "floor": round(float(p.get("floor", 0.0)), 2),
-            "mid": round(float(p.get("mid", 0.0)), 2),
-            "ceiling": round(float(p.get("ceiling", 0.0)), 2),
+            "floor": round(_num(p.get("floor", 0.0)), 2),
+            "mid": round(_num(p.get("mid", 0.0)), 2),
+            "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
         })
 
     for p in lineup["QB"]: add_slot("QB", p)
@@ -724,6 +738,134 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             "books": books,
         }
 
+    # Build debug math payload mirroring range model logic
+    debug_math: Dict[str, object] = {}
+    try:
+        # Helper: normalized p_over and sigma based on summary
+        def _calc_sigma(mean: float, threshold: float, p_over: float, p_under: float) -> tuple[float, float, float, bool]:
+            total = (p_over or 0.0) + (p_under or 0.0)
+            p = (p_over / total) if total > 0 else 0.5
+            # Clamp away from 0/1 to avoid inf
+            p = min(max(p, 1e-4), 1 - 1e-4)
+            z = NormalDist().inv_cdf(p)
+            if abs(z) < 1e-6:
+                sigma = max(abs(threshold) * 0.25, 1.0)
+                return p, z, sigma, True
+            sigma = abs((mean - threshold) / z)
+            sigma = max(sigma, 1e-6)
+            return p, z, sigma, False
+
+        # Per-market details
+        pm_debug: Dict[str, object] = {}
+        for mkey, mdata in markets_out.items():
+            summ = mdata.get("summary") or {}
+            thr = float(summ.get("avg_threshold") or 0.0)
+            pov = float(summ.get("avg_over_prob") or 0.0)
+            pun = float(summ.get("avg_under_prob") or 0.0)
+            mean = float(mdata.get("mean_stat") or 0.0)
+            rng = per_market_ranges.get(mkey) or (None, None, None)
+            q15, q50, q85 = (None, None, None)
+            if rng and isinstance(rng, (list, tuple)) and len(rng) == 3:
+                q15, q50, q85 = rng
+            pnorm, z, sigma, used_fallback = _calc_sigma(mean, thr, pov, pun) if (mkey != "player_anytime_td" and thr != 0) else (None, None, None, False)
+            # FP contributions for this market
+            rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
+            mult = float(scoring_rules.get(rule, 0.0) or 0.0) if rule else 0.0
+            if mkey == "player_pass_interceptions":
+                mult = -abs(mult)
+            fp_floor = round((q15 or 0.0) * mult, 4) if q15 is not None else None
+            fp_mid = round((q50 or 0.0) * mult, 4) if q50 is not None else None
+            fp_ceil = round((q85 or 0.0) * mult, 4) if q85 is not None else None
+            pm_debug[mkey] = {
+                "threshold": thr,
+                "avg_over_prob": pov,
+                "avg_under_prob": pun,
+                "p_over_norm": pnorm,
+                "z": z,
+                "sigma": sigma,
+                "sigma_fallback": used_fallback,
+                "mean": mean,
+                "q15": q15,
+                "q50": q50,
+                "q85": q85,
+                "multiplier_key": rule,
+                "multiplier": mult,
+                "fp_floor": fp_floor,
+                "fp_mid": fp_mid,
+                "fp_ceil": fp_ceil,
+            }
+
+        # Yardage bonuses at each level
+        def _bonus_pass(y: float) -> float:
+            try:
+                if y is None:
+                    return 0.0
+                if y >= 400 and ("bonus_pass_yd_400" in scoring_rules):
+                    return float(scoring_rules["bonus_pass_yd_400"]) or 0.0
+                if y >= 300 and ("bonus_pass_yd_300" in scoring_rules):
+                    return float(scoring_rules["bonus_pass_yd_300"]) or 0.0
+            except Exception:
+                return 0.0
+            return 0.0
+        def _bonus_rush(y: float) -> float:
+            try:
+                if y is None:
+                    return 0.0
+                if y >= 200 and ("bonus_rush_yd_200" in scoring_rules):
+                    return float(scoring_rules["bonus_rush_yd_200"]) or 0.0
+                if y >= 100 and ("bonus_rush_yd_100" in scoring_rules):
+                    return float(scoring_rules["bonus_rush_yd_100"]) or 0.0
+            except Exception:
+                return 0.0
+            return 0.0
+        def _bonus_rec(y: float) -> float:
+            try:
+                if y is None:
+                    return 0.0
+                if y >= 200 and ("bonus_rec_yd_200" in scoring_rules):
+                    return float(scoring_rules["bonus_rec_yd_200"]) or 0.0
+                if y >= 100 and ("bonus_rec_yd_100" in scoring_rules):
+                    return float(scoring_rules["bonus_rec_yd_100"]) or 0.0
+            except Exception:
+                return 0.0
+            return 0.0
+
+        def _get_stat(qidx: int, key: str) -> Optional[float]:
+            rng = per_market_ranges.get(key)
+            if not rng:
+                return None
+            try:
+                return float(rng[qidx])
+            except Exception:
+                return None
+
+        b_floor = (
+            (_bonus_rec(_get_stat(0, "player_reception_yds")) or 0.0)
+            + (_bonus_rush(_get_stat(0, "player_rush_yds")) or 0.0)
+            + (_bonus_pass(_get_stat(0, "player_pass_yds")) or 0.0)
+        )
+        b_mid = (
+            (_bonus_rec(_get_stat(1, "player_reception_yds")) or 0.0)
+            + (_bonus_rush(_get_stat(1, "player_rush_yds")) or 0.0)
+            + (_bonus_pass(_get_stat(1, "player_pass_yds")) or 0.0)
+        )
+        b_ceil = (
+            (_bonus_rec(_get_stat(2, "player_reception_yds")) or 0.0)
+            + (_bonus_rush(_get_stat(2, "player_rush_yds")) or 0.0)
+            + (_bonus_pass(_get_stat(2, "player_pass_yds")) or 0.0)
+        )
+
+        debug_math = {
+            "scoring_rules": scoring_rules,
+            "stat_market_map": STAT_MARKET_MAPPING_SLEEPER,
+            "mean_stats": mean_stats,
+            "per_market": pm_debug,
+            "bonuses": {"floor": b_floor, "mid": b_mid, "ceiling": b_ceil},
+            "totals": {"floor": _floor, "mid": _mid, "ceiling": _ceil},
+        }
+    except Exception:
+        debug_math = {}
+
     pinfo = info_by_alias.get(target_alias, {})
     # Importance classification (vital vs minor) with PPR gating
     def _is_ppr(sc: dict) -> bool:
@@ -773,6 +915,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         "raw_odds": ev_odds,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
+        "debug_math": debug_math,
     }
     return payload
 

@@ -5,7 +5,10 @@ import requests
 from config import SLEEPER_TO_ODDSAPI_TEAM, DATA_DIR
 
 SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
-REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
+# Allow overriding request timeouts via env; default (connect=5s, read=20s)
+_conn_to = float(os.getenv('SLEEPER_CONNECT_TIMEOUT', '5') or 5)
+_read_to = float(os.getenv('SLEEPER_READ_TIMEOUT', '20') or 20)
+REQ_TIMEOUT = (_conn_to, _read_to)  # (connect, read) seconds
 _PLAYERS_CACHE = None
 _PLAYERS_CACHE_FILE = os.path.join(DATA_DIR, 'sleeper_players.json')
 _PLAYERS_TTL = int(os.getenv('SLEEPER_PLAYERS_TTL', '86400'))  # 24h

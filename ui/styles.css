@@ -156,3 +156,35 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .market-summary .chev { margin-left: auto; transition: transform 0.15s ease; color: #9ca3af; }
 .market-summary[aria-expanded="true"] .chev { transform: rotate(90deg); }
 .market-details { padding: 8px 10px; }
+/* Debug overlay list */
+.dbg-list { display: flex; flex-direction: column; gap: 6px; }
+.dbg-stat { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid #233; border-radius: 6px; background: #0b1222; cursor: pointer; }
+.dbg-stat:hover { background: #111a2a; }
+.dbg-stat .left { font-weight: 600; color: #e5e7eb; }
+.dbg-stat .right { color: #9ca3af; font-size: 12px; }
+
+/* Stat-only graph styles (debug overlay) */
+.stat-visual { background: #0f172a; border: 1px solid #233; border-radius: 8px; padding: 10px; margin: 6px 0 10px 0; position: relative; }
+.stat-visual .vis-title { font-size: 12px; color: #93c5fd; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
+.stat-visual .svg-wrap { width: 100%; height: 140px; overflow: visible; }
+.stat-visual svg { width: 100%; height: 140px; display: block; }
+.stat-visual .axis { stroke: #334155; stroke-width: 1; }
+.stat-visual .grid { stroke: #1f2a38; stroke-width: 1; opacity: 0.6; }
+.stat-visual .curve { fill: rgba(96,165,250,0.15); stroke: #60a5fa; stroke-width: 2; }
+.stat-visual .marker { stroke-width: 1.5; opacity: 0.85; }
+.stat-visual .marker.mean { stroke: #22c55e; }
+.stat-visual .marker.q15 { stroke: #f59e0b; stroke-dasharray: 4 3; }
+.stat-visual .marker.q85 { stroke: #60a5fa; stroke-dasharray: 4 3; }
+.stat-visual .marker.summary { stroke: #fbbf24; stroke-dasharray: 2 2; }
+.stat-visual .marker.book { stroke: #94a3b8; stroke-dasharray: 1 3; }
+.stat-visual .legend { display: flex; gap: 10px; color: #9ca3af; font-size: 12px; margin-top: 6px; flex-wrap: wrap; }
+.stat-visual .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.stat-visual .legend .dot.mean { background: #22c55e; }
+.stat-visual .legend .dot.q15 { background: #f59e0b; }
+.stat-visual .legend .dot.q85 { background: #60a5fa; }
+.stat-visual .legend .dot.summary { background: #fbbf24; }
+.stat-visual .legend .dot.book { background: #94a3b8; }
+.bin-bar { background: #111827; border: 1px solid #233; height: 10px; border-radius: 4px; margin: 4px 0; overflow: hidden; }
+.bin-bar .bin { background: #f59e0b; height: 100%; }
+/* Toggle row for stat graph */
+ 

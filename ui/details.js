@@ -472,14 +472,17 @@ async function openPlayerDetails(name, week, opts) {
     + '</div>';
   var predicted = ''
     + '<div class="details-section">'
-    +   '<div class="section-title">Fantasy Points</div>'
-    +   '<div class="cards">'
-    +     '<div class="card floor"><div class="label">Floor</div><div class="value">' + _fmt(floor) + '</div></div>'
-    +     '<div class="card mid"><div class="label">Mid</div><div class="value">' + _fmt(mid) + '</div></div>'
-    +     '<div class="card ceiling"><div class="label">Ceiling</div><div class="value">' + _fmt(ceiling) + '</div></div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="details-section">' + _renderFpVisual(floor, mid, ceiling) + '</div>';
+      +   '<div class="section-title">Fantasy Points</div>'
+      +   '<div class="cards">'
+        +     '<div class="card floor"><div class="label">Floor</div><div class="value">' + _fmt(floor) + '</div></div>'
+        +     '<div class="card mid"><div class="label">Mid</div><div class="value">' + _fmt(mid) + '</div></div>'
+        +     '<div class="card ceiling"><div class="label">Ceiling</div><div class="value">' + _fmt(ceiling) + '</div></div>'
+      +   '</div>'
+      + '</div>'
+    + '<div class="details-section">' + _renderFpVisual(floor, mid, ceiling) + '</div>'
+    + '<div class="details-section">'
+    +   '<div class="btn-row"><button id="showDebugMathBtn" class="secondary">Debug Math</button></div>'
+    + '</div>';
 
   // Stat coverage summary for this position
   function expectedForPos(pos){
@@ -525,7 +528,6 @@ async function openPlayerDetails(name, week, opts) {
   var others = (data.all_order || []).filter(function(k){ return primary.indexOf(k) === -1; });
   var otherHtml = others.map(function(k){ return renderMarketBlock2(k, markets[k]); }).join('');
   if (!otherHtml) otherHtml = '<div class="muted">No other markets.</div>';
-  var debugHtml = renderRawOddsSection(data.raw_odds);
   var marketsHtml = [
     '<div class="details-section">',
       '<div class="section-title">Primary Markets</div>',
@@ -541,9 +543,14 @@ async function openPlayerDetails(name, week, opts) {
       '<div>', head, predicted, covHtml, '</div>',
       '<div>', marketsHtml, '</div>',
     '</div>',
-    debugHtml
   ].join('');
   showDetails('Player Details', html);
+  try {
+    var btn = document.getElementById('showDebugMathBtn');
+    if (btn) {
+      btn.addEventListener('click', function(e){ e.stopPropagation(); _openDebugMathOverlay(data); });
+    }
+  } catch (e) { /* ignore */ }
   try {
     var hdr = document.querySelector('.details-header');
     if (hdr && !hdr.querySelector('#detailsBack')) {
@@ -558,6 +565,183 @@ async function openPlayerDetails(name, week, opts) {
   } catch (e) {}
   try { history.replaceState({ detailsOpen: true, modal: 'player', name: (p.name || name), week: week }, '', '#details'); } catch (e) {}
   try { _attachFpVisualHandlers(document.getElementById('detailsBody')); } catch (e) {}
+}
+
+// ---- Debug Math overlay (drill-down) ----
+function _openDebugMathOverlay(data) {
+  try {
+    var ov = document.getElementById('debugOverlay'); var body = document.getElementById('debugBody'); var ttl = document.getElementById('debugTitle');
+    if (!ov || !body) return;
+    if (ttl) ttl.textContent = (data && data.player && data.player.name ? (data.player.name + ' · Debug Math') : 'Debug Math');
+    ov.classList.remove('hidden');
+    var back = document.getElementById('debugBack'); if (back) back.onclick = function(){ _renderDebugStatList(data); };
+    var close = document.getElementById('debugClose'); if (close) close.onclick = function(){ ov.classList.add('hidden'); };
+    _renderDebugStatList(data);
+  } catch (e) {}
+}
+
+function _fmtNum(x, d){ try { var n=Number(x); if (!isFinite(n)) return '-'; return n.toFixed(d==null?2:d); } catch(e){ return '-'; } }
+
+function _renderDebugStatList(data) {
+  var body = document.getElementById('debugBody'); if (!body) return;
+  var dm = (data && data.debug_math) || {}; var markets = data && data.markets || {};
+  var means = dm.mean_stats || {};
+  var keys = Object.keys(means);
+  if (!keys.length) keys = Object.keys(markets||{});
+  // Order by impact when available
+  keys.sort(function(a,b){ var ia=(markets[a]&&markets[a].impact_score)||0, ib=(markets[b]&&markets[b].impact_score)||0; return ib-ia; });
+  var rows = keys.map(function(k){
+    var nice = _prettyMarketLabel(k);
+    var mean = means[k]; if (mean==null && markets[k]) mean = markets[k].mean_stat;
+    var pm = (dm.per_market && dm.per_market[k]) || {};
+    var midFp = pm.fp_mid; var mult = pm.multiplier;
+    var info = 'mean ' + _fmtNum(mean,2) + (mult!=null? (' · FP mid ' + _fmtNum(midFp,2)) : '');
+    return '<div class="dbg-stat" data-mkey="'+_escapeHtml(k)+'"><div class="left">'+nice+'</div><div class="right">'+info+' ▸</div></div>';
+  }).join('');
+  var html = [
+    '<div class="details-section">',
+      '<div class="section-title">Predicted Stats</div>',
+      '<div class="dbg-list">', rows || '<div class="muted">No stats available.</div>', '</div>',
+    '</div>'
+  ].join('');
+  body.innerHTML = html;
+  try {
+    body.querySelectorAll('.dbg-stat').forEach(function(el){ el.addEventListener('click', function(){ var k=el.getAttribute('data-mkey'); _renderDebugStatDetail(data, k); }); });
+  } catch (e) {}
+}
+
+function _renderDebugStatDetail(data, mkey) {
+  var body = document.getElementById('debugBody'); if (!body) return;
+  var dm = (data && data.debug_math) || {}; var per = dm.per_market || {}; var m = per[mkey] || {};
+  var markets = data && data.markets || {}; var entry = markets[mkey] || {};
+  var nice = _prettyMarketLabel(mkey);
+  var summ = entry.summary || {};
+  // Collect base + alternate book points
+  function _gatherBookPoints(key){
+    var e = markets[key] || {}; var out=[];
+    (e.books||[]).forEach(function(b){
+      var pt = (b.over && b.over.point!=null ? b.over.point : (b.under && b.under.point!=null ? b.under.point : null));
+      if (pt!=null && isFinite(Number(pt))) out.push({ book: b.book||'', point: Number(pt) });
+    });
+    return out;
+  }
+  var baseKey = mkey.replace('_alternate','');
+  var points = _gatherBookPoints(baseKey).concat(_gatherBookPoints(baseKey + '_alternate'));
+  // Deduplicate identical (book, point) combos
+  var seen = new Set();
+  points = points.filter(function(p){ var k = (p.book||'')+'@'+p.point; if (seen.has(k)) return false; seen.add(k); return true; });
+  // Stat-only graph with markers for thresholds from books and summary
+  var statGraph = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points);
+  // Aggregated view
+  var aggRows = [
+    '<tr><th>Threshold (T)</th><td>'+_fmtNum(m.threshold!=null?m.threshold:summ.avg_threshold,2)+'</td></tr>',
+    '<tr><th>p_over (norm)</th><td>'+(m.p_over_norm==null?'-':_fmtNum(m.p_over_norm,3))+'</td></tr>',
+    '<tr><th>Mean</th><td>'+_fmtNum(m.mean,2)+'</td></tr>',
+    '<tr><th>Q15</th><td>'+_fmtNum(m.q15,2)+'</td></tr>',
+    '<tr><th>Q50</th><td>'+_fmtNum(m.q50,2)+'</td></tr>',
+    '<tr><th>Q85</th><td>'+_fmtNum(m.q85,2)+'</td></tr>',
+    '<tr><th>Multiplier</th><td>'+_fmtNum(m.multiplier,2)+'</td></tr>',
+    '<tr><th>FP Floor/Mid/Ceil</th><td>'+_fmtNum(m.fp_floor,2)+' / '+_fmtNum(m.fp_mid,2)+' / '+_fmtNum(m.fp_ceil,2)+'</td></tr>'
+  ].join('');
+  var agg = '<table><tbody>'+aggRows+'</tbody></table>';
+  // Books breakdown
+  var bookRows = (entry.books||[]).map(function(b){
+    var over=b.over||{}; var under=b.under||{}; var o=Number(over.odds||NaN); var u=Number(under.odds||NaN);
+    var oImp = (isFinite(o)? (1/o) : null); var uImp = (isFinite(u)? (1/u) : null);
+    var norm = (oImp!=null && uImp!=null) ? (oImp/(oImp+uImp)) : null;
+    var pt = (over.point!=null?over.point:under.point);
+    return '<tr>'
+      + '<td>'+_escapeHtml(b.book||'')+'</td>'
+      + '<td>'+ (over.odds!=null? _fmtNum(over.odds,2) : '-') +'</td>'
+      + '<td>'+ (over.point!=null? _fmtNum(over.point,2) : '-') +'</td>'
+      + '<td>'+ (under.odds!=null? _fmtNum(under.odds,2) : '-') +'</td>'
+      + '<td>'+ (under.point!=null? _fmtNum(under.point,2) : '-') +'</td>'
+      + '<td>'+ (oImp!=null? _fmtNum(oImp,3): '-') +'</td>'
+      + '<td>'+ (uImp!=null? _fmtNum(uImp,3): '-') +'</td>'
+      + '<td>'+ (norm!=null? _fmtNum(norm,3): '-') +'</td>'
+      + '</tr>';
+  }).join('');
+  var booksTbl = '<table><thead><tr><th>Book</th><th>Over</th><th>Over Pt</th><th>Under</th><th>Under Pt</th><th>Imp(Over)</th><th>Imp(Under)</th><th>p_over(norm)</th></tr></thead><tbody>'+ (bookRows||'') +'</tbody></table>';
+  var html = [
+    '<div class="details-section">',
+      '<div class="section-title">', _escapeHtml(nice), '</div>',
+      statGraph,
+      '<div class="muted">Aggregated from bookmaker lines (click Back to choose another stat)</div>',
+      agg,
+    '</div>',
+    '<div class="details-section">',
+      '<div class="section-title">Books Lines</div>',
+      (bookRows? booksTbl : '<div class="muted">No per-book lines found.</div>'),
+    '</div>'
+  ].join('');
+  body.innerHTML = html;
+}
+
+// Render a stat-specific PDF with markers for thresholds and book points
+function _renderStatGraph(title, baseKey, m, summaryThreshold, bookPoints) {
+  try {
+    var mean = Number(m.mean||0);
+    var q15 = Number(m.q15||0), q85 = Number(m.q85||0);
+    var sigma = Number(m.sigma||0.000001);
+    var isBinary = (baseKey === 'player_anytime_td') || (Number(m.threshold||0) === 0 && !isFinite(sigma));
+    var minX = 0;
+    var maxX = Math.max(mean, q85 || 0, summaryThreshold || 0, (bookPoints||[]).reduce(function(mx,p){ return Math.max(mx, Number(p.point||0)); }, 0));
+    if (!(maxX > 0)) maxX = 1;
+    // Add margin
+    maxX = maxX * 1.2;
+    var W = 600, H = 140, PAD = 14;
+    function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
+    function yScale(y){ return H - PAD - y * (H - 2*PAD); }
+    var path = '';
+    var legend = '';
+    if (!isBinary) {
+      // Build normal pdf curve
+      var N = 80; var pts = []; var maxY = 0;
+      function pdf(x){ return Math.exp(-0.5 * Math.pow((x - mean) / (sigma || 1e-6), 2)); }
+      for (var i=0;i<=N;i++){
+        var x = minX + (maxX-minX)*i/N; var y = pdf(x); if (y > maxY) maxY = y; pts.push([x, y]);
+      }
+      var d = pts.map(function(p,i){ var X=xScale(p[0]).toFixed(1), Y=yScale((p[1]/(maxY||1))*1).toFixed(1); return (i?'L':'M')+X+','+Y; }).join('');
+      var area = d + ' L ' + xScale(maxX).toFixed(1) + ',' + yScale(0) + ' L ' + xScale(minX).toFixed(1) + ',' + yScale(0) + ' Z';
+      // Markers: summary threshold, mean (q50), q15, q85, books
+      var mk = [];
+      function vline(x, cls){ return '<line class="marker '+cls+'" x1="'+x+'" y1="'+yScale(0)+'" x2="'+x+'" y2="'+yScale(1)+'" />'; }
+      var xF = xScale(q15), xM = xScale(Number(m.q50||mean)), xC = xScale(q85);
+      mk.push(vline(xF, 'q15'));
+      mk.push(vline(xM, 'mean'));
+      mk.push(vline(xC, 'q85'));
+      if (summaryThreshold!=null) mk.push(vline(xScale(Number(summaryThreshold)), 'summary'));
+      // Book markers
+      var bookMarks = (bookPoints||[]).map(function(p){ return vline(xScale(p.point), 'book'); });
+      var grid = (function(){ var out=''; for (var gi=1; gi<=5; gi++){ var xv=minX+(maxX-minX)*gi/6; out += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; } return out; })();
+      var svg = [
+        '<div class="stat-visual">',
+          '<div class="vis-title">', _escapeHtml(title), ' (stat only)</div>',
+          '<div class="svg-wrap"><svg viewBox="0 0 ', W, ' ', H, '" preserveAspectRatio="none">',
+            grid,
+            '<line class="axis" x1="', xScale(minX), '" y1="', yScale(0), '" x2="', xScale(maxX), '" y2="', yScale(0), '" />',
+            '<path class="curve" d="', area, '" />',
+            mk.join(''),
+            bookMarks.join(''),
+          '</svg></div>',
+          '<div class="legend">',
+            '<span><span class="dot q15"></span>Q15</span>',
+            '<span><span class="dot mean"></span>Mean</span>',
+            '<span><span class="dot q85"></span>Q85</span>',
+            (summaryThreshold!=null? '<span><span class="dot summary"></span>Summary T</span>' : ''),
+            (bookPoints && bookPoints.length? '<span><span class="dot book"></span>Book lines</span>' : ''),
+          '</div>',
+        '</div>'
+      ].join('');
+      return svg;
+    } else {
+      // Simple binary visualization
+      var p = (m.p_over_norm==null ? 0.5 : Number(m.p_over_norm));
+      var bar0 = '<div class="bin-bar"><div class="bin" style="width:' + ((1-p)*100).toFixed(1) + '%"></div></div>';
+      var bar1 = '<div class="bin-bar"><div class="bin" style="width:' + (p*100).toFixed(1) + '%; background:#60a5fa"></div></div>';
+      return '<div class="stat-visual"><div class="vis-title">'+_escapeHtml(title)+' (probability)</div>'+bar0+bar1+'<div class="legend"><span>0</span><span>1</span></div></div>';
+    }
+  } catch (e) { return ''; }
 }
 
 async function openDefenseDetails(defense, week) {
