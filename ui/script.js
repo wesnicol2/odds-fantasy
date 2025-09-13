@@ -419,9 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
   attachSettingsListeners();
   
-  document.querySelectorAll('.btn-show-lineup').forEach(btn => {
-    btn.addEventListener('click', () => showLineup(btn.dataset.week));
-  });
+  // Removed: legacy number-only lineup view button
   document.querySelectorAll('.btn-defenses').forEach(btn => {
     btn.addEventListener('click', () => loadDefenses(btn.dataset.week));
   });

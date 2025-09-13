@@ -36,6 +36,8 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .details-box { width: min(1100px, 100%); max-width: 100%; display: flex; flex-direction: column; gap: 0; }
 .details-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; padding: 4px 2px; }
 .details-title { font-weight: 700; font-size: 18px; letter-spacing: 0.2px; }
+.back-btn { background: transparent; border: 1px solid #334155; color: #cbd5e1; border-radius: 6px; padding: 4px 8px; cursor: pointer; margin-right: 8px; }
+.back-btn:hover { background: #111827; color: #fff; }
 .close-btn { background: transparent; border: none; color: #cbd5e1; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
 .close-btn:hover { background: #111827; color: #fff; }
 .details-body { background: #0b1020; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow: visible; max-height: none; overflow-x: auto; }
@@ -97,10 +99,19 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .compare-list .player { padding: 6px 8px; border-radius: 6px; color: #cbd5e1; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 .compare-list .player:hover { background: #111b33; }
 .compare-list .player.active { background: #1f2a44; color: #fff; }
+.compare-list .player .right { display: inline-flex; align-items: center; gap: 6px; }
+.compare-list .player .mini.details { background: transparent; border: 1px solid #334155; color: #cbd5e1; border-radius: 4px; padding: 2px 6px; font-size: 12px; cursor: pointer; }
+.compare-list .player .mini.details:hover { background: #223; }
+.compare-list .player .fmc { font-size: 12px; color: #9ca3af; }
+.compare-list .player .name-link { background: transparent; border: none; color: #e5e7eb; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; margin: 0; }
+.compare-list .player .name-link:hover { color: #ffffff; }
 .compare-list .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; border: 1px solid #233; }
 .compare-graph { background: #0f172a; border: 1px solid #233; border-radius: 8px; padding: 8px; position: relative; }
 .compare-graph svg { width: 100%; height: 360px; display: block; }
 .compare-graph .grid { stroke: #1f2a44; stroke-width: 1; opacity: 0.5; }
+.compare-graph .hover-x { stroke: #6b7280; stroke-width: 1; stroke-dasharray: 3 3; }
+.compare-graph .hover-dot { fill: #fbbf24; stroke: #ffffff; stroke-width: 1; }
+.compare-graph .fmc-line { stroke: #a3a3a3; stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.9; }
 .curve-line { stroke-width: 1.5; fill: none; opacity: 0.35; }
 .curve-line.highlight { stroke-width: 3; opacity: 0.95; }
 .curve-line.dim { opacity: 0.15; }
