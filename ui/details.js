@@ -1,4 +1,4 @@
-﻿// Details modal helpers and on-demand odds detail viewers
+// Details modal helpers and on-demand odds detail viewers
 
 function showDetails(title, html) {
   var overlay = document.getElementById('detailsOverlay');
@@ -51,8 +51,11 @@ function _escapeHtml(s) {
 function _renderFpVisual(floor, mid, ceil) {
   try {
     var f = Number(floor||0), m = Number(mid||0), c = Number(ceil||0);
-    var minX = Math.max(0, Math.min(f, m) - Math.abs(m-f)*0.5);
-    var maxX = Math.max(c, m) + Math.abs(c-m)*0.5;
+    // Use global FP range when available to keep all graphs comparable
+    var gmax = null;
+    try { if (window && window.GLOBAL_FP_RANGE) { gmax = Number(window.GLOBAL_FP_RANGE.maxX) || null; } } catch (e) {}
+    var minX = 0;
+    var maxX = (gmax && gmax > 0) ? gmax : (Math.max(c, m) + Math.abs(c-m)*0.5);
     if (maxX <= minX) { maxX = minX + 1; }
     var W = 600, H = 140, PAD = 14;
     var z85 = 1.036; // approx z for 85th
@@ -76,7 +79,7 @@ function _renderFpVisual(floor, mid, ceil) {
     }
     // normalize y to [0,1] and map to pixels
     var path = '';
-    pts.forEach(function(p, i){ var X=p[0], Y=yScale((p[1]/(maxY||1))*0.9); path += (i?'L':'M') + X.toFixed(1) + ',' + Y.toFixed(1); });
+    pts.forEach(function(p, i){ var X=p[0], Y=yScale((p[1]/(maxY||1))*1); path += (i?'L':'M') + X.toFixed(1) + ',' + Y.toFixed(1); });
     // close area to baseline
     var area = path + ' L ' + xScale(maxX).toFixed(1) + ',' + yScale(0).toFixed(1) + ' L ' + xScale(minX).toFixed(1) + ',' + yScale(0).toFixed(1) + ' Z';
     // Build gridlines (x: 5 ticks)
@@ -121,23 +124,40 @@ function openCompareCurves(week) {
     fetchJSON(projUrl).then(function(res){
       if (!res.ok) { hideDetails(); alert('Failed to load projections'); return; }
       var all = (res.data && res.data.players) || [];
-      var posTabs = ['QB','RB','WR','TE','FLEX'];
-      var tabsHtml = '<div class="details-section"><div class="section-title">Select Position (' + (week==='next'?'Next Week':'This Week') + ')</div>' + posTabs.map(function(p){ return '<button class="pill" data-pos="'+p+'">'+p+'</button>'; }).join(' ') + '</div>';
+      // Compute global FP range across all players and store globally
+      try {
+        var gMax = 0;
+        (all||[]).forEach(function(p){ var c = Number(p.ceiling||0); if (c > gMax) gMax = c; });
+        if (!(gMax > 0)) gMax = 1;
+        window.GLOBAL_FP_RANGE = { minX: 0, maxX: gMax };
+      } catch (e) {}
+      var curTarget = 'mid';
+      var posTabs = ['LINEUP','ALL','QB','RB','WR','TE','FLEX'];
+      var tabsHtml = '<div class="details-section"><div class="section-title">Select (' + (week==='next'?'Next Week':'This Week') + ')</div>'
+        + posTabs.map(function(p){ return '<button class="pill" data-pos="'+p+'">'+p+'</button>'; }).join(' ')
+        + ' <span class="muted" style="margin-left:10px;">Target:</span> '
+        + ['floor','mid','ceiling'].map(function(t){ return '<button class="pill target-pill" data-target="'+t+'">'+t.toUpperCase()+'</button>'; }).join(' ')
+        + '</div>';
       var controls = '<div class="cmp-controls"><input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" /><label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label></div>';
       var grid = controls + '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
       var body = document.getElementById('detailsBody');
-      body.innerHTML = tabsHtml + grid;
+      body.innerHTML = tabsHtml + grid + '<div class="details-section" id="cmpLineup" style="display:none"></div>';
+      function _renderTargetPills(){ try{ var pills=body.querySelectorAll('.target-pill'); pills.forEach(function(btn){ var t=btn.getAttribute('data-target'); btn.classList.toggle('pill-active', String(t)===String(curTarget)); }); }catch(e){} }
       function renderForPos(pos){
-        var pool = all.filter(function(p){ return pos==='FLEX' ? (['WR','RB','TE'].indexOf(p.pos)>=0) : (p.pos===pos); }).slice();
+        var pool = all.filter(function(p){ return pos==='FLEX' ? (['WR','RB','TE'].indexOf(p.pos)>=0) : ((pos==='ALL'||pos==='LINEUP') ? true : (p.pos===pos)); }).slice();
+        var slotByName = {};
+        if ((pos==='ALL' || pos==='LINEUP') && typeof computeLineupFromPlayers==='function'){
+          try { var lp = computeLineupFromPlayers(all, curTarget||'mid'); (lp.lineup||[]).forEach(function(r){ if (r.slot!=='BENCH') slotByName[r.name]=r.slot; }); pool = all.filter(function(p){ return !!slotByName[p.name]; }); } catch(e){}
+        }
         pool.sort(function(a,b){ return Number(b.mid||0) - Number(a.mid||0); });
         pool = pool.slice(0, 20);
-        var minX = 0, maxX = 0, z85=1.036;
-        pool.forEach(function(p){ var f=Number(p.floor||0), m=Number(p.mid||0), c=Number(p.ceiling||0); var left=Math.max(0, Math.min(f,m)-Math.abs(m-f)*0.5); var right=Math.max(c,m)+Math.abs(c-m)*0.5; if (left<minX) minX=left; if (right>maxX) maxX=right; });
-        if (maxX<=minX) maxX=minX+1;
+        var z85=1.036;
+        var minX = (window && window.GLOBAL_FP_RANGE ? Number(window.GLOBAL_FP_RANGE.minX)||0 : 0);
+        var maxX = (window && window.GLOBAL_FP_RANGE ? Number(window.GLOBAL_FP_RANGE.maxX)||1 : 1);
         var W=800,H=360,PAD=24;
         function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
         function yScale(y){ return H - PAD - y * (H - 2*PAD); }
-        function pathFor(floor, mid, ceil){ var f=Number(floor||0), m=Number(mid||0), c=Number(ceil||0); var sigR=Math.max(0.1, Math.abs(c-m)/z85), sigL=Math.max(0.1, Math.abs(m-f)/z85); var N=120; var pts=[], maxY=0; for (var i=0;i<=N;i++){ var x=minX+(maxX-minX)*i/N; var s=(x>=m?sigR:sigL); var y=Math.exp(-0.5*Math.pow((x-m)/s,2)); if (y>maxY) maxY=y; pts.push([xScale(x), y]); } var d=''; pts.forEach(function(p,i){ var X=p[0],Y=yScale((p[1]/(maxY||1))*0.95); d+=(i?'L':'M')+X.toFixed(1)+','+Y.toFixed(1); }); return d; }
+        function pathFor(floor, mid, ceil){ var f=Number(floor||0), m=Number(mid||0), c=Number(ceil||0); var sigR=Math.max(0.1, Math.abs(c-m)/z85), sigL=Math.max(0.1, Math.abs(m-f)/z85); var N=120; var pts=[], maxY=0; for (var i=0;i<=N;i++){ var x=minX+(maxX-minX)*i/N; var s=(x>=m?sigR:sigL); var y=Math.exp(-0.5*Math.pow((x-m)/s,2)); if (y>maxY) maxY=y; pts.push([xScale(x), y]); } var d=''; pts.forEach(function(p,i){ var X=p[0],Y=yScale((p[1]/(maxY||1))*1); d+=(i?'L':'M')+X.toFixed(1)+','+Y.toFixed(1); }); return d; }
         // Keep curve params for hover density calculations
         var curves = pool.map(function(p){ var f=Number(p.floor||0), m=Number(p.mid||0), c=Number(p.ceiling||0); return { f:f, m:m, c:c, sigR: Math.max(0.1, Math.abs(c-m)/z85), sigL: Math.max(0.1, Math.abs(m-f)/z85) }; });
         function pdfAt(i, x){ var cur=curves[i]; var s=(x>=cur.m?cur.sigR:cur.sigL); return Math.exp(-0.5*Math.pow((x-cur.m)/s,2)); }
@@ -151,7 +171,18 @@ function openCompareCurves(week) {
           for (var i=0;i<n;i++) { var hue = Math.round((360*i)/n) % 360; cols.push('hsl('+hue+','+sat+'%,'+light+'%)'); }
           return cols;
         })();
-        var list = document.getElementById('cmpList'); list.innerHTML = pool.map(function(p,idx){ var col=palette[idx]||'hsl(200,70%,55%)'; return '<div class="player" data-idx="'+idx+'" data-name="'+_escapeHtml(p.name.toLowerCase())+'"><span><span class="dot" style="background:'+col+'"></span>'+_escapeHtml(p.name)+'</span><span class="muted">'+(Number(p.mid||0).toFixed(1))+'</span></div>'; }).join('');
+        var list = document.getElementById('cmpList');
+        list.innerHTML = pool.map(function(p,idx){
+          var col=palette[idx]||'hsl(200,70%,55%)';
+          var slot = slotByName[p.name] ? ('<span class="pill" title="Lineup slot">'+slotByName[p.name]+'</span> ') : '';
+          var nums = '<span class="muted fmc">F '+Number(p.floor||0).toFixed(1)+' Â· M '+Number(p.mid||0).toFixed(1)+' Â· C '+Number(p.ceiling||0).toFixed(1)+'</span>';
+          var detailsBtn = '<button class="mini details" data-name="'+_escapeHtml(p.name)+'" title="Details">âŸ²</button>';
+          var nameBtn = '<button class="name-link" data-name="'+_escapeHtml(p.name)+'">'+_escapeHtml(p.name)+'</button>';
+          return '<div class="player" data-idx="'+idx+'" data-name="'+_escapeHtml(p.name.toLowerCase())+'">'
+            + '<span class="left"><span class="dot" style="background:'+col+'"></span>'+slot+nameBtn+'</span>'
+            + '<span class="right">'+nums+' '+detailsBtn+'</span>'
+            + '</div>';
+        }).join('');
         var svg = document.getElementById('cmpSvg');
         var grid=''; for (var gi=1; gi<=6; gi++){ var xv=minX+(maxX-minX)*gi/7; grid += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; }
         var ax = grid + '<line class="axis" x1="'+xScale(minX)+'" y1="'+yScale(0)+'" x2="'+xScale(maxX)+'" y2="'+yScale(0)+'" />';
@@ -173,6 +204,10 @@ function openCompareCurves(week) {
             applyHighlight();
           });
         });
+        // Details buttons
+        list.querySelectorAll('.player .details').forEach(function(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); var name=btn.getAttribute('data-name')||''; openPlayerDetails(name, week); }); });
+        // Clicking the name opens the single-player popup
+        list.querySelectorAll('.player .name-link').forEach(function(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); var name=btn.getAttribute('data-name')||''; openPlayerDetails(name, week); }); });
         var search = document.getElementById('cmpSearch'); if (search){ search.value=''; search.oninput = function(){ var q=(search.value||'').toLowerCase().trim(); list.querySelectorAll('.player').forEach(function(it){ var name=(it.getAttribute('data-name')||''); it.style.display = (q==='' || name.indexOf(q)>=0) ? '' : 'none'; }); }; }
         var chk = document.getElementById('cmpShowPinned'); if (chk){ chk.checked=false; chk.onchange = function(){ showPinnedOnly = !!chk.checked; applyHighlight(); }; }
         applyHighlight();
@@ -192,7 +227,7 @@ function openCompareCurves(week) {
               if (candXpx < PAD || candXpx > (W-PAD)) continue;
               var candXVal = minX + (candXpx-PAD)*(maxX-minX)/(W-2*PAD);
               var dens = pdfAt(i, candXVal);
-              var candYpx = yScale(dens*0.95);
+          var candYpx = yScale(dens*1);
               var dx = candXpx - localX; var dy = candYpx - localY; var d2 = dx*dx + dy*dy;
               if (d2 < best.dist2){ best = { idx: i, xPx: candXpx, yPx: candYpx, xVal: candXVal, dens: dens, dist2: d2 }; }
             }
@@ -206,13 +241,34 @@ function openCompareCurves(week) {
         }
         function onLeave(){ if (locked==null) setHighlight(null); if (hoverX) hoverX.style.display='none'; if (hoverDot) hoverDot.style.display='none'; if (tip) tip.style.display='none'; }
         svg.addEventListener('mousemove', onMove); svg.addEventListener('mouseleave', onLeave);
+        // Render lineup table when LINEUP tab is active
+        try {
+          var lc = document.getElementById('cmpLineup');
+          if (pos === 'LINEUP') {
+            if (lc) { lc.style.display='block'; }
+            if (typeof computeLineupFromPlayers==='function') {
+              var lpp = computeLineupFromPlayers(all, curTarget||'mid');
+              if (lc) renderLineup('cmpLineup', 'Optimal Lineup', lpp);
+            }
+          } else {
+            if (lc) { lc.style.display='none'; lc.innerHTML=''; }
+          }
+        } catch(e){}
       }
       function saveLastPos(pos){ try{ localStorage.setItem('ofdash.cmp.lastPos.'+week, pos);}catch(e){} }
-      function loadLastPos(){ try{ return localStorage.getItem('ofdash.cmp.lastPos.'+week) || 'WR'; }catch(e){ return 'WR'; } }
+      function loadLastPos(){ try{ return localStorage.getItem('ofdash.cmp.lastPos.'+week) || 'LINEUP'; }catch(e){ return 'LINEUP'; } }
       function activateTab(pos){ var pills = body.querySelectorAll('.details-section .pill[data-pos]'); pills.forEach(function(b){ b.classList.toggle('pill-active', b.getAttribute('data-pos')===pos); }); saveLastPos(pos); renderForPos(pos); }
       body.querySelectorAll('.details-section .pill[data-pos]').forEach(function(btn){ btn.addEventListener('click', function(){ activateTab(btn.getAttribute('data-pos')); }); });
+      // Target selector for lineup optimization
+      body.querySelectorAll('.target-pill').forEach(function(btn){ btn.addEventListener('click', function(){ curTarget = btn.getAttribute('data-target')||'mid'; _renderTargetPills(); var active = body.querySelector('.details-section .pill.pill-active[data-pos]'); var pos = active ? active.getAttribute('data-pos') : 'LINEUP'; renderForPos(pos||'LINEUP'); }); });
+      _renderTargetPills();
       activateTab(loadLastPos());
-    }).catch(function(){ hideDetails(); alert('Failed to load data'); });
+      try { history.replaceState({ detailsOpen: true, modal: 'compare', week: week }, '', '#details'); } catch (e) {}
+    }).catch(function(e){
+      try { console.error('[compare] error', e); } catch(_){ }
+      hideDetails();
+      alert('Failed to load data: ' + (e && (e.message || e.toString ? e.toString() : e)));
+    });
   } catch (e) { try { hideDetails(); } catch(_){} }
 }
 function _formatISOToLocal(iso) {
@@ -293,7 +349,7 @@ function renderMarketBlock(key, payload) {
   var header = [
     '<div class="market"summary- aria-expanded="false" data-target="mk_', safeKey, '">',
       '<div class="title">', _prettyMarketLabel(key), '</div>',
-      '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : 'â€”'),
+      '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : 'Ã¢â‚¬â€'),
       ' <span class="pill">impact ', _fmt(impact), '</span>',
       s && (s.samples!=null) ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : '',
       '</div>',
@@ -303,10 +359,10 @@ function renderMarketBlock(key, payload) {
   var rows = (payload.books || []).map(function(b){
     return '<tr>'
       + '<td>' + (b.book||'') + '</td>'
-      + '<td>' + (b.over && b.over.odds!=null?_fmt(b.over.odds):'â€”') + '</td>'
-      + '<td>' + (b.over && b.over.point!=null?_fmt(b.over.point):'â€”') + '</td>'
-      + '<td>' + (b.under && b.under.odds!=null?_fmt(b.under.odds):'â€”') + '</td>'
-      + '<td>' + (b.under && b.under.point!=null?_fmt(b.under.point):'â€”') + '</td>'
+      + '<td>' + (b.over && b.over.odds!=null?_fmt(b.over.odds):'Ã¢â‚¬â€') + '</td>'
+      + '<td>' + (b.over && b.over.point!=null?_fmt(b.over.point):'Ã¢â‚¬â€') + '</td>'
+      + '<td>' + (b.under && b.under.odds!=null?_fmt(b.under.odds):'Ã¢â‚¬â€') + '</td>'
+      + '<td>' + (b.under && b.under.point!=null?_fmt(b.under.point):'Ã¢â‚¬â€') + '</td>'
       + '</tr>';
   }).join('');
   var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
@@ -339,11 +395,11 @@ function renderMarketBlock2(key, payload) {
   }).join('');
   var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
   var fp = payload || {};
-  var fpStrip = '<div id="imp_' + safeKey + '" class="impact-strip hidden">FP impact — Floor: <strong>' + _fmt(fp.fp_floor) + '</strong> · Mid: <strong>' + _fmt(fp.fp_mid) + '</strong> · Ceiling: <strong>' + _fmt(fp.fp_ceiling) + '</strong></div>';
+  var fpStrip = '<div id="imp_' + safeKey + '" class="impact-strip hidden">FP impact â€” Floor: <strong>' + _fmt(fp.fp_floor) + '</strong> Â· Mid: <strong>' + _fmt(fp.fp_mid) + '</strong> Â· Ceiling: <strong>' + _fmt(fp.fp_ceiling) + '</strong></div>';
   return '<div class="market">' + header + fpStrip + '<div id="mk_' + safeKey + '" class="market-details hidden">' + table + '</div></div>';
 }
 
-async function openPlayerDetails(name, week) {
+async function openPlayerDetails(name, week, opts) {
   try {
     var n = String(name||'');
     n = n.replace(/[\u00B7\u2022\u2219]/g,' ').replace(/[\u00C2]/g,'');
@@ -355,7 +411,15 @@ async function openPlayerDetails(name, week) {
     if (n) name = n;
   } catch (e) {}
 
-  showDetails('Player Details', '<div class="status"><span class="spinner"></span> Loading...</div>');
+  if (!opts || !opts.noHistory) {
+    showDetails('Player Details', '<div class="status"><span class="spinner"></span> Loading...</div>');
+  } else {
+    try {
+      var ov0 = document.getElementById('detailsOverlay'); if (ov0) ov0.classList.remove('hidden');
+      var tt0 = document.getElementById('detailsTitle'); if (tt0) tt0.textContent = 'Player Details';
+      var bd0 = document.getElementById('detailsBody'); if (bd0) bd0.innerHTML = '<div class="status"><span class="spinner"></span> Loading...</div>';
+    } catch (e) {}
+  }
   // Fetch odds detail + projections for fantasy points trio
   var oddsUrl = apiUrl('/player/odds', {
     username: val('username') || 'wesnicol',
@@ -371,6 +435,18 @@ async function openPlayerDetails(name, week) {
     week: week,
     mode: getDataMode()
   });
+  try {
+    var players = [];
+    if (projResp.ok && projResp.data) {
+      if (Array.isArray(projResp.data.players)) players = projResp.data.players;
+      else if (projResp.data.projections && projResp.data.projections[week]) players = projResp.data.projections[week].players || [];
+    }
+    // Update global FP range for consistent axes across views
+    var gMaxAll = 0; (players||[]).forEach(function(r){ var cc = Number(r.ceiling||0); if (cc > gMaxAll) gMaxAll = cc; });
+    if (!(gMaxAll > 0)) gMaxAll = 1;
+    try { window.GLOBAL_FP_RANGE = { minX: 0, maxX: gMaxAll }; } catch (e) {}
+  } catch (e) { /* ignore */ }
+ 
   var [resp, projResp] = await Promise.all([fetchJSON(oddsUrl), fetchJSON(projUrl)]);
   if (!resp.ok) { showDetails('Player Details', '<div class="status">Failed to load.</div>'); return; }
   var data = resp.data || {};
@@ -392,7 +468,7 @@ async function openPlayerDetails(name, week) {
 
   var head = '<div class="player-head">'
     + '<div class="player-name">' + _escapeHtml(p.name || name) + '</div>'
-    + '<div class="player-meta">' + _escapeHtml(p.pos || '') + ' · ' + _escapeHtml(p.team || '') + '</div>'
+    + '<div class="player-meta">' + _escapeHtml(p.pos || '') + ' Â· ' + _escapeHtml(p.team || '') + '</div>'
     + '</div>';
   var predicted = ''
     + '<div class="details-section">'
@@ -468,6 +544,19 @@ async function openPlayerDetails(name, week) {
     debugHtml
   ].join('');
   showDetails('Player Details', html);
+  try {
+    var hdr = document.querySelector('.details-header');
+    if (hdr && !hdr.querySelector('#detailsBack')) {
+      var bk = document.createElement('button');
+      bk.id = 'detailsBack';
+      bk.className = 'back-btn';
+      bk.setAttribute('aria-label','Back');
+      bk.textContent = 'â† Back';
+      bk.addEventListener('click', function(e){ e.stopPropagation(); try { history.back(); } catch(_) { hideDetails(); } });
+      hdr.insertBefore(bk, hdr.firstChild);
+    }
+  } catch (e) {}
+  try { history.replaceState({ detailsOpen: true, modal: 'player', name: (p.name || name), week: week }, '', '#details'); } catch (e) {}
   try { _attachFpVisualHandlers(document.getElementById('detailsBody')); } catch (e) {}
 }
 
@@ -504,9 +593,9 @@ async function openDefenseDetails(defense, week) {
     var rows = (g.books||[]).map(function(b){
       return '<tr>'
         + '<td>' + (b.book||'') + '</td>'
-        + '<td>' + (b.total_point!=null?_fmt(b.total_point):'â€”') + '</td>'
-        + '<td>' + (b.opponent_spread!=null?_fmt(b.opponent_spread):'â€”') + '</td>'
-        + '<td>' + (b.opponent_implied!=null?_fmt(b.opponent_implied):'â€”') + '</td>'
+        + '<td>' + (b.total_point!=null?_fmt(b.total_point):'Ã¢â‚¬â€') + '</td>'
+        + '<td>' + (b.opponent_spread!=null?_fmt(b.opponent_spread):'Ã¢â‚¬â€') + '</td>'
+        + '<td>' + (b.opponent_implied!=null?_fmt(b.opponent_implied):'Ã¢â‚¬â€') + '</td>'
         + '</tr>';
     }).join('');
     var table = '<table><thead><tr><th>Book</th><th>Total</th><th>Opp Spread</th><th>Opp Implied</th></tr></thead><tbody>' + rows + '</tbody></table>';
@@ -565,8 +654,8 @@ function renderRawOddsSection(raw) {
             var outcomes = Array.isArray(mkt.outcomes) ? mkt.outcomes : [];
             var rows = outcomes.map(function(o){
               var name = _escapeHtml(o.name);
-              var price = (o.price!=null? _escapeHtml(o.price) : (o.odds!=null? _escapeHtml(o.odds): 'â€”'));
-              var point = (o.point!=null? _escapeHtml(o.point) : 'â€”');
+              var price = (o.price!=null? _escapeHtml(o.price) : (o.odds!=null? _escapeHtml(o.odds): 'Ã¢â‚¬â€'));
+              var point = (o.point!=null? _escapeHtml(o.point) : 'Ã¢â‚¬â€');
               var other = {};
               Object.keys(o||{}).forEach(function(k){ if (['name','price','odds','point'].indexOf(k)===-1) other[k]=o[k]; });
               var otherStr = (Object.keys(other).length? _escapeHtml(JSON.stringify(other)) : '');
@@ -646,7 +735,12 @@ document.addEventListener('DOMContentLoaded', function(){
   });
   // Mobile back button: close modal via history pop
   try {
-    window.addEventListener('popstate', function(){
+    window.addEventListener('popstate', function(ev){
+      var st = ev.state || {};
+      if (st && st.modal === 'player') { try { openPlayerDetails(st.name, st.week || 'this', { noHistory: true }); return; } catch(_) {}
+      }
+      if (st && st.modal === 'compare') { try { openCompareCurves(st.week || 'this', { noHistory: true }); return; } catch(_) {}
+      }
       var overlay = document.getElementById('detailsOverlay');
       if (overlay && !overlay.classList.contains('hidden')) hideDetails();
     });
@@ -761,7 +855,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // We override rendering helpers defined in script.js to add badges and dashes for missing stats.
 (function(){
   // Defensive checks in case functions are renamed
-  function fmtCell(v, inc) { return inc ? 'â€”' : Number(v||0).toFixed(2); }
+  function fmtCell(v, inc) { return inc ? 'Ã¢â‚¬â€' : Number(v||0).toFixed(2); }
 
   // Override renderPlayers to show incomplete badge and dashes
   if (typeof window.renderPlayers === 'function') {
@@ -850,7 +944,7 @@ document.addEventListener('DOMContentLoaded', function(){
         const body = rows.map(r => {
           const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
           const nameHtml = inc ? (r.name + ' <span class="pill pill"warn- title="Odds missing; stats incomplete">incomplete</span>') : r.name;
-          const fmt = (v) => inc ? 'â€”' : Number(v||0).toFixed(2);
+          const fmt = (v) => inc ? 'Ã¢â‚¬â€' : Number(v||0).toFixed(2);
           return '<tr>'
             + '<td>' + (r.slot||'') + '</td>'
             + '<td>' + (inc ? ('<span class="incomplete"name->' + nameHtml + '</span>') : nameHtml) + '</td>'

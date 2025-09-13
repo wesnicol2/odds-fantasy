@@ -1,0 +1,57 @@
+*** Begin Patch
+*** Update File: ui/details.js
+@@
+-      var posTabs = ['QB','RB','WR','TE','FLEX'];
+-      var tabsHtml = '<div class="details-section"><div class="section-title">Select Position (' + (week==='next'?'Next Week':'This Week') + ')</div>' + posTabs.map(function(p){ return '<button class="pill" data-pos="'+p+'">'+p+'</button>'; }).join(' ') + '</div>';
+-      var controls = '<div class="cmp-controls"><input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" /><label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label></div>';
+-      var grid = controls + '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
+-      var body = document.getElementById('detailsBody');
+-      body.innerHTML = tabsHtml + grid;
++      var curTarget = 'mid';
++      var posTabs = ['LINEUP','ALL','QB','RB','WR','TE','FLEX'];
++      var tabsHtml = '<div class="details-section"><div class="section-title">Select (' + (week==='next'?'Next Week':'This Week') + ')</div>'
++        + posTabs.map(function(p){ return '<button class="pill" data-pos="'+p+'">'+p+'</button>'; }).join(' ')
++        + ' <span class="muted" style="margin-left:10px;">Target:</span> '
++        + ['floor','mid','ceiling'].map(function(t){ return '<button class="pill target-pill" data-target="'+t+'">'+t.toUpperCase()+'</button>'; }).join(' ')
++        + '</div>';
++      var controls = '<div class="cmp-controls"><input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" /><label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label></div>';
++      var grid = controls + '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
++      var body = document.getElementById('detailsBody');
++      body.innerHTML = tabsHtml + grid + '<div class="details-section" id="cmpLineup" style="display:none"></div>';
++      function _renderTargetPills(){ try{ var pills=body.querySelectorAll('.target-pill'); pills.forEach(function(btn){ var t=btn.getAttribute('data-target'); btn.classList.toggle('pill-active', String(t)===String(curTarget)); }); }catch(e){} }
+@@
+-      function renderForPos(pos){
+-        var pool = all.filter(function(p){ return pos==='FLEX' ? (['WR','RB','TE'].indexOf(p.pos)>=0) : (p.pos===pos); }).slice();
++      function renderForPos(pos){
++        var pool = all.filter(function(p){ return pos==='FLEX' ? (['WR','RB','TE'].indexOf(p.pos)>=0) : ((pos==='ALL'||pos==='LINEUP') ? true : (p.pos===pos)); }).slice();
+         var slotByName = {};
++        if ((pos==='ALL' || pos==='LINEUP') && typeof computeLineupFromPlayers==='function'){
++          try { var lp = computeLineupFromPlayers(all, curTarget||'mid'); (lp.lineup||[]).forEach(function(r){ if (r.slot!=='BENCH') slotByName[r.name]=r.slot; }); pool = all.filter(function(p){ return !!slotByName[p.name]; }); } catch(e){}
++        }
+@@
+-        svg.addEventListener('mousemove', onMove); svg.addEventListener('mouseleave', onLeave);
++        svg.addEventListener('mousemove', onMove); svg.addEventListener('mouseleave', onLeave);
++        // Render lineup table when LINEUP tab is active
++        try {
++          var lc = document.getElementById('cmpLineup');
++          if (pos === 'LINEUP') {
++            if (lc) { lc.style.display='block'; }
++            if (typeof computeLineupFromPlayers==='function') {
++              var lpp = computeLineupFromPlayers(all, curTarget||'mid');
++              if (lc) renderLineup('cmpLineup', 'Optimal Lineup', lpp);
++            }
++          } else {
++            if (lc) { lc.style.display='none'; lc.innerHTML=''; }
++          }
++        } catch(e){}
+       }
+@@
+-      function loadLastPos(){ try{ return localStorage.getItem('ofdash.cmp.lastPos.'+week) || 'WR'; }catch(e){ return 'WR'; } }
++      function loadLastPos(){ try{ return localStorage.getItem('ofdash.cmp.lastPos.'+week) || 'LINEUP'; }catch(e){ return 'LINEUP'; } }
+       function activateTab(pos){ var pills = body.querySelectorAll('.details-section .pill[data-pos]'); pills.forEach(function(b){ b.classList.toggle('pill-active', b.getAttribute('data-pos')===pos); }); saveLastPos(pos); renderForPos(pos); }
+       body.querySelectorAll('.details-section .pill[data-pos]').forEach(function(btn){ btn.addEventListener('click', function(){ activateTab(btn.getAttribute('data-pos')); }); });
+-      activateTab(loadLastPos());
++      // Target selector
++      body.querySelectorAll('.target-pill').forEach(function(btn){ btn.addEventListener('click', function(){ curTarget = btn.getAttribute('data-target')||'mid'; _renderTargetPills(); var active = body.querySelector('.details-section .pill.pill-active[data-pos]'); var pos = active ? active.getAttribute('data-pos') : 'LINEUP'; renderForPos(pos||'LINEUP'); }); });
++      _renderTargetPills();
++      activateTab(loadLastPos());
