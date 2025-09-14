@@ -211,7 +211,7 @@ function renderLineup(containerId, title, payload) {
   const rowHtml = rows.map(r => `
     <tr>
       <td>${r.slot}</td>
-      <td>${r.name}</td>
+      <td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td>
       <td>${r.pos}</td>
       <td>${Number(r.floor).toFixed(2)}</td>
       <td>${Number(r.mid).toFixed(2)}</td>
@@ -278,7 +278,7 @@ function renderPlayers(containerId, players) {
   rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
   const table = [
     '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>',
-    ...rows.map(r => `<tr><td>${r.name}</td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`),
+    ...rows.map(r => `<tr><td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`),
     '</tbody></table>'
   ].join('\n');
   c.innerHTML = table;

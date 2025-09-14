@@ -92,6 +92,10 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .fp-visual .hover-dot { fill: #fbbf24; stroke: #0f172a; stroke-width: 1; }
 .fp-visual .legend { display: flex; gap: 10px; color: #9ca3af; font-size: 12px; margin-top: 6px; flex-wrap: wrap; }
 .fp-visual .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.fp-visual .range-readout { margin-top: 6px; font-size: 12px; color: #cbd5e1; }
+.fp-visual .range-readout .val { font-weight: 700; color: #22c55e; }
+.fp-visual .range-readout .clear { margin-left: 8px; color: #94a3b8; cursor: pointer; text-decoration: underline; }
+.fp-visual .range-readout .clear:hover { color: #e5e7eb; }
 .fp-visual .legend .floor .dot { background: #f59e0b; }
 .fp-visual .legend .mid .dot { background: #22c55e; }
 .fp-visual .legend .ceiling .dot { background: #60a5fa; }
