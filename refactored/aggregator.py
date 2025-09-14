@@ -89,13 +89,36 @@ def aggregate_players_from_event(
                         if alias is None:
                             continue
                     side = _classify_side(outcome.get("name")) or "over"
-                    alias_outcomes.setdefault(alias, {"over": None, "under": None})
-                    alias_outcomes[alias][side] = {
-                        "odds": outcome.get("price"),
-                        "point": outcome.get("point", 0),
-                    }
+                    # Preserve alternates as full lists by side
+                    if market_key and str(market_key).endswith("_alternate"):
+                        alias_outcomes.setdefault(alias, {"alts_over": [], "alts_under": []})
+                        rec = {
+                            "odds": outcome.get("price"),
+                            "point": outcome.get("point", 0),
+                        }
+                        if side == "over":
+                            alias_outcomes[alias]["alts_over"].append(rec)
+                        else:
+                            alias_outcomes[alias]["alts_under"].append(rec)
+                    else:
+                        alias_outcomes.setdefault(alias, {"over": None, "under": None})
+                        alias_outcomes[alias][side] = {
+                            "odds": outcome.get("price"),
+                            "point": outcome.get("point", 0),
+                        }
 
                 for alias, sides in alias_outcomes.items():
+                    # If alternate market, attach 'alts' lists and skip summary accumulation
+                    if market_key and str(market_key).endswith("_alternate"):
+                        out_per_player.setdefault(alias, {})
+                        out_per_player[alias].setdefault(bookmaker_key, {})
+                        out_per_player[alias][bookmaker_key][market_key] = {
+                            "alts": {
+                                "over": list(sides.get("alts_over") or []),
+                                "under": list(sides.get("alts_under") or []),
+                            }
+                        }
+                        continue
                     over = sides.get("over")
                     under = sides.get("under")
 

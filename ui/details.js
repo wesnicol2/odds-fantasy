@@ -120,7 +120,7 @@ function _renderFpVisual(floor, mid, ceil) {
 function openCompareCurves(week) {
   try {
     showDetails('Compare Curves', '<div class="status"><span class="spinner"></span> Loading curves...</div>');
-    var projUrl = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week: week, mode: getDataMode() });
+  var projUrl = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const')) });
     fetchJSON(projUrl).then(function(res){
       if (!res.ok) { hideDetails(); alert('Failed to load projections'); return; }
       var all = (res.data && res.data.players) || [];
@@ -138,11 +138,31 @@ function openCompareCurves(week) {
         + ' <span class="muted" style="margin-left:10px;">Target:</span> '
         + ['floor','mid','ceiling'].map(function(t){ return '<button class="pill target-pill" data-target="'+t+'">'+t.toUpperCase()+'</button>'; }).join(' ')
         + '</div>';
-      var controls = '<div class="cmp-controls"><input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" /><label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label></div>';
+      var controls = '<div class="cmp-controls">'
+        + '<input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" />'
+        + '<label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label>'
+        + '<span class="muted" style="margin-left:10px;">Model:</span> '
+        + '<select id="cmpModelGlobal"><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select>'
+        + '<button id="cmpApplyGlobal" class="secondary" style="margin-left:6px;">Apply</button>'
+        + '</div>';
       var grid = controls + '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
       var body = document.getElementById('detailsBody');
       body.innerHTML = tabsHtml + grid + '<div class="details-section" id="cmpLineup" style="display:none"></div>';
       function _renderTargetPills(){ try{ var pills=body.querySelectorAll('.target-pill'); pills.forEach(function(btn){ var t=btn.getAttribute('data-target'); btn.classList.toggle('pill-active', String(t)===String(curTarget)); }); }catch(e){} }
+      try { var mg = document.getElementById('cmpModelGlobal'); if (mg) mg.value = (typeof getModel==='function'? getModel() : 'const'); } catch (e) {}
+      try {
+        var apply = document.getElementById('cmpApplyGlobal');
+        if (apply) apply.addEventListener('click', function(){
+          try {
+            var mg = document.getElementById('cmpModelGlobal'); var chosen = (mg && mg.value) || 'const';
+            var ms = document.getElementById('modelSelect'); var mf = document.getElementById('modelSelectFloating');
+            if (ms) ms.value = chosen; if (mf) mf.value = chosen;
+            try { if (typeof saveSettings==='function') saveSettings(); } catch(e){}
+            openCompareCurves(week);
+            try { if (typeof refreshAll==='function') refreshAll(); } catch(e){}
+          } catch (e) {}
+        });
+      } catch (e) {}
       function renderForPos(pos){
         var pool = all.filter(function(p){ return pos==='FLEX' ? (['WR','RB','TE'].indexOf(p.pos)>=0) : ((pos==='ALL'||pos==='LINEUP') ? true : (p.pos===pos)); }).slice();
         var slotByName = {};
@@ -427,13 +447,15 @@ async function openPlayerDetails(name, week, opts) {
     week: week,
     name: name,
     region: 'us,us2',
-    mode: getDataMode()
+    mode: getDataMode(),
+    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
   });
   var projUrl = apiUrl('/projections', {
     username: val('username') || 'wesnicol',
     season: val('season') || '2025',
     week: week,
-    mode: getDataMode()
+    mode: getDataMode(),
+    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
   });
   try {
     var players = [];
@@ -478,6 +500,17 @@ async function openPlayerDetails(name, week, opts) {
         +     '<div class="card mid"><div class="label">Mid</div><div class="value">' + _fmt(mid) + '</div></div>'
         +     '<div class="card ceiling"><div class="label">Ceiling</div><div class="value">' + _fmt(ceiling) + '</div></div>'
       +   '</div>'
+      +   '<div class="btn-row" style="margin-top:8px">'
+      +     '<label class="muted">Model: '
+      +       '<select id="pdModelSel">'
+      +         '<option value="const">Constantini</option>'
+      +         '<option value="puelz">Puelz</option>'
+      +         '<option value="angelini">Angelini</option>'
+      +         '<option value="baseline">Baseline</option>'
+      +       '</select>'
+      +     '</label>'
+      +     '<button id="pdApplyModelBtn" class="secondary">Apply Model</button>'
+      +   '</div>'
       + '</div>'
     + '<div class="details-section">' + _renderFpVisual(floor, mid, ceiling) + '</div>'
     + '<div class="details-section">'
@@ -519,9 +552,10 @@ async function openPlayerDetails(name, week, opts) {
         present.map(function(k){return chipFor(k, 'present');}).join(' '),
         (fallback.length? (' ' + fallback.map(function(k){return chipFor(k, 'fallback');}).join(' ')) : ''),
         (missing.length? (' ' + missing.map(function(k){return chipFor(k, 'missing');}).join(' ')) : ''),
-      '</div>',
-    '</div>'
-  ].join('');
+        '</div>',
+        '<div class="fp-tooltip" style="display:none; left:0; top:0;">x: 0, density: 0</div>',
+      '</div>'
+    ].join('');
 
   var primaryHtml = primary.map(function(k){ return renderMarketBlock2(k, markets[k]); }).join('');
   if (!primaryHtml) primaryHtml = '<div class="muted">No primary markets.</div>';
@@ -550,6 +584,26 @@ async function openPlayerDetails(name, week, opts) {
     if (btn) {
       btn.addEventListener('click', function(e){ e.stopPropagation(); _openDebugMathOverlay(data); });
     }
+  } catch (e) { /* ignore */ }
+  // Hook up model apply button: sets global model and refreshes this popup
+  try {
+    var ms = document.getElementById('modelSelect') || null;
+    var mf = document.getElementById('modelSelectFloating') || null;
+    var pdSel = document.getElementById('pdModelSel');
+    var current = (mf && mf.value) || (ms && ms.value) || 'const';
+    if (pdSel) pdSel.value = current;
+    var apply = document.getElementById('pdApplyModelBtn');
+    if (apply) apply.addEventListener('click', async function(){
+      try {
+        var chosen = (pdSel && pdSel.value) || 'const';
+        if (ms) ms.value = chosen; if (mf) mf.value = chosen;
+        try { if (typeof saveSettings === 'function') saveSettings(); } catch (e) {}
+        // Refresh this popup under the new model
+        await openPlayerDetails(p.name || name, week, { noHistory: true });
+        // Optionally refresh header data in the background
+        try { if (typeof refreshAll === 'function') refreshAll(); } catch (e) {}
+      } catch (e) {}
+    });
   } catch (e) { /* ignore */ }
   try {
     var hdr = document.querySelector('.details-header');
@@ -608,6 +662,7 @@ function _renderDebugStatList(data) {
   try {
     body.querySelectorAll('.dbg-stat').forEach(function(el){ el.addEventListener('click', function(){ var k=el.getAttribute('data-mkey'); _renderDebugStatDetail(data, k); }); });
   } catch (e) {}
+  try { _attachFpVisualHandlers(document.getElementById('detailsBody')); } catch (e) {}
 }
 
 function _renderDebugStatDetail(data, mkey) {
@@ -616,13 +671,31 @@ function _renderDebugStatDetail(data, mkey) {
   var markets = data && data.markets || {}; var entry = markets[mkey] || {};
   var nice = _prettyMarketLabel(mkey);
   var summ = entry.summary || {};
+  // Compare controls (Model A = current global, Model B selectable)
+  var currentModel = (document.getElementById('modelSelectFloating') && document.getElementById('modelSelectFloating').value) || (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const';
+  var cmpControls = '<div class="btn-row"><label class="muted">Compare vs: <select id="cmpModelSel"><option value="">(None)</option><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select></label><button id="cmpApplyBtn" class="secondary">Use This Model</button></div>';
+  var modelCheckboxes = '<div class="btn-row">'
+    + '<span class="muted">Show models:</span> '
+    + '<label class="muted"><input type="checkbox" class="mdlChk" value="const" checked> Constantini</label>'
+    + '<label class="muted"><input type="checkbox" class="mdlChk" value="puelz"> Puelz</label>'
+    + '<label class="muted"><input type="checkbox" class="mdlChk" value="angelini"> Angelini</label>'
+    + '<label class="muted"><input type="checkbox" class="mdlChk" value="baseline"> Baseline</label>'
+    + '</div>';
   // Collect base + alternate book points
   function _gatherBookPoints(key){
     var e = markets[key] || {}; var out=[];
+    // Base books
     (e.books||[]).forEach(function(b){
       var pt = (b.over && b.over.point!=null ? b.over.point : (b.under && b.under.point!=null ? b.under.point : null));
       if (pt!=null && isFinite(Number(pt))) out.push({ book: b.book||'', point: Number(pt) });
     });
+    // Alternates if present
+    try {
+      if (e.alts && (Array.isArray(e.alts.over) || Array.isArray(e.alts.under))) {
+        (e.alts.over||[]).forEach(function(it){ if (it && it.point!=null) out.push({ book: it.book||'', point: Number(it.point) }); });
+        (e.alts.under||[]).forEach(function(it){ if (it && it.point!=null) out.push({ book: it.book||'', point: Number(it.point) }); });
+      }
+    } catch (err) {}
     return out;
   }
   var baseKey = mkey.replace('_alternate','');
@@ -630,8 +703,8 @@ function _renderDebugStatDetail(data, mkey) {
   // Deduplicate identical (book, point) combos
   var seen = new Set();
   points = points.filter(function(p){ var k = (p.book||'')+'@'+p.point; if (seen.has(k)) return false; seen.add(k); return true; });
-  // Stat-only graph with markers for thresholds from books and summary
-  var statGraph = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points);
+  // Stat graph container (we will re-render if user enables comparison)
+  var statGraph = '<div id="statGraphHost">' + _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points) + '</div>';
   // Aggregated view
   var aggRows = [
     '<tr><th>Threshold (T)</th><td>'+_fmtNum(m.threshold!=null?m.threshold:summ.avg_threshold,2)+'</td></tr>',
@@ -664,7 +737,13 @@ function _renderDebugStatDetail(data, mkey) {
   var booksTbl = '<table><thead><tr><th>Book</th><th>Over</th><th>Over Pt</th><th>Under</th><th>Under Pt</th><th>Imp(Over)</th><th>Imp(Under)</th><th>p_over(norm)</th></tr></thead><tbody>'+ (bookRows||'') +'</tbody></table>';
   var html = [
     '<div class="details-section">',
+      '<div class="section-title">Model</div>',
+      '<div>Active: <strong>'+_escapeHtml(String(currentModel||''))+'</strong></div>',
+      cmpControls,
+    '</div>',
+    '<div class="details-section">',
       '<div class="section-title">', _escapeHtml(nice), '</div>',
+      modelCheckboxes,
       statGraph,
       '<div class="muted">Aggregated from bookmaker lines (click Back to choose another stat)</div>',
       agg,
@@ -675,6 +754,177 @@ function _renderDebugStatDetail(data, mkey) {
     '</div>'
   ].join('');
   body.innerHTML = html;
+  try { _attachStatVisualHandlers(document.getElementById('debugBody')); } catch (e) {}
+  try {
+    var sel = document.getElementById('cmpModelSel');
+    if (sel) sel.addEventListener('change', async function(){
+      var modelB = (sel && sel.value) || '';
+      var host = document.getElementById('statGraphHost');
+      if (!host) return;
+      if (!modelB) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); try { _attachStatVisualHandlers(host); } catch (e) {} return; }
+      try {
+        var st = (history && history.state) || {};
+        var oddsUrlB = apiUrl('/player/odds', {
+          username: val('username') || 'wesnicol',
+          season: val('season') || '2025',
+          week: (st && st.week) || 'this',
+          name: (data && data.player && data.player.name) || '',
+          region: 'us,us2',
+          mode: getDataMode(),
+          model: modelB
+        });
+        var respB = await fetchJSON(oddsUrlB);
+        if (!respB.ok) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); return; }
+        var perB = ((respB.data||{}).debug_math||{}).per_market || {}; var mB = perB[mkey] || {};
+        host.innerHTML = _renderStatGraphCompare(nice, baseKey, m, mB, (summ && summ.avg_threshold), points, modelB);
+        try { _attachStatVisualHandlers(host); } catch (e) {}
+      } catch (e) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); }
+    });
+    // Apply comparison model globally and refresh
+    var applyBtn = document.getElementById('cmpApplyBtn');
+    if (applyBtn) applyBtn.addEventListener('click', async function(){
+      try {
+        var modelB = (sel && sel.value) || '';
+        if (!modelB) return;
+        var ms = document.getElementById('modelSelect');
+        var mf = document.getElementById('modelSelectFloating');
+        if (ms) ms.value = modelB; if (mf) mf.value = modelB;
+        try { if (typeof saveSettings === 'function') saveSettings(); } catch (e) {}
+        // Close debug overlay and refresh Player Details under new model
+        try { var ov = document.getElementById('debugOverlay'); if (ov) ov.classList.add('hidden'); } catch (e) {}
+        await openPlayerDetails((data && data.player && data.player.name) || '', (history && history.state && history.state.week) || 'this', { noHistory: true });
+        try { if (typeof refreshAll === 'function') refreshAll(); } catch (e) {}
+      } catch (e) {}
+    });
+    // Multi-model checkboxes overlay
+    var mdlChecks = Array.prototype.slice.call(document.querySelectorAll('.mdlChk'));
+    var mdlCache = {};
+    var activeLabelColor = { const: '#60a5fa', puelz: '#f59e0b', angelini: '#22c55e', baseline: '#ef4444' };
+    function _fetchModelStat(modelKey){
+      return new Promise(async function(resolve){
+        if (mdlCache[modelKey]) { resolve(mdlCache[modelKey]); return; }
+        try {
+          var st = (history && history.state) || {};
+          var oddsUrl = apiUrl('/player/odds', {
+            username: val('username') || 'wesnicol',
+            season: val('season') || '2025',
+            week: (st && st.week) || 'this',
+            name: (data && data.player && data.player.name) || '',
+            region: 'us,us2',
+            mode: getDataMode(),
+            model: modelKey
+          });
+          var r = await fetchJSON(oddsUrl);
+          var pm = ((r.data||{}).debug_math||{}).per_market || {};
+          var mX = pm[mkey] || {};
+          mdlCache[modelKey] = mX;
+          resolve(mX);
+        } catch (e) { resolve({}); }
+      });
+    }
+    function _updateMulti(){
+      var host = document.getElementById('statGraphHost'); if (!host) return;
+      var selected = mdlChecks.filter(function(c){ return c && c.checked; }).map(function(c){ return c.value; });
+      if (!selected.length) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); return; }
+      Promise.all(selected.map(_fetchModelStat)).then(function(all){
+        var map = {}; for (var i=0;i<selected.length;i++){ map[selected[i]] = all[i] || {}; }
+        host.innerHTML = _renderStatGraphMulti(nice, baseKey, map, (summ && summ.avg_threshold), points, activeLabelColor);
+        try { _attachStatVisualHandlers(host); } catch (e) {}
+      });
+    }
+    mdlChecks.forEach(function(ch){ ch.addEventListener('change', _updateMulti); });
+  } catch (e) {}
+}
+
+// Render a two-model overlay of the stat graph (Model A: active; Model B: selected)
+function _renderStatGraphCompare(title, baseKey, mA, mB, summaryThreshold, bookPoints, labelB) {
+  try {
+    function buildOne(m) {
+      var mean = Number(m.mean||0);
+      var q15 = Number(m.q15||0), q85 = Number(m.q85||0);
+      var sigma = Number(m.sigma||0.000001);
+      return { mean, q15, q85, sigma };
+    }
+    var A = buildOne(mA), B = buildOne(mB);
+    // Compute axis range from both
+    var minX = 0;
+    var maxX = Math.max(A.mean, A.q85||0, B.mean, B.q85||0, summaryThreshold||0, (bookPoints||[]).reduce(function(mx,p){ return Math.max(mx, Number(p.point||0)); }, 0));
+    if (!(maxX > 0)) maxX = 1;
+    maxX = maxX * 1.2;
+    var W = 600, H = 140, PAD = 14;
+    function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
+    function yScale(y){ return H - PAD - y * (H - 2*PAD); }
+    function pathFor(m){ var N=80, pts=[], maxY=0; function pdf(x){ return Math.exp(-0.5*Math.pow((x-m.mean)/(m.sigma||1e-6),2)); } for (var i=0;i<=N;i++){ var x=minX+(maxX-minX)*i/N; var y=pdf(x); if (y>maxY) maxY=y; pts.push([x,y]); } var d=pts.map(function(p,i){ var X=xScale(p[0]).toFixed(1),Y=yScale((p[1]/(maxY||1))*1).toFixed(1); return (i?'L':'M')+X+','+Y; }).join(''); return d + ' L ' + xScale(maxX).toFixed(1) + ',' + yScale(0) + ' L ' + xScale(minX).toFixed(1) + ',' + yScale(0) + ' Z'; }
+    function vline(x, cls){ return '<line class="marker '+cls+'" x1="'+x+'" y1="'+yScale(0)+'" x2="'+x+'" y2="'+yScale(1)+'" />'; }
+    var grid = (function(){ var out=''; for (var gi=1; gi<=5; gi++){ var xv=minX+(maxX-minX)*gi/6; out += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; } return out; })();
+    var mk = [];
+    if (summaryThreshold!=null) mk.push(vline(xScale(Number(summaryThreshold)), 'summary'));
+    var bookMarks = (bookPoints||[]).map(function(p){ return vline(xScale(p.point), 'book'); });
+    var svg = [
+      '<div class="stat-visual" data-min="', minX, '" data-max="', maxX, '" data-pad="', PAD, '" data-w="', W, '" data-h="', H, '" data-mean="', A.mean, '" data-sigma="', A.sigma, '">',
+        '<div class="vis-title">', _escapeHtml(title), ' (stat, compare)</div>',
+        '<div class="svg-wrap"><svg viewBox="0 0 ', W, ' ', H, '" preserveAspectRatio="none">',
+          grid,
+          '<line class="axis" x1="', xScale(minX), '" y1="', yScale(0), '" x2="', xScale(maxX), '" y2="', yScale(0), '" />',
+          '<path class="curve" d="', pathFor(A), '" />',
+          '<path class="curve2" d="', pathFor(B), '" />',
+          vline(xScale(A.q15), 'q15'), vline(xScale(A.mean), 'mean'), vline(xScale(A.q85), 'q85'),
+          vline(xScale(B.q15), 'q15 m2'), vline(xScale(B.mean), 'mean m2'), vline(xScale(B.q85), 'q85 m2'),
+          bookMarks.join(''),
+          '<line class="hover-x" x1="0" y1="', yScale(1), '" x2="0" y2="', yScale(0), '" style="display:none" />',
+          '<circle class="hover-dot" cx="0" cy="0" r="3" style="display:none" />',
+        '</svg></div>',
+        '<div class="legend">',
+          '<span><span class="dot q15"></span>A: Q15/Mean/Q85</span>',
+          '<span><span class="dot" style="background:#f472b6"></span>B: ', _escapeHtml(String(labelB||'model B')), '</span>',
+          (summaryThreshold!=null? '<span><span class="dot summary"></span>Summary T</span>' : ''),
+          (bookPoints && bookPoints.length? '<span><span class="dot book"></span>Book lines</span>' : ''),
+        '</div>',
+        '<div class="fp-tooltip" style="display:none; left:0; top:0;">x: 0, density: 0</div>',
+      '</div>'
+    ].join('');
+    return svg;
+  } catch (e) { return _renderStatGraph(title, baseKey, mA, summaryThreshold, bookPoints); }
+}
+
+// Multi-model overlay renderer (modelsMap: key -> per-market m)
+function _renderStatGraphMulti(title, baseKey, modelsMap, summaryThreshold, bookPoints, colorMap) {
+  try {
+    var keys = Object.keys(modelsMap || {});
+    // Compute bounds across models
+    var minX = 0;
+    var maxX = 1;
+    keys.forEach(function(k){ var m=modelsMap[k]||{}; var mx=Math.max(Number(m.mean||0), Number(m.q85||0)); if (mx > maxX) maxX = mx; });
+    if (summaryThreshold!=null && Number(summaryThreshold) > maxX) maxX = Number(summaryThreshold);
+    if (bookPoints && bookPoints.length){ bookPoints.forEach(function(p){ var v=Number(p.point||0); if (v>maxX) maxX=v; }); }
+    if (!(maxX > 0)) maxX = 1;
+    maxX = maxX * 1.2;
+    var W=600,H=140,PAD=14;
+    function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
+    function yScale(y){ return H - PAD - y * (H - 2*PAD); }
+    function pathFor(m){ var N=100, pts=[], maxY=0; var mean=Number(m.mean||0); var sigma=Number(m.sigma||0.000001); function pdf(x){ return Math.exp(-0.5*Math.pow((x-mean)/(sigma||1e-6),2)); } for (var i=0;i<=N;i++){ var x=minX+(maxX-minX)*i/N; var y=pdf(x); if (y>maxY) maxY=y; pts.push([x,y]); } var d=pts.map(function(p,i){ var X=xScale(p[0]).toFixed(1),Y=yScale((p[1]/(maxY||1))*1).toFixed(1); return (i?'L':'M')+X+','+Y; }).join(''); return d + ' L ' + xScale(maxX).toFixed(1) + ',' + yScale(0) + ' L ' + xScale(minX).toFixed(1) + ',' + yScale(0) + ' Z'; }
+    function vline(x, cls){ return '<line class="marker '+cls+'" x1="'+x+'" y1="'+yScale(0)+'" x2="'+x+'" y2="'+yScale(1)+'" />'; }
+    var grid = (function(){ var out=''; for (var gi=1; gi<=5; gi++){ var xv=minX+(maxX-minX)*gi/6; out += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; } return out; })();
+    var mk = [];
+    if (summaryThreshold!=null) mk.push(vline(xScale(Number(summaryThreshold)), 'summary'));
+    var bookMarks = (bookPoints||[]).map(function(p){ return vline(xScale(p.point), 'book'); });
+    var legendParts = [];
+    var curves = keys.map(function(k){ var m=modelsMap[k]||{}; var color=(colorMap&&colorMap[k])||'#888'; legendParts.push('<span><span class="dot" style="background:'+color+'"></span>'+k+'</span>'); return '<path class="curve-line" stroke="'+color+'" fill="rgba(0,0,0,0.0)" d="'+pathFor(m)+'" />'; });
+    var svg = [
+      '<div class="stat-visual">',
+        '<div class="vis-title">', _escapeHtml(title), ' (stat, multi-model)</div>',
+        '<div class="svg-wrap"><svg viewBox="0 0 ', W, ' ', H, '" preserveAspectRatio="none">',
+          grid,
+          '<line class="axis" x1="', xScale(minX), '" y1="', yScale(0), '" x2="', xScale(maxX), '" y2="', yScale(0), '" />',
+          curves.join(''),
+          mk.join(''),
+          bookMarks.join(''),
+        '</svg></div>',
+        '<div class="legend">', legendParts.join(' '), (summaryThreshold!=null? ' <span><span class="dot summary"></span>Summary T</span>':''), (bookPoints && bookPoints.length? ' <span><span class="dot book"></span>Book lines</span>':''), '</div>',
+      '</div>'
+    ].join('');
+    return svg;
+  } catch (e) { return ''; }
 }
 
 // Render a stat-specific PDF with markers for thresholds and book points
@@ -715,7 +965,7 @@ function _renderStatGraph(title, baseKey, m, summaryThreshold, bookPoints) {
       var bookMarks = (bookPoints||[]).map(function(p){ return vline(xScale(p.point), 'book'); });
       var grid = (function(){ var out=''; for (var gi=1; gi<=5; gi++){ var xv=minX+(maxX-minX)*gi/6; out += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; } return out; })();
       var svg = [
-        '<div class="stat-visual">',
+        '<div class="stat-visual" data-min="', minX.toFixed(6),'" data-max="', maxX.toFixed(6),'" data-pad="', PAD, '" data-w="', W, '" data-h="', H, '" data-mean="', mean, '" data-sigma="', sigma, '">',
           '<div class="vis-title">', _escapeHtml(title), ' (stat only)</div>',
           '<div class="svg-wrap"><svg viewBox="0 0 ', W, ' ', H, '" preserveAspectRatio="none">',
             grid,
@@ -723,6 +973,8 @@ function _renderStatGraph(title, baseKey, m, summaryThreshold, bookPoints) {
             '<path class="curve" d="', area, '" />',
             mk.join(''),
             bookMarks.join(''),
+            '<line class="hover-x" x1="0" y1="', yScale(1), '" x2="0" y2="', yScale(0), '" style="display:none" />',
+            '<circle class="hover-dot" cx="0" cy="0" r="3" style="display:none" />',
           '</svg></div>',
           '<div class="legend">',
             '<span><span class="dot q15"></span>Q15</span>',
@@ -731,6 +983,7 @@ function _renderStatGraph(title, baseKey, m, summaryThreshold, bookPoints) {
             (summaryThreshold!=null? '<span><span class="dot summary"></span>Summary T</span>' : ''),
             (bookPoints && bookPoints.length? '<span><span class="dot book"></span>Book lines</span>' : ''),
           '</div>',
+          '<div class="fp-tooltip" style="display:none; left:0; top:0;">x: 0, density: 0</div>',
         '</div>'
       ].join('');
       return svg;
@@ -1165,3 +1418,41 @@ try {
 
 
 
+
+// Hover handlers for stat graphs (single/compare/multi)
+function _attachStatVisualHandlers(root) {
+  try {
+    var container = root || document;
+    (container.querySelectorAll ? container.querySelectorAll('.stat-visual') : []).forEach(function(box){
+      var svg = box.querySelector('svg'); if(!svg) return;
+      var hoverX = svg.querySelector('.hover-x');
+      var hoverDot = svg.querySelector('.hover-dot');
+      var tip = box.querySelector('.fp-tooltip');
+      var minX = parseFloat(box.getAttribute('data-min')||'0');
+      var maxX = parseFloat(box.getAttribute('data-max')||'1');
+      var PAD = parseFloat(box.getAttribute('data-pad')||'14');
+      var W = parseFloat(box.getAttribute('data-w')||'600');
+      var H = parseFloat(box.getAttribute('data-h')||'140');
+      var mean = parseFloat(box.getAttribute('data-mean')||'0');
+      var sigma = parseFloat(box.getAttribute('data-sigma')||'0.000001');
+      function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
+      function yScale(y){ return H - PAD - y * (H - 2*PAD); }
+      function pdf(x){ var s = (sigma||1e-6); return Math.exp(-0.5 * Math.pow((x - mean) / s, 2)); }
+      var maxY = pdf(mean) || 1;
+      function onMove(evt){
+        var rect = svg.getBoundingClientRect();
+        var localX = Math.min(W-PAD, Math.max(PAD, (evt.clientX - rect.left) * (W/rect.width)));
+        var xVal = minX + (localX - PAD)*(maxX-minX)/(W-2*PAD);
+        var yNorm = (pdf(xVal)/(maxY||1))*0.9; var yPx = yScale(yNorm);
+        if (hoverX){ hoverX.setAttribute('x1', localX); hoverX.setAttribute('x2', localX); hoverX.style.display='block'; }
+        if (hoverDot){ hoverDot.setAttribute('cx', localX); hoverDot.setAttribute('cy', yPx); hoverDot.style.display='block'; }
+        if (tip){ tip.style.display='block'; var bx = box.getBoundingClientRect(); tip.style.left = (evt.clientX - bx.left + 8) + 'px'; tip.style.top = (evt.clientY - bx.top - 8) + 'px'; tip.textContent = 'x: ' + xVal.toFixed(2) + ', density: ' + yNorm.toFixed(3); }
+      }
+      function onEnter(){ if (hoverX) hoverX.style.display='block'; if (hoverDot) hoverDot.style.display='block'; if (tip) tip.style.display='block'; }
+      function onLeave(){ if (hoverX) hoverX.style.display='none'; if (hoverDot) hoverDot.style.display='none'; if (tip) tip.style.display='none'; }
+      svg.addEventListener('mousemove', onMove);
+      svg.addEventListener('mouseenter', onEnter);
+      svg.addEventListener('mouseleave', onLeave);
+    });
+  } catch (e) { /* ignore */ }
+}

@@ -58,12 +58,12 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, reg
     return out
 
 
-def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto") -> Dict:
+def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto", model: str = "const") -> Dict:
     print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _proj_cache = getattr(compute_projections, "_cache", {})
-    key = (username, season, week, region)
+    key = (username, season, week, region, model)
     now = time.time()
     if not fresh and key in _proj_cache:
         ts, payload = _proj_cache[key]
@@ -176,7 +176,11 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     present_aliases = set(per_player_odds.keys())
     for alias, by_book in per_player_odds.items():
         pinfo = info_by_alias.get(alias, {})
-        floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+        from .range_model import compute_fantasy_range_model, compute_fantasy_range
+        if (model or "baseline").lower() == "baseline":
+            floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+        else:
+            floor, mid, ceil, _ = compute_fantasy_range_model(by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model)
 
         # Coverage diagnostics
         available: set[str] = set()
@@ -316,7 +320,10 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
 
 
 def build_lineup(players: List[dict], target: str = "mid") -> Dict:
-    """Build lineup: QB1, RB2, WR2, TE1, FLEX1 (from WR/RB/TE)."""
+    """Build lineup: QB1, WR2, RB2, FLEX1 (from WR/RB/TE), then BENCH.
+
+    Always include players with zero projection in BENCH.
+    """
     print(f"[services] build_lineup target={target}")
     buckets: Dict[str, List[dict]] = {"QB": [], "RB": [], "WR": [], "TE": []}
     for p in players:
@@ -337,10 +344,10 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
                     break
         return out
 
-    lineup = {
+    starters = {
         "QB": take("QB", 1),
-        "RB": take("RB", 2),
         "WR": take("WR", 2),
+        "RB": take("RB", 2),
         "TE": take("TE", 1),
     }
     # FLEX best remaining WR/RB/TE
@@ -350,7 +357,9 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
             if item["name"] not in used:
                 flex_pool.append(item)
     flex_pool.sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
-    lineup["FLEX"] = flex_pool[:1]
+    flex = flex_pool[:1]
+    for f in flex:
+        used.add(f["name"])  # mark used for bench
 
     rows = []
     total = 0.0
@@ -378,11 +387,42 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
             "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
         })
 
-    for p in lineup["QB"]: add_slot("QB", p)
-    for p in lineup["RB"]: add_slot("RB", p)
-    for p in lineup["WR"]: add_slot("WR", p)
-    for p in lineup["TE"]: add_slot("TE", p)
-    for p in lineup["FLEX"]: add_slot("FLEX", p)
+    # Order: QB, WR, WR, RB, RB, TE, FLEX
+    for p in starters["QB"]: add_slot("QB", p)
+    if len(starters["WR"]) > 0: add_slot("WR", starters["WR"][0])
+    if len(starters["WR"]) > 1: add_slot("WR", starters["WR"][1])
+    if len(starters["RB"]) > 0: add_slot("RB", starters["RB"][0])
+    if len(starters["RB"]) > 1: add_slot("RB", starters["RB"][1])
+    for p in starters["TE"]: add_slot("TE", p)
+    for p in flex: add_slot("FLEX", p)
+
+    # Bench: remaining players by target (include zeros)
+    bench: List[dict] = []
+    for pos in ("QB", "WR", "RB", "TE"):
+        for item in buckets.get(pos, []):
+            if item["name"] not in used:
+                bench.append(item)
+    bench.sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
+
+    def _num(v):
+        try:
+            if v is None:
+                return 0.0
+            return float(v)
+        except Exception:
+            return 0.0
+
+    for b in bench:
+        rows.append({
+            "slot": "BENCH",
+            "name": b["name"],
+            "pos": b["pos"],
+            "team": b.get("team"),
+            "points": round(_num(b.get(target, 0.0)), 2),
+            "floor": round(_num(b.get("floor", 0.0)), 2),
+            "mid": round(_num(b.get("mid", 0.0)), 2),
+            "ceiling": round(_num(b.get("ceiling", 0.0)), 2),
+        })
 
     return {"target": target, "lineup": rows, "total_points": round(total, 2)}
 
@@ -548,6 +588,7 @@ def build_dashboard(
     weeks: str = "both",  # 'this' | 'next' | 'both'
     def_scope: str = "owned",  # 'owned' | 'available' | 'both'
     include_players: bool = True,
+    model: str = "const",
 ) -> Dict:
     """Build a single payload for UI: lineups and defenses with optional scoping.
 
@@ -568,9 +609,9 @@ def build_dashboard(
     proj_this = None
     proj_next = None
     if weeks in ("this", "both"):
-        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
     if weeks in ("next", "both"):
-        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
 
     # Build lineups from one projections call per week
     lineups = {"this": None, "next": None}
@@ -625,7 +666,7 @@ def _norm_name(s: str) -> str:
         return s or ""
 
 
-def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto") -> Dict:
+def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "baseline") -> Dict:
     """Return per-book odds and market summaries used for a single player.
 
     Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).
@@ -687,7 +728,11 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     # Build per-market details
     # Also compute per-market stat quantiles and fantasy point contributions
     try:
-        _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range(by_book, market_summaries, scoring_rules)
+        from .range_model import compute_fantasy_range_model, compute_fantasy_range
+        if (model or "baseline").lower() == "baseline":
+            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range(by_book, market_summaries, scoring_rules)
+        else:
+            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range_model(by_book, market_summaries, scoring_rules, model=model)
     except Exception:
         per_market_ranges = {}
 
@@ -710,8 +755,19 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     for mkey in set(list(by_book.keys()) + list(market_summaries.keys()) + list(mean_stats.keys()) + list(per_market_ranges.keys())):
         # Per-book rows
         books = []
+        alts_out = {"over": [], "under": []}
         for book_key, mkts in by_book.items():
             sides = mkts.get(mkey, {"over": None, "under": None})
+            # Collect alt lists if present
+            alts = (sides or {}).get("alts")
+            if alts and (isinstance(alts, dict)):
+                try:
+                    for it in (alts.get("over") or []):
+                        alts_out["over"].append({"book": book_key, "point": it.get("point"), "odds": it.get("odds")})
+                    for it in (alts.get("under") or []):
+                        alts_out["under"].append({"book": book_key, "point": it.get("point"), "odds": it.get("odds")})
+                except Exception:
+                    pass
             books.append({
                 "book": book_key,
                 "over": sides.get("over"),
@@ -727,7 +783,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
                 "samples": getattr(summ, "samples", 0),
             }
         f_floor, f_mid, f_ceil = _fp_triplet_for_market(mkey)
-        markets_out[mkey] = {
+        entry = {
             "summary": m_summ,
             "mean_stat": mean_stats.get(mkey),
             "impact_score": impacts.get(mkey, 0.0),
@@ -737,6 +793,13 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             "fp_ceiling": f_ceil,
             "books": books,
         }
+        # Attach alternates if present (combined across books)
+        try:
+            if (alts_out["over"] or alts_out["under"]):
+                entry["alts"] = alts_out
+        except Exception:
+            pass
+        markets_out[mkey] = entry
 
     # Build debug math payload mirroring range model logic
     debug_math: Dict[str, object] = {}
