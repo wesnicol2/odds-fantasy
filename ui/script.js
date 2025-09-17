@@ -235,9 +235,17 @@ function renderDefenses(containerId, payload) {
     c.innerHTML = '<div class="status">No defenses found for this week.</div>';
     return;
   }
+  // Ensure sorted by opponent implied total ascending (server already sorts, but keep safe)
+  rows.sort((a, b) => (Number(a.implied_total_median) - Number(b.implied_total_median)) || (Number(b.book_count) - Number(a.book_count)));
   const table = [
-    '<table><thead><tr><th>Defense</th><th>Opponent</th><th>Game Date</th><th>Opp Implied</th><th># Books</th><th>Source</th></tr></thead><tbody>',
-    ...rows.map(r => `<tr><td>${r.defense}</td><td>${r.opponent}</td><td>${r.game_date}</td><td>${Number(r.implied_total_median).toFixed(2)}</td><td>${r.book_count}</td><td>${r.source}</td></tr>`),
+    '<table><thead><tr><th>Defense</th><th>Owner</th><th>Opponent</th><th>Game Date</th><th>Opp Implied</th><th># Books</th><th>Source</th></tr></thead><tbody>',
+    ...rows.map(r => {
+      const owner = r.owner ? String(r.owner) : '';
+      const mine = !!r.owned_by_current;
+      const taken = !!(r.owner);
+      const cls = mine ? 'def-row def-mine' : (taken ? 'def-row def-taken' : 'def-row def-available');
+      return `<tr class="${cls}"><td>${r.defense}</td><td>${owner || '-'}</td><td>${r.opponent}</td><td>${r.game_date}</td><td>${Number(r.implied_total_median).toFixed(2)}</td><td>${r.book_count}</td><td>${r.source}</td></tr>`;
+    }),
     '</tbody></table>',
     `<div class="status">RateLimit: ${payload.ratelimit || ''}</div>`
   ].join('\n');

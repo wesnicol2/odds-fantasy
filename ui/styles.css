@@ -153,6 +153,11 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
   .overlay-box { width: 100%; }
   .details-body { padding: 10px; }
 }
+.def-row.def-available td { background: #ecfdf5; color: #065f46; }
+/* Owned by current user */
+.def-row.def-mine td { background: #eff6ff; color: #1d4ed8; }
+/* Owned by someone else */
+.def-row.def-taken td { background: #f3f4f6; color: #374151; }
 .details-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .details-body th, .details-body td { border-bottom: 1px solid #233; padding: 6px 8px; text-align: left; }
 .details-body th { background: #111827; color: #e5e7eb; }

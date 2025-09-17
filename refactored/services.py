@@ -456,27 +456,40 @@ def _implied_total(game_total: float, team_spread: float) -> float:
     return game_total / 2.0 - team_spread / 2.0
 
 
-def _def_teams_for_user(username: str, season: str) -> Tuple[List[str], List[str]]:
-    """Return (owned_DEF_fullnames, available_DEF_fullnames) as OddsAPI team names."""
-    # Owned defenses
-    roster = sleeper_api.get_user_sleeper_data(username, season)
-    owned = []
-    for pid, pdata in roster.get("players", {}).items():
-        if pdata.get("primary_position") == "DEF":
-            team = pdata.get("editorial_team_full_name")
-            if team:
-                owned.append(team)
-
-    # Available defenses
-    avail_map = sleeper_api.get_available_defenses(username, season)
-    available = []
-    for pid, pdata in avail_map.items():
-        abbr = pdata.get("team")
-        full = SLEEPER_TO_ODDSAPI_TEAM.get(abbr)
-        if full:
-            available.append(full)
-
-    return owned, available
+def _def_ownership_map(username: str, season: str) -> Tuple[dict, str | None]:
+    """Return (team_fullname -> {id, name}, current_user_id)."""
+    try:
+        league_id, user_id = sleeper_api.get_league_id_for_user(username, season)
+        if not league_id:
+            return {}, None
+        rosters = sleeper_api.get_league_rosters(league_id)
+        users = sleeper_api.get_league_users(league_id)
+        # Map owner_id -> display name (fallback to username/id)
+        owner_name: dict = {}
+        for u in users or []:
+            name = u.get('display_name') or u.get('username') or u.get('user_id')
+            owner_name[u.get('user_id')] = name
+        # All players metadata to identify DEF and team abbr
+        all_players = sleeper_api.get_players()
+        team_to_owner: dict = {}
+        for r in rosters or []:
+            oid = r.get('owner_id')
+            disp = owner_name.get(oid) or (oid or 'unknown')
+            for pid in r.get('players', []) or []:
+                try:
+                    pdata = all_players.get(pid) or {}
+                    if pdata.get('position') != 'DEF':
+                        continue
+                    abbr = pdata.get('team')
+                    full = SLEEPER_TO_ODDSAPI_TEAM.get(abbr)
+                    if full:
+                        team_to_owner[full] = {"id": oid, "name": disp}
+                except Exception:
+                    continue
+        return team_to_owner, user_id
+    except Exception as e:
+        print(f"[services] def ownership mapping error: {e}")
+        return {}, None
 
 
 def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us") -> Dict:
@@ -494,12 +507,20 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     (this_start, this_end), (next_start, next_end) = compute_week_windows()
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
 
-    owned, available = _def_teams_for_user(username, season)
+    # Build ownership map across entire league
+    team_to_owner, current_uid = _def_ownership_map(username, season)
+    # All teams (full names)
+    all_teams = list(SLEEPER_TO_ODDSAPI_TEAM.values())
+    # Scope handling remains, but default 'both' -> include all
+    include_owned = scope in ("owned", "both")
+    include_avail = scope in ("available", "both")
     team_list: List[Tuple[str, str]] = []
-    if scope in ("owned", "both"):
-        team_list += [(t, "owned") for t in owned]
-    if scope in ("available", "both"):
-        team_list += [(t, "available") for t in available]
+    for t in all_teams:
+        has_owner = t in team_to_owner
+        if has_owner and include_owned:
+            team_list.append((t, "owned"))
+        elif (not has_owner) and include_avail:
+            team_list.append((t, "available"))
 
     # Filter events in window
     eff_mode = 'fresh' if fresh else cache_mode
@@ -562,6 +583,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             if implieds:
                 implieds.sort()
                 mid = implieds[len(implieds)//2] if len(implieds) % 2 == 1 else (implieds[len(implieds)//2 -1] + implieds[len(implieds)//2])/2
+                owner_info = team_to_owner.get(team) or {}
                 out_rows.append({
                     "defense": team,
                     "opponent": opp,
@@ -569,6 +591,8 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
                     "implied_total_median": round(mid, 2),
                     "book_count": len(implieds),
                     "source": source,
+                    "owner": owner_info.get("name"),
+                    "owned_by_current": bool(owner_info) and (owner_info.get("id") == current_uid),
                 })
 
     # Sort ascending by implied total (lower is better for defense)

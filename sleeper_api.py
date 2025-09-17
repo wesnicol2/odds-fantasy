@@ -94,6 +94,24 @@ def get_league_rosters(league_id):
     return response.json()
 
 
+def get_league_users(league_id):
+    """
+    Fetch all user profiles for a given league to map owner_id -> display_name/username.
+    """
+    url = f"{SLEEPER_BASE_URL}/league/{league_id}/users"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+def get_league_id_for_user(username, season):
+    """Return the first league_id for a user in a season (simple default)."""
+    user_id = get_user_id(username)
+    leagues = get_user_leagues(user_id, season)
+    if not leagues:
+        return None, user_id
+    return leagues[0]['league_id'], user_id
+
+
 def get_players(fresh: bool = False):
     """Fetch all NFL player metadata from Sleeper with simple disk cache.
 
