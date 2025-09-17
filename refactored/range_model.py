@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from statistics import NormalDist
 
 from predicted_stats import predict_stats_for_player
+from .prob_models import get_model_registry, _inverse_cdf  # type: ignore
 from config import STAT_MARKET_MAPPING_SLEEPER
 
 
@@ -163,5 +164,128 @@ def compute_fantasy_range(
     floor_fp = _fantasy_points(floor_stats, scoring_rules)
     mid_fp = _fantasy_points(mid_stats, scoring_rules)
     ceil_fp = _fantasy_points(ceil_stats, scoring_rules)
+    return floor_fp, mid_fp, ceil_fp, per_market_ranges
+
+
+def compute_fantasy_range_model(
+    per_bookmaker_odds: Dict,
+    market_summaries: Dict[str, object],
+    scoring_rules: Dict[str, float],
+    model: str = "baseline",
+) -> Tuple[float, float, float, Dict[str, Tuple[float, float, float]]]:
+    model = (model or "baseline").lower()
+    if model == "baseline":
+        return compute_fantasy_range(per_bookmaker_odds, market_summaries, scoring_rules)
+
+    # 1) Predict mean stats per market (used for fallback + sigma estimation)
+    mean_stats_all = predict_stats_for_player(per_bookmaker_odds)
+
+    # 2) Build per-market ranges via model quantiles where possible
+    reg = get_model_registry()
+    model_func = reg.get(model)
+    per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
+    for key, mean_val in mean_stats_all.items():
+        use_key = key
+        if key not in PRIMARY_MARKET_WHITELIST:
+            base_key = key.replace("_alternate", "")
+            if base_key in mean_stats_all:
+                continue
+            if base_key != key:
+                use_key = base_key
+        summ = market_summaries.get(key) or market_summaries.get(use_key)
+        if summ is None:
+            q10 = max(0.0, mean_val * 0.8)
+            q50 = max(0.0, mean_val)
+            q90 = max(0.0, mean_val * 1.2)
+            per_market_ranges[use_key] = (q10, q50, q90)
+            continue
+        # Fallback quantiles via parametric
+        fallback_q = _market_quantiles(
+            use_key,
+            mean=mean_val,
+            threshold=getattr(summ, "avg_threshold", 0.0),
+            p_over=getattr(summ, "avg_over_prob", 0.0),
+            p_under=getattr(summ, "avg_under_prob", 0.0),
+        )
+        q10 = q50 = q90 = None
+        if model_func and use_key != "player_anytime_td":
+            try:
+                q = model_func(per_bookmaker_odds, use_key, fallback_q)
+                if q:
+                    q10, q50, q90 = q
+            except Exception:
+                q10 = q50 = q90 = None
+        if q10 is None:
+            q10, q50, q90 = fallback_q
+        per_market_ranges[use_key] = (q10, q50, q90)
+
+    # 3) Convert ranges to FP with mixed-mode bonuses (EV ramp for yards, discrete for TD/steps)
+    floor_stats = {k: v[0] for k, v in per_market_ranges.items()}
+    mid_stats = {k: v[1] for k, v in per_market_ranges.items()}
+    ceil_stats = {k: v[2] for k, v in per_market_ranges.items()}
+
+    # Remove yardage step bonuses from base scoring
+    base_scoring = dict(scoring_rules or {})
+    for bk in ("bonus_rush_yd_100", "bonus_rush_yd_200", "bonus_rec_yd_100", "bonus_rec_yd_200", "bonus_pass_yd_300", "bonus_pass_yd_400"):
+        if bk in base_scoring:
+            base_scoring.pop(bk, None)
+
+    floor_fp = _fantasy_points(floor_stats, base_scoring)
+    mid_fp = _fantasy_points(mid_stats, base_scoring)
+    ceil_fp = _fantasy_points(ceil_stats, base_scoring)
+
+    # EV ramp for all yardage (pass/rush/rec) on floor/mid; discrete at ceiling
+    def _expected_bonus_for(key: str, levels: list[tuple[float, str]]) -> float:
+        try:
+            summ = market_summaries.get(key)
+            if not summ:
+                return 0.0
+            mean = float(mid_stats.get(key, 0.0) or 0.0)
+            sigma = _calc_sigma(mean, getattr(summ, "avg_threshold", 0.0) or 0.0,
+                                getattr(summ, "avg_over_prob", 0.0) or 0.0,
+                                getattr(summ, "avg_under_prob", 0.0) or 0.0)
+            if sigma <= 0:
+                return 0.0
+            dist = NormalDist(mu=mean, sigma=sigma)
+            total = 0.0
+            for thr, bonus_key in levels:
+                if bonus_key in (scoring_rules or {}):
+                    try:
+                        bval = float(scoring_rules.get(bonus_key, 0.0) or 0.0)
+                    except Exception:
+                        bval = 0.0
+                    if bval != 0.0:
+                        try:
+                            p = max(0.0, 1.0 - float(dist.cdf(thr)))
+                        except Exception:
+                            p = 0.0
+                        total += bval * p
+            return total
+        except Exception:
+            return 0.0
+
+    def _discrete_bonus(value: float, levels: list[tuple[float, str]]) -> float:
+        try:
+            awarded = 0.0
+            for thr, key in sorted(levels, key=lambda x: x[0]):
+                if key in (scoring_rules or {}) and value >= thr:
+                    try:
+                        awarded = float(scoring_rules.get(key, 0.0) or 0.0)
+                    except Exception:
+                        awarded = 0.0
+            return awarded
+        except Exception:
+            return 0.0
+
+    # Yardage bonuses
+    rush_ev = _expected_bonus_for("player_rush_yds", [(100.0, "bonus_rush_yd_100"), (200.0, "bonus_rush_yd_200")])
+    rec_ev = _expected_bonus_for("player_reception_yds", [(100.0, "bonus_rec_yd_100"), (200.0, "bonus_rec_yd_200")])
+    pass_ev = _expected_bonus_for("player_pass_yds", [(300.0, "bonus_pass_yd_300"), (400.0, "bonus_pass_yd_400")])
+    floor_fp += rush_ev + rec_ev + pass_ev
+    mid_fp += rush_ev + rec_ev + pass_ev
+    ceil_fp += _discrete_bonus(float(ceil_stats.get("player_rush_yds", 0.0) or 0.0), [(100.0, "bonus_rush_yd_100"), (200.0, "bonus_rush_yd_200")])
+    ceil_fp += _discrete_bonus(float(ceil_stats.get("player_reception_yds", 0.0) or 0.0), [(100.0, "bonus_rec_yd_100"), (200.0, "bonus_rec_yd_200")])
+    ceil_fp += _discrete_bonus(float(ceil_stats.get("player_pass_yds", 0.0) or 0.0), [(300.0, "bonus_pass_yd_300"), (400.0, "bonus_pass_yd_400")])
+
     return floor_fp, mid_fp, ceil_fp, per_market_ranges
 

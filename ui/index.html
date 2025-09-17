@@ -26,6 +26,15 @@
       <label><input type="radio" name="dataMode" value="auto" checked /> Auto (TTL)</label>
       <label><input type="radio" name="dataMode" value="cache" /> Cache</label>
       <label><input type="radio" name="dataMode" value="fresh" /> Fresh</label>
+      <label>
+        Model:
+        <select id="modelSelect">
+          <option value="const" selected>Constantini</option>
+          <option value="puelz">Puelz</option>
+          <option value="angelini">Angelini</option>
+          <option value="baseline">Baseline</option>
+        </select>
+      </label>
       <span id="pingStatus" class="status"></span>
       <span id="rlHeader" class="status"></span>
       <span id="netSpin" class="spinner hidden" title="Network activity"></span>
@@ -87,6 +96,19 @@
     <span id="rateLimit" class="status"></span>
   </footer>
 
+  <!-- Floating model selector (always visible) -->
+  <div id="floatingModel" class="floating-controls" aria-label="Model selector" title="Choose probability model">
+    <label>
+      <span class="fm-label">Model</span>
+      <select id="modelSelectFloating">
+        <option value="const" selected>Constantini</option>
+        <option value="puelz">Puelz</option>
+        <option value="angelini">Angelini</option>
+        <option value="baseline">Baseline</option>
+      </select>
+    </label>
+  </div>
+
   <!-- Global loading overlay -->
   <div id="globalLoading" class="overlay hidden">
     <div class="overlay-box">
@@ -105,11 +127,24 @@
       <div id="detailsBody" class="details-body"></div>
     </div>
   </div>
+
+  <!-- Debug Math overlay -->
+  <div id="debugOverlay" class="overlay hidden">
+    <div class="overlay-box details-box">
+      <div class="details-header">
+        <button id="debugBack" class="back-btn" aria-label="Back">← Back</button>
+        <div id="debugTitle" class="details-title">Debug Math</div>
+        <button id="debugClose" class="close-btn" aria-label="Close">✕</button>
+      </div>
+      <div id="debugBody" class="details-body"></div>
+    </div>
+  </div>
 <script src="/ui/script.js"></script>
   <script src="/ui/details.js"></script>
 </body>
   
 </html>
+
 
 
 

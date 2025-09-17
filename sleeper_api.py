@@ -5,7 +5,10 @@ import requests
 from config import SLEEPER_TO_ODDSAPI_TEAM, DATA_DIR
 
 SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
-REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
+# Allow overriding request timeouts via env; default (connect=5s, read=20s)
+_conn_to = float(os.getenv('SLEEPER_CONNECT_TIMEOUT', '5') or 5)
+_read_to = float(os.getenv('SLEEPER_READ_TIMEOUT', '20') or 20)
+REQ_TIMEOUT = (_conn_to, _read_to)  # (connect, read) seconds
 _PLAYERS_CACHE = None
 _PLAYERS_CACHE_FILE = os.path.join(DATA_DIR, 'sleeper_players.json')
 _PLAYERS_TTL = int(os.getenv('SLEEPER_PLAYERS_TTL', '86400'))  # 24h
@@ -89,6 +92,24 @@ def get_league_rosters(league_id):
     response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
+
+
+def get_league_users(league_id):
+    """
+    Fetch all user profiles for a given league to map owner_id -> display_name/username.
+    """
+    url = f"{SLEEPER_BASE_URL}/league/{league_id}/users"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+def get_league_id_for_user(username, season):
+    """Return the first league_id for a user in a season (simple default)."""
+    user_id = get_user_id(username)
+    leagues = get_user_leagues(user_id, season)
+    if not leagues:
+        return None, user_id
+    return leagues[0]['league_id'], user_id
 
 
 def get_players(fresh: bool = False):

@@ -62,20 +62,22 @@ function computeLineupFromPlayers(players, target) {
     }
     return out;
   };
-  const lineup = {
+  const starters = {
     QB: take('QB', 1),
-    RB: take('RB', 2),
     WR: take('WR', 2),
+    RB: take('RB', 2),
     TE: take('TE', 1)
   };
+  // FLEX best remaining WR/RB/TE
   const flexPool = [];
   for (const pos of ['WR','RB','TE']) {
     for (const p of buckets[pos]) { const key=nameKey(p.name); if (!used.has(key)) flexPool.push(p); }
   }
   flexPool.sort(by(target));
-  lineup.FLEX = flexPool.slice(0, 1);
-  // Mark FLEX selection as used to prevent duplicate in bench
-  lineup.FLEX.forEach(p => used.add(nameKey(p.name)));
+  const FLEX = flexPool.slice(0, 1);
+  FLEX.forEach(p => used.add(nameKey(p.name)));
+
+  // Compose rows in the required order: QB, WR, WR, RB, RB, TE, FLEX
   const rows = [];
   let total = 0;
   const add = (slot, p) => {
@@ -83,14 +85,17 @@ function computeLineupFromPlayers(players, target) {
     total += pts;
     rows.push({ slot, name: p.name, pos: p.pos, floor: Number(p.floor||0), mid: Number(p.mid||0), ceiling: Number(p.ceiling||0) });
   };
-  lineup.QB.forEach(p => add('QB', p));
-  lineup.RB.forEach(p => add('RB', p));
-  lineup.WR.forEach(p => add('WR', p));
-  lineup.TE.forEach(p => add('TE', p));
-  lineup.FLEX.forEach(p => add('FLEX', p));
-  // Append bench (remaining sorted by target)
+  starters.QB.forEach(p => add('QB', p));
+  if (starters.WR[0]) add('WR', starters.WR[0]);
+  if (starters.WR[1]) add('WR', starters.WR[1]);
+  if (starters.RB[0]) add('RB', starters.RB[0]);
+  if (starters.RB[1]) add('RB', starters.RB[1]);
+  starters.TE.forEach(p => add('TE', p));
+  FLEX.forEach(p => add('FLEX', p));
+
+  // Bench: include everyone else, even zeros
   const bench = [];
-  for (const pos of ['QB','RB','WR','TE']) {
+  for (const pos of ['QB','WR','RB','TE']) {
     for (const p of buckets[pos]) { const key=nameKey(p.name); if (!used.has(key)) bench.push(p); }
   }
   bench.sort(by(target));
@@ -128,7 +133,7 @@ async function showLineup(week) {
     const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
     showContainerLoading(containerId, 'Loading lineup...');
     const mode = getDataMode();
-    const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode });
+  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { document.getElementById(containerId).innerHTML = '<div class=\"status\">Failed to load lineup.</div>'; return; }
     appCache.lineupPlayers[week] = data.players || [];
@@ -187,6 +192,13 @@ function getDataMode() {
   return el.value || el.getAttribute('value') || 'auto';
 }
 
+function getModel() {
+  const elFloat = document.getElementById('modelSelectFloating');
+  if (elFloat && elFloat.value) return elFloat.value;
+  const el = document.getElementById('modelSelect');
+  return (el && el.value) ? el.value : 'const';
+}
+
 
 function renderLineup(containerId, title, payload) {
   const c = $(containerId);
@@ -199,7 +211,7 @@ function renderLineup(containerId, title, payload) {
   const rowHtml = rows.map(r => `
     <tr>
       <td>${r.slot}</td>
-      <td>${r.name}</td>
+      <td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td>
       <td>${r.pos}</td>
       <td>${Number(r.floor).toFixed(2)}</td>
       <td>${Number(r.mid).toFixed(2)}</td>
@@ -223,9 +235,17 @@ function renderDefenses(containerId, payload) {
     c.innerHTML = '<div class="status">No defenses found for this week.</div>';
     return;
   }
+  // Ensure sorted by opponent implied total ascending (server already sorts, but keep safe)
+  rows.sort((a, b) => (Number(a.implied_total_median) - Number(b.implied_total_median)) || (Number(b.book_count) - Number(a.book_count)));
   const table = [
-    '<table><thead><tr><th>Defense</th><th>Opponent</th><th>Game Date</th><th>Opp Implied</th><th># Books</th><th>Source</th></tr></thead><tbody>',
-    ...rows.map(r => `<tr><td>${r.defense}</td><td>${r.opponent}</td><td>${r.game_date}</td><td>${Number(r.implied_total_median).toFixed(2)}</td><td>${r.book_count}</td><td>${r.source}</td></tr>`),
+    '<table><thead><tr><th>Defense</th><th>Owner</th><th>Opponent</th><th>Game Date</th><th>Opp Implied</th><th># Books</th><th>Source</th></tr></thead><tbody>',
+    ...rows.map(r => {
+      const owner = r.owner ? String(r.owner) : '';
+      const mine = !!r.owned_by_current;
+      const taken = !!(r.owner);
+      const cls = mine ? 'def-row def-mine' : (taken ? 'def-row def-taken' : 'def-row def-available');
+      return `<tr class="${cls}"><td>${r.defense}</td><td>${owner || '-'}</td><td>${r.opponent}</td><td>${r.game_date}</td><td>${Number(r.implied_total_median).toFixed(2)}</td><td>${r.book_count}</td><td>${r.source}</td></tr>`;
+    }),
     '</tbody></table>',
     `<div class="status">RateLimit: ${payload.ratelimit || ''}</div>`
   ].join('\n');
@@ -241,7 +261,7 @@ async function loadLineup(week, target) {
     dbg('loadLineup:no-cache', { week, target });
     showContainerLoading(containerId, 'Loading lineup...');
   const mode = getDataMode();
-  const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, mode });
+  const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, mode, model: getModel() });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load lineup.</div>'; return; }
     appCache.lineups[week] = appCache.lineups[week] || {};
@@ -266,7 +286,7 @@ function renderPlayers(containerId, players) {
   rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
   const table = [
     '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>',
-    ...rows.map(r => `<tr><td>${r.name}</td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`),
+    ...rows.map(r => `<tr><td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`),
     '</tbody></table>'
   ].join('\n');
   c.innerHTML = table;
@@ -323,7 +343,7 @@ async function showPlayers(week) {
     dbg('showPlayers:no-cache', { week });
     showContainerLoading(containerId, 'Loading players...');
   const mode = getDataMode();
-  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode });
+  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load players.</div>'; return; }
     appCache.projections[week] = data;
@@ -358,7 +378,7 @@ async function refreshAll() {
   const username = val('username') || 'wesnicol';
   const season = val('season') || '2025';
   const mode = getDataMode();
-  const url = apiUrl('/dashboard', { username, season, mode, weeks: 'this', def_scope: 'owned', include_players: '1' });
+  const url = apiUrl('/dashboard', { username, season, mode, weeks: 'this', def_scope: 'owned', include_players: '1', model: getModel() });
   dbg('refreshAll:start', { url, username, season });
   setStatus($('pingStatus'), 'Refreshing...');
   showGlobalLoading('Refreshing dashboard...');
@@ -405,7 +425,8 @@ async function dbgProjections(week) {
     username: val('username') || 'wesnicol',
     season: val('season') || '2025',
     week,
-    mode: getDataMode()
+    mode: getDataMode(),
+    model: getModel()
   });
   showContainerLoading('projectionsDebug', 'Loading projections...');
   const { ok, data } = await fetchJSON(url);
@@ -417,7 +438,20 @@ async function dbgProjections(week) {
 // Wire handlers
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
+  // Help (More Info) overlay wiring
+  try {
+    const btnHelp = document.getElementById('btnHelp');
+    const help = document.getElementById('helpOverlay');
+    const helpClose = document.getElementById('helpClose');
+    if (btnHelp && help) {
+      btnHelp.addEventListener('click', () => { try { help.classList.remove('hidden'); } catch (e) {} });
+    }
+    if (helpClose && help) {
+      helpClose.addEventListener('click', () => { try { help.classList.add('hidden'); } catch (e) {} });
+    }
+  } catch (e) { /* ignore */ }
   attachSettingsListeners();
+  try { const v = getModel(); const ms = document.getElementById('modelSelect'); const mf = document.getElementById('modelSelectFloating'); if (ms) ms.value = v; if (mf) mf.value = v; } catch (e) {}
   
   // Removed: legacy number-only lineup view button
   document.querySelectorAll('.btn-defenses').forEach(btn => {
@@ -456,6 +490,7 @@ function saveSettings() {
       username: ($('username')||{}).value || '',
       season: ($('season')||{}).value || '',
       dataMode: (document.querySelector('input[name="dataMode"]:checked')||{}).value || 'auto',
+      model: getModel() || 'const',
     };
     localStorage.setItem('ofdash.settings', JSON.stringify(data));
   } catch (e) { /* ignore */ }
@@ -473,12 +508,18 @@ function loadSettings() {
       const radio = document.querySelector('input[name="dataMode"][value="'+s.dataMode+'"]');
       if (radio) radio.checked = true;
     }
+    if (s.model) {
+      const ms = document.getElementById('modelSelect'); if (ms) ms.value = s.model;
+      const mf = document.getElementById('modelSelectFloating'); if (mf) mf.value = s.model;
+    }
   } catch (e) { /* ignore */ }
 }
 
 function attachSettingsListeners() {
   ['apiBase','username','season'].forEach(id => { const el=$(id); if (el) el.addEventListener('change', saveSettings); });
   document.querySelectorAll('input[name="dataMode"]').forEach(r => r.addEventListener('change', saveSettings));
+  const ms = document.getElementById('modelSelect'); if (ms) ms.addEventListener('change', () => { try { const mf = document.getElementById('modelSelectFloating'); if (mf) mf.value = ms.value; saveSettings(); refreshAll(); } catch (e) {} });
+  const mf = document.getElementById('modelSelectFloating'); if (mf) mf.addEventListener('change', () => { try { const ms2 = document.getElementById('modelSelect'); if (ms2) ms2.value = mf.value; saveSettings(); refreshAll(); } catch (e) {} });
 }
 
 // Enable simple table sorting on click

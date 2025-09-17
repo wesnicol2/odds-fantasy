@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from typing import Dict, List, Tuple, Optional
+from statistics import NormalDist
 import datetime as dt
 import time
 import os
@@ -57,19 +58,24 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, reg
     return out
 
 
-def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto") -> Dict:
+def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto", model: str = "const") -> Dict:
     print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _proj_cache = getattr(compute_projections, "_cache", {})
-    key = (username, season, week, region)
+    key = (username, season, week, region, model)
     now = time.time()
     if not fresh and key in _proj_cache:
         ts, payload = _proj_cache[key]
         if now - ts < ttl:
             print(f"[services] compute_projections cache hit key={key} age={int(now-ts)}s")
             return payload
-    roster = sleeper_api.get_user_sleeper_data(username, season)
+    try:
+        roster = sleeper_api.get_user_sleeper_data(username, season)
+    except Exception as e:
+        print(f"[services] sleeper error: {e}")
+        # Graceful fallback: continue with empty roster so UI can load
+        return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "error": "sleeper_timeout"}
     if not roster:
         return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
 
@@ -170,7 +176,11 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     present_aliases = set(per_player_odds.keys())
     for alias, by_book in per_player_odds.items():
         pinfo = info_by_alias.get(alias, {})
-        floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+        from .range_model import compute_fantasy_range_model, compute_fantasy_range
+        if (model or "baseline").lower() == "baseline":
+            floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+        else:
+            floor, mid, ceil, _ = compute_fantasy_range_model(by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model)
 
         # Coverage diagnostics
         available: set[str] = set()
@@ -310,14 +320,18 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
 
 
 def build_lineup(players: List[dict], target: str = "mid") -> Dict:
-    """Build lineup: QB1, RB2, WR2, TE1, FLEX1 (from WR/RB/TE)."""
+    """Build lineup: QB1, WR2, RB2, FLEX1 (from WR/RB/TE), then BENCH.
+
+    Always include players with zero projection in BENCH.
+    """
     print(f"[services] build_lineup target={target}")
     buckets: Dict[str, List[dict]] = {"QB": [], "RB": [], "WR": [], "TE": []}
     for p in players:
         if p.get("pos") in buckets:
             buckets[p["pos"]].append(p)
     for pos in buckets:
-        buckets[pos].sort(key=lambda x: x.get(target, 0.0), reverse=True)
+        # Ensure None values do not break sort comparisons
+        buckets[pos].sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
 
     used = set()
     def take(pos: str, n: int) -> List[dict]:
@@ -330,10 +344,10 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
                     break
         return out
 
-    lineup = {
+    starters = {
         "QB": take("QB", 1),
-        "RB": take("RB", 2),
         "WR": take("WR", 2),
+        "RB": take("RB", 2),
         "TE": take("TE", 1),
     }
     # FLEX best remaining WR/RB/TE
@@ -342,14 +356,23 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
         for item in buckets.get(pos, []):
             if item["name"] not in used:
                 flex_pool.append(item)
-    flex_pool.sort(key=lambda x: x.get(target, 0.0), reverse=True)
-    lineup["FLEX"] = flex_pool[:1]
+    flex_pool.sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
+    flex = flex_pool[:1]
+    for f in flex:
+        used.add(f["name"])  # mark used for bench
 
     rows = []
     total = 0.0
     def add_slot(slot: str, p: dict):
         nonlocal total
-        pts = float(p.get(target, 0.0))
+        def _num(v):
+            try:
+                if v is None:
+                    return 0.0
+                return float(v)
+            except Exception:
+                return 0.0
+        pts = _num(p.get(target, 0.0))
         total += pts
         rows.append({
             "slot": slot,
@@ -359,16 +382,47 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
             "team": p.get("team"),
             "points": round(pts, 2),
             # include full trio for UI rendering
-            "floor": round(float(p.get("floor", 0.0)), 2),
-            "mid": round(float(p.get("mid", 0.0)), 2),
-            "ceiling": round(float(p.get("ceiling", 0.0)), 2),
+            "floor": round(_num(p.get("floor", 0.0)), 2),
+            "mid": round(_num(p.get("mid", 0.0)), 2),
+            "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
         })
 
-    for p in lineup["QB"]: add_slot("QB", p)
-    for p in lineup["RB"]: add_slot("RB", p)
-    for p in lineup["WR"]: add_slot("WR", p)
-    for p in lineup["TE"]: add_slot("TE", p)
-    for p in lineup["FLEX"]: add_slot("FLEX", p)
+    # Order: QB, WR, WR, RB, RB, TE, FLEX
+    for p in starters["QB"]: add_slot("QB", p)
+    if len(starters["WR"]) > 0: add_slot("WR", starters["WR"][0])
+    if len(starters["WR"]) > 1: add_slot("WR", starters["WR"][1])
+    if len(starters["RB"]) > 0: add_slot("RB", starters["RB"][0])
+    if len(starters["RB"]) > 1: add_slot("RB", starters["RB"][1])
+    for p in starters["TE"]: add_slot("TE", p)
+    for p in flex: add_slot("FLEX", p)
+
+    # Bench: remaining players by target (include zeros)
+    bench: List[dict] = []
+    for pos in ("QB", "WR", "RB", "TE"):
+        for item in buckets.get(pos, []):
+            if item["name"] not in used:
+                bench.append(item)
+    bench.sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
+
+    def _num(v):
+        try:
+            if v is None:
+                return 0.0
+            return float(v)
+        except Exception:
+            return 0.0
+
+    for b in bench:
+        rows.append({
+            "slot": "BENCH",
+            "name": b["name"],
+            "pos": b["pos"],
+            "team": b.get("team"),
+            "points": round(_num(b.get(target, 0.0)), 2),
+            "floor": round(_num(b.get("floor", 0.0)), 2),
+            "mid": round(_num(b.get("mid", 0.0)), 2),
+            "ceiling": round(_num(b.get("ceiling", 0.0)), 2),
+        })
 
     return {"target": target, "lineup": rows, "total_points": round(total, 2)}
 
@@ -402,27 +456,40 @@ def _implied_total(game_total: float, team_spread: float) -> float:
     return game_total / 2.0 - team_spread / 2.0
 
 
-def _def_teams_for_user(username: str, season: str) -> Tuple[List[str], List[str]]:
-    """Return (owned_DEF_fullnames, available_DEF_fullnames) as OddsAPI team names."""
-    # Owned defenses
-    roster = sleeper_api.get_user_sleeper_data(username, season)
-    owned = []
-    for pid, pdata in roster.get("players", {}).items():
-        if pdata.get("primary_position") == "DEF":
-            team = pdata.get("editorial_team_full_name")
-            if team:
-                owned.append(team)
-
-    # Available defenses
-    avail_map = sleeper_api.get_available_defenses(username, season)
-    available = []
-    for pid, pdata in avail_map.items():
-        abbr = pdata.get("team")
-        full = SLEEPER_TO_ODDSAPI_TEAM.get(abbr)
-        if full:
-            available.append(full)
-
-    return owned, available
+def _def_ownership_map(username: str, season: str) -> Tuple[dict, str | None]:
+    """Return (team_fullname -> {id, name}, current_user_id)."""
+    try:
+        league_id, user_id = sleeper_api.get_league_id_for_user(username, season)
+        if not league_id:
+            return {}, None
+        rosters = sleeper_api.get_league_rosters(league_id)
+        users = sleeper_api.get_league_users(league_id)
+        # Map owner_id -> display name (fallback to username/id)
+        owner_name: dict = {}
+        for u in users or []:
+            name = u.get('display_name') or u.get('username') or u.get('user_id')
+            owner_name[u.get('user_id')] = name
+        # All players metadata to identify DEF and team abbr
+        all_players = sleeper_api.get_players()
+        team_to_owner: dict = {}
+        for r in rosters or []:
+            oid = r.get('owner_id')
+            disp = owner_name.get(oid) or (oid or 'unknown')
+            for pid in r.get('players', []) or []:
+                try:
+                    pdata = all_players.get(pid) or {}
+                    if pdata.get('position') != 'DEF':
+                        continue
+                    abbr = pdata.get('team')
+                    full = SLEEPER_TO_ODDSAPI_TEAM.get(abbr)
+                    if full:
+                        team_to_owner[full] = {"id": oid, "name": disp}
+                except Exception:
+                    continue
+        return team_to_owner, user_id
+    except Exception as e:
+        print(f"[services] def ownership mapping error: {e}")
+        return {}, None
 
 
 def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us") -> Dict:
@@ -440,12 +507,20 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     (this_start, this_end), (next_start, next_end) = compute_week_windows()
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
 
-    owned, available = _def_teams_for_user(username, season)
+    # Build ownership map across entire league
+    team_to_owner, current_uid = _def_ownership_map(username, season)
+    # All teams (full names)
+    all_teams = list(SLEEPER_TO_ODDSAPI_TEAM.values())
+    # Scope handling remains, but default 'both' -> include all
+    include_owned = scope in ("owned", "both")
+    include_avail = scope in ("available", "both")
     team_list: List[Tuple[str, str]] = []
-    if scope in ("owned", "both"):
-        team_list += [(t, "owned") for t in owned]
-    if scope in ("available", "both"):
-        team_list += [(t, "available") for t in available]
+    for t in all_teams:
+        has_owner = t in team_to_owner
+        if has_owner and include_owned:
+            team_list.append((t, "owned"))
+        elif (not has_owner) and include_avail:
+            team_list.append((t, "available"))
 
     # Filter events in window
     eff_mode = 'fresh' if fresh else cache_mode
@@ -508,6 +583,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             if implieds:
                 implieds.sort()
                 mid = implieds[len(implieds)//2] if len(implieds) % 2 == 1 else (implieds[len(implieds)//2 -1] + implieds[len(implieds)//2])/2
+                owner_info = team_to_owner.get(team) or {}
                 out_rows.append({
                     "defense": team,
                     "opponent": opp,
@@ -515,6 +591,8 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
                     "implied_total_median": round(mid, 2),
                     "book_count": len(implieds),
                     "source": source,
+                    "owner": owner_info.get("name"),
+                    "owned_by_current": bool(owner_info) and (owner_info.get("id") == current_uid),
                 })
 
     # Sort ascending by implied total (lower is better for defense)
@@ -534,6 +612,7 @@ def build_dashboard(
     weeks: str = "both",  # 'this' | 'next' | 'both'
     def_scope: str = "owned",  # 'owned' | 'available' | 'both'
     include_players: bool = True,
+    model: str = "const",
 ) -> Dict:
     """Build a single payload for UI: lineups and defenses with optional scoping.
 
@@ -554,9 +633,9 @@ def build_dashboard(
     proj_this = None
     proj_next = None
     if weeks in ("this", "both"):
-        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
     if weeks in ("next", "both"):
-        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
 
     # Build lineups from one projections call per week
     lineups = {"this": None, "next": None}
@@ -611,7 +690,7 @@ def _norm_name(s: str) -> str:
         return s or ""
 
 
-def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto") -> Dict:
+def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "baseline") -> Dict:
     """Return per-book odds and market summaries used for a single player.
 
     Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).
@@ -673,7 +752,11 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     # Build per-market details
     # Also compute per-market stat quantiles and fantasy point contributions
     try:
-        _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range(by_book, market_summaries, scoring_rules)
+        from .range_model import compute_fantasy_range_model, compute_fantasy_range
+        if (model or "baseline").lower() == "baseline":
+            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range(by_book, market_summaries, scoring_rules)
+        else:
+            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range_model(by_book, market_summaries, scoring_rules, model=model)
     except Exception:
         per_market_ranges = {}
 
@@ -696,8 +779,19 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     for mkey in set(list(by_book.keys()) + list(market_summaries.keys()) + list(mean_stats.keys()) + list(per_market_ranges.keys())):
         # Per-book rows
         books = []
+        alts_out = {"over": [], "under": []}
         for book_key, mkts in by_book.items():
             sides = mkts.get(mkey, {"over": None, "under": None})
+            # Collect alt lists if present
+            alts = (sides or {}).get("alts")
+            if alts and (isinstance(alts, dict)):
+                try:
+                    for it in (alts.get("over") or []):
+                        alts_out["over"].append({"book": book_key, "point": it.get("point"), "odds": it.get("odds")})
+                    for it in (alts.get("under") or []):
+                        alts_out["under"].append({"book": book_key, "point": it.get("point"), "odds": it.get("odds")})
+                except Exception:
+                    pass
             books.append({
                 "book": book_key,
                 "over": sides.get("over"),
@@ -713,7 +807,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
                 "samples": getattr(summ, "samples", 0),
             }
         f_floor, f_mid, f_ceil = _fp_triplet_for_market(mkey)
-        markets_out[mkey] = {
+        entry = {
             "summary": m_summ,
             "mean_stat": mean_stats.get(mkey),
             "impact_score": impacts.get(mkey, 0.0),
@@ -723,6 +817,141 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             "fp_ceiling": f_ceil,
             "books": books,
         }
+        # Attach alternates if present (combined across books)
+        try:
+            if (alts_out["over"] or alts_out["under"]):
+                entry["alts"] = alts_out
+        except Exception:
+            pass
+        markets_out[mkey] = entry
+
+    # Build debug math payload mirroring range model logic
+    debug_math: Dict[str, object] = {}
+    try:
+        # Helper: normalized p_over and sigma based on summary
+        def _calc_sigma(mean: float, threshold: float, p_over: float, p_under: float) -> tuple[float, float, float, bool]:
+            total = (p_over or 0.0) + (p_under or 0.0)
+            p = (p_over / total) if total > 0 else 0.5
+            # Clamp away from 0/1 to avoid inf
+            p = min(max(p, 1e-4), 1 - 1e-4)
+            z = NormalDist().inv_cdf(p)
+            if abs(z) < 1e-6:
+                sigma = max(abs(threshold) * 0.25, 1.0)
+                return p, z, sigma, True
+            sigma = abs((mean - threshold) / z)
+            sigma = max(sigma, 1e-6)
+            return p, z, sigma, False
+
+        # Per-market details
+        pm_debug: Dict[str, object] = {}
+        for mkey, mdata in markets_out.items():
+            summ = mdata.get("summary") or {}
+            thr = float(summ.get("avg_threshold") or 0.0)
+            pov = float(summ.get("avg_over_prob") or 0.0)
+            pun = float(summ.get("avg_under_prob") or 0.0)
+            mean = float(mdata.get("mean_stat") or 0.0)
+            rng = per_market_ranges.get(mkey) or (None, None, None)
+            q15, q50, q85 = (None, None, None)
+            if rng and isinstance(rng, (list, tuple)) and len(rng) == 3:
+                q15, q50, q85 = rng
+            pnorm, z, sigma, used_fallback = _calc_sigma(mean, thr, pov, pun) if (mkey != "player_anytime_td" and thr != 0) else (None, None, None, False)
+            # FP contributions for this market
+            rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
+            mult = float(scoring_rules.get(rule, 0.0) or 0.0) if rule else 0.0
+            if mkey == "player_pass_interceptions":
+                mult = -abs(mult)
+            fp_floor = round((q15 or 0.0) * mult, 4) if q15 is not None else None
+            fp_mid = round((q50 or 0.0) * mult, 4) if q50 is not None else None
+            fp_ceil = round((q85 or 0.0) * mult, 4) if q85 is not None else None
+            pm_debug[mkey] = {
+                "threshold": thr,
+                "avg_over_prob": pov,
+                "avg_under_prob": pun,
+                "p_over_norm": pnorm,
+                "z": z,
+                "sigma": sigma,
+                "sigma_fallback": used_fallback,
+                "mean": mean,
+                "q15": q15,
+                "q50": q50,
+                "q85": q85,
+                "multiplier_key": rule,
+                "multiplier": mult,
+                "fp_floor": fp_floor,
+                "fp_mid": fp_mid,
+                "fp_ceil": fp_ceil,
+            }
+
+        # Yardage bonuses at each level
+        def _bonus_pass(y: float) -> float:
+            try:
+                if y is None:
+                    return 0.0
+                if y >= 400 and ("bonus_pass_yd_400" in scoring_rules):
+                    return float(scoring_rules["bonus_pass_yd_400"]) or 0.0
+                if y >= 300 and ("bonus_pass_yd_300" in scoring_rules):
+                    return float(scoring_rules["bonus_pass_yd_300"]) or 0.0
+            except Exception:
+                return 0.0
+            return 0.0
+        def _bonus_rush(y: float) -> float:
+            try:
+                if y is None:
+                    return 0.0
+                if y >= 200 and ("bonus_rush_yd_200" in scoring_rules):
+                    return float(scoring_rules["bonus_rush_yd_200"]) or 0.0
+                if y >= 100 and ("bonus_rush_yd_100" in scoring_rules):
+                    return float(scoring_rules["bonus_rush_yd_100"]) or 0.0
+            except Exception:
+                return 0.0
+            return 0.0
+        def _bonus_rec(y: float) -> float:
+            try:
+                if y is None:
+                    return 0.0
+                if y >= 200 and ("bonus_rec_yd_200" in scoring_rules):
+                    return float(scoring_rules["bonus_rec_yd_200"]) or 0.0
+                if y >= 100 and ("bonus_rec_yd_100" in scoring_rules):
+                    return float(scoring_rules["bonus_rec_yd_100"]) or 0.0
+            except Exception:
+                return 0.0
+            return 0.0
+
+        def _get_stat(qidx: int, key: str) -> Optional[float]:
+            rng = per_market_ranges.get(key)
+            if not rng:
+                return None
+            try:
+                return float(rng[qidx])
+            except Exception:
+                return None
+
+        b_floor = (
+            (_bonus_rec(_get_stat(0, "player_reception_yds")) or 0.0)
+            + (_bonus_rush(_get_stat(0, "player_rush_yds")) or 0.0)
+            + (_bonus_pass(_get_stat(0, "player_pass_yds")) or 0.0)
+        )
+        b_mid = (
+            (_bonus_rec(_get_stat(1, "player_reception_yds")) or 0.0)
+            + (_bonus_rush(_get_stat(1, "player_rush_yds")) or 0.0)
+            + (_bonus_pass(_get_stat(1, "player_pass_yds")) or 0.0)
+        )
+        b_ceil = (
+            (_bonus_rec(_get_stat(2, "player_reception_yds")) or 0.0)
+            + (_bonus_rush(_get_stat(2, "player_rush_yds")) or 0.0)
+            + (_bonus_pass(_get_stat(2, "player_pass_yds")) or 0.0)
+        )
+
+        debug_math = {
+            "scoring_rules": scoring_rules,
+            "stat_market_map": STAT_MARKET_MAPPING_SLEEPER,
+            "mean_stats": mean_stats,
+            "per_market": pm_debug,
+            "bonuses": {"floor": b_floor, "mid": b_mid, "ceiling": b_ceil},
+            "totals": {"floor": _floor, "mid": _mid, "ceiling": _ceil},
+        }
+    except Exception:
+        debug_math = {}
 
     pinfo = info_by_alias.get(target_alias, {})
     # Importance classification (vital vs minor) with PPR gating
@@ -773,6 +1002,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         "raw_odds": ev_odds,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
+        "debug_math": debug_math,
     }
     return payload
 
