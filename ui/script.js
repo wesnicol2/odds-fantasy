@@ -462,6 +462,12 @@ document.addEventListener('DOMContentLoaded', () => {
       try { if (typeof openCompareCurves === 'function') openCompareCurves(btn.dataset.week || 'this'); } catch (e) { console.error(e); }
     });
   });
+  const btnBookCoverage = document.getElementById('btnBookCoverage');
+  if (btnBookCoverage) {
+    btnBookCoverage.addEventListener('click', () => {
+      try { if (typeof openBookCoverage === 'function') openBookCoverage('this'); } catch (e) { console.error(e); }
+    });
+  }
   document.querySelectorAll('.btn-players').forEach(btn => {
     btn.addEventListener('click', () => showPlayers(btn.dataset.week));
   });

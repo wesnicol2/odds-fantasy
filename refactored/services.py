@@ -20,6 +20,17 @@ from config import STAT_MARKET_MAPPING_SLEEPER, POSITION_STAT_CONFIG
 from .range_model import PRIMARY_MARKET_WHITELIST
 
 
+COVERAGE_MARKET_ORDER = [
+    'player_anytime_td',
+    'player_reception_yds',
+    'player_rush_yds',
+    'player_pass_yds',
+    'player_pass_tds',
+    'player_pass_interceptions',
+    'player_receptions',
+]
+
+
 def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
     (this_start, this_end), (next_start, next_end) = compute_week_windows(now_utc)
     return (this_start, this_end) if which == "this" else (next_start, next_end)
@@ -176,6 +187,8 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     present_aliases = set(per_player_odds.keys())
     for alias, by_book in per_player_odds.items():
         pinfo = info_by_alias.get(alias, {})
+        vital_exp, minor_exp = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
+        vital_exp, minor_exp = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
         from .range_model import compute_fantasy_range_model, compute_fantasy_range
         if (model or "baseline").lower() == "baseline":
             floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
@@ -205,6 +218,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "name": pinfo.get("full_name", alias),
             "pos": pos,
             "team": pinfo.get("editorial_team_full_name"),
+            "alias": alias,
             "floor": round(floor, 2),
             "mid": round(mid, 2),
             "ceiling": round(ceil, 2),
@@ -219,6 +233,8 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "fallback_vital": fallback_vital,
             "fallback_minor": fallback_minor,
             "is_critical": (len(missing_vital) > 0 or len(fallback_vital) > 0),
+            "vital_markets": sorted(list(vital_exp)),
+            "minor_markets": sorted(list(minor_exp)),
         })
 
     # Add planned roster players with no odds as incomplete entries
@@ -233,6 +249,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "name": pinfo.get("full_name", alias),
             "pos": pos,
             "team": pinfo.get("editorial_team_full_name"),
+            "alias": alias,
             "floor": None,
             "mid": None,
             "ceiling": None,
@@ -246,6 +263,8 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "fallback_vital": [],
             "fallback_minor": [],
             "is_critical": bool(vital_exp),
+            "vital_markets": sorted(list(vital_exp)),
+            "minor_markets": sorted(list(minor_exp)),
         })
 
         # Include roster players without scheduled events as incomplete
@@ -258,10 +277,12 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
                     continue
                 pos = p.get("primary_position")
                 team = p.get("editorial_team_full_name")
+                alias = p.get("alias") or p.get("player_id") or full_name
                 players_out.append({
                     "name": full_name,
                     "pos": pos,
                     "team": team,
+                    "alias": alias,
                     "floor": None,
                     "mid": None,
                     "ceiling": None,
@@ -275,6 +296,8 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
                     "fallback_vital": [],
                     "fallback_minor": [],
                     "is_critical": bool(vital_exp),
+                    "vital_markets": sorted(list(vital_exp)),
+                    "minor_markets": sorted(list(minor_exp)),
                 })
             except Exception:
                 continue
@@ -312,11 +335,193 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
 
     # Sort by mid desc, placing missing mids (None) at the end
     players_out.sort(key=lambda x: (x.get("mid") if isinstance(x.get("mid"), (int, float)) else float("-inf")), reverse=True)
-    payload = {"week": week, "players": players_out, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+
+    def _blank_coverage_counts() -> Dict[str, int]:
+        return {market: 0 for market in COVERAGE_MARKET_ORDER}
+
+    def _market_has_line(entry: object) -> bool:
+        if not isinstance(entry, dict):
+            return bool(entry)
+        if entry.get("over"):
+            return True
+        if entry.get("under"):
+            return True
+        alts = entry.get("alts")
+        if isinstance(alts, dict):
+            over_alts = alts.get("over")
+            if over_alts:
+                return True
+            under_alts = alts.get("under")
+            if under_alts:
+                return True
+        return False
+
+    coverage_counts: Dict[str, Dict[str, int]] = {}
+    for alias, books in per_player_odds.items():
+        tracker = {market: set() for market in COVERAGE_MARKET_ORDER}
+        for book_key, mkts in (books or {}).items():
+            for raw_key, rec in (mkts or {}).items():
+                norm_key = _norm_market_key(raw_key)
+                if norm_key in tracker and _market_has_line(rec):
+                    tracker[norm_key].add(book_key)
+        coverage_counts[alias] = {market: len(book_keys) for market, book_keys in tracker.items()}
+
+    for alias, mkts in (per_player_summaries or {}).items():
+        current = coverage_counts.setdefault(alias, _blank_coverage_counts())
+        for raw_key, summary in (mkts or {}).items():
+            norm_key = _norm_market_key(raw_key)
+            if norm_key not in current:
+                continue
+            try:
+                samples = int(getattr(summary, "samples", 0) or 0)
+            except Exception:
+                samples = 0
+            if samples > current[norm_key]:
+                current[norm_key] = samples
+
+    coverage_rows: List[dict] = []
+    seen_aliases: set[str] = set()
+    for pdata in players_out:
+        alias = pdata.get("alias")
+        counts = _blank_coverage_counts()
+        if alias and alias in coverage_counts:
+            src_counts = coverage_counts.get(alias, {})
+            for market in COVERAGE_MARKET_ORDER:
+                try:
+                    counts[market] = int(src_counts.get(market, 0) or 0)
+                except Exception:
+                    counts[market] = 0
+            seen_aliases.add(alias)
+        pdata_vital: set[str] = set()
+        for _item in (pdata.get("vital_markets") or []):
+            try:
+                _mk = _norm_market_key(_item)
+            except Exception:
+                _mk = None
+            if _mk:
+                pdata_vital.add(_mk)
+        pdata_minor: set[str] = set()
+        for _item in (pdata.get("minor_markets") or []):
+            try:
+                _mk2 = _norm_market_key(_item)
+            except Exception:
+                _mk2 = None
+            if _mk2:
+                pdata_minor.add(_mk2)
+        if not pdata_vital and not pdata_minor:
+            alt_pos = pdata.get("pos")
+            alt_vital, alt_minor = _importance_for_pos(alt_pos, scoring_rules)
+            pdata_vital = set(alt_vital)
+            pdata_minor = set(alt_minor)
+        coverage_rows.append({
+            "alias": alias,
+            "name": pdata.get("name"),
+            "pos": pdata.get("pos"),
+            "team": pdata.get("team"),
+            "markets": counts,
+            "total_books": int(sum(counts.values())),
+            "incomplete": bool(pdata.get("incomplete")),
+            "vital_markets": sorted(list(pdata_vital)),
+            "minor_markets": sorted(list(pdata_minor)),
+        })
+
+    for alias, counts_dict in coverage_counts.items():
+        if not alias or alias in seen_aliases:
+            continue
+        fallback_counts = _blank_coverage_counts()
+        for market in COVERAGE_MARKET_ORDER:
+            try:
+                fallback_counts[market] = int(counts_dict.get(market, 0) or 0)
+            except Exception:
+                fallback_counts[market] = 0
+        pinfo = info_by_alias.get(alias, {})
+        vital_exp, minor_exp = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
+        coverage_rows.append({
+            "alias": alias,
+            "name": pinfo.get("full_name", alias),
+            "pos": pinfo.get("primary_position"),
+            "team": pinfo.get("editorial_team_full_name"),
+            "markets": fallback_counts,
+            "total_books": int(sum(fallback_counts.values())),
+            "incomplete": True,
+            "vital_markets": sorted(list(vital_exp)),
+            "minor_markets": sorted(list(minor_exp)),
+        })
+
+    payload = {
+        "week": week,
+        "players": players_out,
+        "ratelimit": ratelimit.format_status(),
+        "ratelimit_info": ratelimit.get_details(),
+        "book_coverage": {
+            "markets": list(COVERAGE_MARKET_ORDER),
+            "rows": coverage_rows,
+        },
+    }
     # store in cache
     _proj_cache[key] = (now, payload)
     compute_projections._cache = _proj_cache
     return payload
+
+
+def compute_book_coverage(
+    username: str,
+    season: str,
+    week: str = "this",
+    region: str = "us",
+    fresh: bool = False,
+    cache_mode: str = "auto",
+    model: str = "const",
+) -> Dict:
+    data = compute_projections(
+        username=username,
+        season=season,
+        week=week,
+        region=region,
+        fresh=fresh,
+        cache_mode=cache_mode,
+        model=model,
+    )
+    coverage = data.get("book_coverage") or {}
+    markets = list(coverage.get("markets") or COVERAGE_MARKET_ORDER)
+    rows_out: List[dict] = []
+    for row in coverage.get("rows") or []:
+        raw_markets = row.get("markets") or {}
+        markets_map = {market: 0 for market in COVERAGE_MARKET_ORDER}
+        for market in COVERAGE_MARKET_ORDER:
+            try:
+                markets_map[market] = int(raw_markets.get(market, 0) or 0)
+            except Exception:
+                markets_map[market] = 0
+        for extra_key, extra_val in (raw_markets.items() if hasattr(raw_markets, 'items') else []):
+            if extra_key not in markets_map:
+                try:
+                    markets_map[extra_key] = int(extra_val or 0)
+                except Exception:
+                    markets_map[extra_key] = 0
+        total = int(sum(markets_map.values()))
+        vital_list = [str(v) for v in (row.get("vital_markets") or [])]
+        minor_list = [str(v) for v in (row.get("minor_markets") or [])]
+        rows_out.append({
+            "alias": row.get("alias"),
+            "name": row.get("name"),
+            "pos": row.get("pos"),
+            "team": row.get("team"),
+            "markets": markets_map,
+            "total_books": total,
+            "incomplete": bool(row.get("incomplete")),
+            "vital_markets": vital_list,
+            "minor_markets": minor_list,
+        })
+    return {
+        "week": data.get("week", week),
+        "coverage": {
+            "markets": markets,
+            "rows": rows_out,
+        },
+        "ratelimit": data.get("ratelimit"),
+        "ratelimit_info": data.get("ratelimit_info"),
+    }
 
 
 def build_lineup(players: List[dict], target: str = "mid") -> Dict:

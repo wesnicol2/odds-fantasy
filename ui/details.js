@@ -48,6 +48,96 @@ function _escapeHtml(s) {
   }
 }
 
+const COVERAGE_MARKET_ORDER_UI = [
+  'player_anytime_td',
+  'player_reception_yds',
+  'player_rush_yds',
+  'player_pass_yds',
+  'player_pass_tds',
+  'player_pass_interceptions',
+  'player_receptions',
+];
+
+const COVERAGE_MARKET_LABELS = {
+  player_anytime_td: 'Anytime TD',
+  player_reception_yds: 'Rec Yards',
+  player_rush_yds: 'Rush Yards',
+  player_pass_yds: 'Pass Yards',
+  player_pass_tds: 'Pass TDs',
+  player_pass_interceptions: 'Pass INTs',
+  player_receptions: 'Receptions',
+};
+
+function _coverageNameKey(name) {
+  try {
+    return String(name || '')
+      .toLowerCase()
+      .replace(/[\.'`-]/g, ' ')
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/(jr|sr|ii|iii|iv|v)/g, '')
+      .replace(/\s+/g, '')
+      .trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+function _mergeCoverageOrder(order) {
+  var base = COVERAGE_MARKET_ORDER_UI.slice();
+  (Array.isArray(order) ? order : []).forEach(function(key) {
+    if (base.indexOf(key) === -1) { base.push(key); }
+  });
+  return base;
+}
+
+function buildCoverageMiniDots(row, orderOverride) {
+  try {
+    var markets = (row && row.markets) || {};
+    var order = _mergeCoverageOrder(orderOverride);
+    var vitalSet = new Set();
+    var minorSet = new Set();
+    (Array.isArray(row && row.vital_markets) ? row.vital_markets : []).forEach(function(key) {
+      try { vitalSet.add(String(key)); } catch (e) { vitalSet.add(key); }
+    });
+    (Array.isArray(row && row.minor_markets) ? row.minor_markets : []).forEach(function(key) {
+      try { minorSet.add(String(key)); } catch (e) { minorSet.add(key); }
+    });
+    var parts = [];
+    var desc = [];
+    order.forEach(function(key) {
+      var keyStr = String(key);
+      var count = parseInt(markets[key] || 0, 10) || 0;
+      var level = 'cov-none';
+      if (count >= 3) level = 'cov-high';
+      else if (count >= 1) level = 'cov-mid';
+      var label = COVERAGE_MARKET_LABELS[key] || key;
+      var importanceClass = '';
+      var importanceLabel = '';
+      if (vitalSet.has(keyStr)) {
+        importanceClass = ' cov-vital';
+        importanceLabel = ' (vital)';
+      } else if (minorSet.has(keyStr)) {
+        importanceClass = ' cov-minor';
+        importanceLabel = ' (secondary)';
+      }
+      var titleText = label + ': ' + count + ' book' + (count === 1 ? '' : 's') + importanceLabel;
+      desc.push(titleText);
+      parts.push('<span class="cov-dot ' + level + importanceClass + '" data-market="' + key + '" data-count="' + count + '" title="' + _escapeHtml(titleText) + '"></span>');
+    });
+    if (!parts.length) {
+      parts.push('<span class="cov-dot cov-none" title="No coverage data"></span>');
+      desc.push('No coverage data');
+    }
+    var classes = ['coverage-mini'];
+    if (row && row.incomplete) { classes.push('coverage-mini-incomplete'); }
+    if (vitalSet.size) { classes.push('coverage-mini-has-vital'); }
+    var aria = 'Coverage - ' + desc.join('; ');
+    return '<span class="' + classes.join(' ') + '" role="img" aria-label="' + _escapeHtml(aria) + '">' + parts.join('') + '</span>';
+  } catch (e) {
+    return '';
+  }
+}
+
 function _renderFpVisual(floor, mid, ceil) {
   try {
     var f = Number(floor||0), m = Number(mid||0), c = Number(ceil||0);
@@ -124,6 +214,27 @@ function openCompareCurves(week) {
     fetchJSON(projUrl).then(function(res){
       if (!res.ok) { hideDetails(); alert('Failed to load projections'); return; }
       var all = (res.data && res.data.players) || [];
+      var coverageData = {};
+      var coverageOrder = null;
+      try {
+        var bc = (res.data && res.data.book_coverage) || {};
+        if (Array.isArray(bc.markets) && bc.markets.length) { coverageOrder = bc.markets.slice(); }
+        (Array.isArray(bc.rows) ? bc.rows : []).forEach(function(row) {
+          if (!row) { return; }
+          var aliasKey = row.alias ? ('alias:' + String(row.alias).toLowerCase()) : null;
+          if (aliasKey) { coverageData[aliasKey] = row; }
+          var nameKey = _coverageNameKey(row.name);
+          if (nameKey) { coverageData['name:' + nameKey] = row; }
+        });
+      } catch (e) { coverageData = {}; coverageOrder = null; }
+      function _coverageRowForPlayer(player) {
+        if (!player) { return null; }
+        var aliasKey = player.alias ? ('alias:' + String(player.alias).toLowerCase()) : null;
+        if (aliasKey && coverageData[aliasKey]) { return coverageData[aliasKey]; }
+        var nameKey = _coverageNameKey(player.name);
+        if (nameKey && coverageData['name:' + nameKey]) { return coverageData['name:' + nameKey]; }
+        return null;
+      }
       // Compute global FP range across all players and store globally
       try {
         var gMax = 0;
@@ -194,13 +305,33 @@ function openCompareCurves(week) {
         var list = document.getElementById('cmpList');
         list.innerHTML = pool.map(function(p,idx){
           var col=palette[idx]||'hsl(200,70%,55%)';
+          var coverageRow = _coverageRowForPlayer(p);
+          if (coverageRow) {
+            if (!Array.isArray(coverageRow.vital_markets) && Array.isArray(p.vital_markets)) { coverageRow.vital_markets = p.vital_markets.slice(); }
+            if (!Array.isArray(coverageRow.minor_markets) && Array.isArray(p.minor_markets)) { coverageRow.minor_markets = p.minor_markets.slice(); }
+          } else {
+            coverageRow = {
+              markets: {},
+              incomplete: !!p.incomplete,
+              vital_markets: Array.isArray(p.vital_markets) ? p.vital_markets.slice() : [],
+              minor_markets: Array.isArray(p.minor_markets) ? p.minor_markets.slice() : [],
+            };
+          }
+          var coverageHtml = buildCoverageMiniDots(coverageRow, coverageOrder);
           var slot = slotByName[p.name] ? ('<span class="pill" title="Lineup slot">'+slotByName[p.name]+'</span> ') : '';
-          var nums = '<span class="muted fmc">F '+Number(p.floor||0).toFixed(1)+' Ã‚Â· M '+Number(p.mid||0).toFixed(1)+' Ã‚Â· C '+Number(p.ceiling||0).toFixed(1)+'</span>';
-          var detailsBtn = '<button class="mini details" data-name="'+_escapeHtml(p.name)+'" title="Details">Ã¢Å¸Â²</button>';
+          var floorVal = Number(p.floor || 0).toFixed(1);
+          var midVal = Number(p.mid || 0).toFixed(1);
+          var ceilVal = Number(p.ceiling || 0).toFixed(1);
+          var statsHtml = '<span class="fmc-group">' +
+            '<span class="fmc-item fmc-floor">F ' + floorVal + '</span>' +
+            '<span class="fmc-item fmc-mid">M ' + midVal + '</span>' +
+            '<span class="fmc-item fmc-ceiling">C ' + ceilVal + '</span>' +
+            '</span>';
+          var detailsBtn = '<button class="mini details" data-name="'+_escapeHtml(p.name)+'" title="Details">&rsaquo;</button>';
           var nameBtn = '<button class="name-link" data-name="'+_escapeHtml(p.name)+'">'+_escapeHtml(p.name)+'</button>';
           return '<div class="player" data-idx="'+idx+'" data-name="'+_escapeHtml(p.name.toLowerCase())+'">'
-            + '<span class="left"><span class="dot" style="background:'+col+'"></span>'+slot+nameBtn+'</span>'
-            + '<span class="right">'+nums+' '+detailsBtn+'</span>'
+            + '<span class="left"><span class="dot" style="background:'+col+'"></span>'+slot+nameBtn+(coverageHtml || '')+'</span>'
+            + '<span class="right">'+statsHtml+' '+detailsBtn+'</span>'
             + '</div>';
         }).join('');
         var svg = document.getElementById('cmpSvg');
@@ -291,6 +422,207 @@ function openCompareCurves(week) {
     });
   } catch (e) { try { hideDetails(); } catch(_){} }
 }
+function openBookCoverage(initialWeek) {
+  var week = initialWeek === 'next' ? 'next' : 'this';
+  try {
+    showDetails('Book Coverage', '<div class="status"><span class="spinner"></span> Loading coverage...</div>');
+    var body = document.getElementById('detailsBody');
+    var title = document.getElementById('detailsTitle');
+    if (!body) { return; }
+    var cache = {};
+    var currentWeek = week;
+    body.innerHTML = [
+      '<div class="coverage-grid">',
+        '<div class="details-section coverage-controls-section">',
+          '<div class="coverage-controls">',
+            '<div class="coverage-week-group" role="group" aria-label="Select week">',
+              '<button class="pill coverage-week" data-week="this">This Week</button>',
+              '<button class="pill coverage-week" data-week="next">Next Week</button>',
+            '</div>',
+            '<input type="search" class="coverage-search cmp-search" placeholder="Filter players or teams" />',
+            '<div class="coverage-legend">',
+              '<span class="legend-item"><span class="legend-swatch swatch-none"></span>0 books</span>',
+              '<span class="legend-item"><span class="legend-swatch swatch-low"></span>1-2 books</span>',
+              '<span class="legend-item"><span class="legend-swatch swatch-high"></span>3+ books</span>',
+              '<span class="legend-item"><span class="legend-swatch swatch-vital"></span>Vital market</span>',
+              '<span class="legend-item"><span class="legend-swatch swatch-secondary"></span>Secondary market</span>',
+            '</div>',
+          '</div>',
+        '</div>',
+        '<div class="details-section coverage-table-section">',
+          '<div id="coverageTableWrap" class="coverage-table-wrap">',
+            '<div class="status"><span class="spinner"></span> Loading coverage...</div>',
+          '</div>',
+        '</div>',
+      '</div>'
+    ].join('');
+    var searchInput = body.querySelector('.coverage-search');
+    var weekButtons = Array.from(body.querySelectorAll('.coverage-week'));
+
+    function updateTitle(w) {
+      if (!title) { return; }
+      try { title.textContent = 'Book Coverage - ' + (w === 'next' ? 'Next Week' : 'This Week'); } catch (err) { /* ignore */ }
+    }
+
+    function setActiveWeek(w) {
+      weekButtons.forEach(function(btn) {
+        var val = btn.getAttribute('data-week') || 'this';
+        btn.classList.toggle('pill-active', val === w);
+      });
+    }
+
+    function coverageColor(count, max) {
+      if (!count) { return { bg: '#541616', fg: '#fca5a5' }; }
+      var denom = max > 0 ? max : 1;
+      var ratio = Math.min(1, count / denom);
+      if (ratio <= 0.34) {
+        return { bg: '#92400e', fg: '#fef3c7' };
+      }
+      var hue = 110 + Math.round(20 * (ratio - 0.34) / 0.66);
+      var light = 28 + (ratio * 20);
+      return { bg: 'hsl(' + hue + ', 70%, ' + light.toFixed(1) + '%)', fg: '#052e16' };
+    }
+
+    function normalizeMarkets(list) {
+      return _mergeCoverageOrder(Array.isArray(list) ? list : []);
+    }
+
+    function render(w) {
+      var data = cache[w] || {};
+      var wrap = body.querySelector('#coverageTableWrap');
+      if (!wrap) { return; }
+      var coverage = data.coverage || {};
+      var keys = normalizeMarkets(coverage.markets);
+      var rows = Array.isArray(coverage.rows) ? coverage.rows.slice() : [];
+      rows.sort(function(a, b) {
+        var bt = (b && (b.total_books || 0)) || 0;
+        var at = (a && (a.total_books || 0)) || 0;
+        if (bt !== at) { return bt - at; }
+        return String((a && a.name) || '').localeCompare(String((b && b.name) || ''));
+      });
+      var term = (searchInput && searchInput.value || '').trim().toLowerCase();
+      var filtered = rows.filter(function(row) {
+        if (!term) { return true; }
+        var name = String(row && row.name || '').toLowerCase();
+        var pos = String(row && row.pos || '').toLowerCase();
+        var team = String(row && row.team || '').toLowerCase();
+        return name.includes(term) || pos.includes(term) || team.includes(term);
+      });
+      var maxCount = 0;
+      filtered.forEach(function(row) {
+        var markets = row && row.markets || {};
+        keys.forEach(function(key) {
+          var val = parseInt(markets[key] || 0, 10) || 0;
+          if (val > maxCount) { maxCount = val; }
+        });
+      });
+      if (!filtered.length) {
+        wrap.innerHTML = '<div class="status">No players match the current filters.</div>';
+        return;
+      }
+      var header = [
+        '<th>Player</th>',
+        '<th>Pos</th>',
+        '<th>Team</th>'
+      ];
+      keys.forEach(function(key) {
+        header.push('<th data-market="' + key + '">' + (COVERAGE_MARKET_LABELS[key] || key) + '</th>');
+      });
+      header.push('<th>Total</th>');
+      var bodyRows = filtered.map(function(row) {
+        var markets = row && row.markets || {};
+        var total = 0;
+        var vitalSet = new Set();
+        (Array.isArray(row && row.vital_markets) ? row.vital_markets : []).forEach(function(k){ vitalSet.add(String(k)); });
+        var minorSet = new Set();
+        (Array.isArray(row && row.minor_markets) ? row.minor_markets : []).forEach(function(k){ minorSet.add(String(k)); });
+        var cells = keys.map(function(key) {
+          var keyStr = String(key);
+          var count = parseInt(markets[key] || 0, 10) || 0;
+          total += count;
+          var colors = coverageColor(count, maxCount || count || 1);
+          var importanceClass = '';
+          var importanceTag = '';
+          if (vitalSet.has(keyStr)) { importanceClass = ' cov-vital'; importanceTag = ' [vital]'; }
+          else if (minorSet.has(keyStr)) { importanceClass = ' cov-minor'; importanceTag = ' [secondary]'; }
+          var titleTxt = (COVERAGE_MARKET_LABELS[key] || key) + ': ' + count + ' book' + (count === 1 ? '' : 's') + importanceTag;
+          return '<td class="coverage-cell' + importanceClass + '" data-market="' + key + '" title="' + titleTxt + '" style="background:' + colors.bg + '; color:' + colors.fg + ';">' + count + '</td>';
+        });
+        var rowClasses = ['coverage-row'];
+        if (row && row.incomplete) { rowClasses.push('coverage-row-incomplete'); }
+        if (vitalSet.size) { rowClasses.push('coverage-row-vital'); }
+        return '<tr class="' + rowClasses.join(' ') + '"><td title="' + (row && row.team || '') + '">' + (row && row.name || '-') + '</td><td>' + (row && row.pos || '-') + '</td><td>' + (row && row.team || '-') + '</td>' + cells.join('') + '<td>' + total + '</td></tr>';
+      });
+      var tableHtml = [
+        '<table class="coverage-table">',
+          '<thead><tr>' + header.join('') + '</tr></thead>',
+          '<tbody>' + bodyRows.join('') + '</tbody>',
+        '</table>'
+      ].join('');
+      wrap.innerHTML = tableHtml;
+      var tableEl = wrap.querySelector('table');
+      if (tableEl && typeof enableTableSort === 'function') { enableTableSort(tableEl); }
+    }
+
+    function fetchWeek(w) {
+      var wrap = body.querySelector('#coverageTableWrap');
+      if (!wrap) { return; }
+      setActiveWeek(w);
+      updateTitle(w);
+      if (cache[w]) {
+        render(w);
+        try { updateRateLimitDisplays(cache[w] || {}); } catch (err) { /* ignore */ }
+        try { history.replaceState({ detailsOpen: true, modal: 'book-coverage', week: w }, '', '#details'); } catch (err) { /* ignore */ }
+        return;
+      }
+      wrap.innerHTML = '<div class="status"><span class="spinner"></span> Loading coverage...</div>';
+      var params = {
+        username: (typeof val === 'function' ? (val('username') || 'wesnicol') : 'wesnicol'),
+        season: (typeof val === 'function' ? (val('season') || '2025') : '2025'),
+        week: w,
+        mode: (typeof getDataMode === 'function' ? getDataMode() : 'auto'),
+        model: (typeof getModel === 'function' ? getModel() : 'const')
+      };
+      fetchJSON(apiUrl('/book-coverage', params)).then(function(res) {
+        if (!res || !res.ok) {
+          wrap.innerHTML = '<div class="status">Failed to load coverage.</div>';
+          return;
+        }
+        cache[w] = res.data || {};
+        try { updateRateLimitDisplays(res.data || {}); } catch (err) { /* ignore */ }
+        render(w);
+        try { history.replaceState({ detailsOpen: true, modal: 'book-coverage', week: w }, '', '#details'); } catch (err) { /* ignore */ }
+      }).catch(function(err) {
+        console.error('[coverage] fetch error', err);
+        wrap.innerHTML = '<div class="status">Failed to load coverage.</div>';
+      });
+    }
+
+    weekButtons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var targetWeek = btn.getAttribute('data-week') || 'this';
+        if (targetWeek === currentWeek) { return; }
+        currentWeek = targetWeek;
+        fetchWeek(currentWeek);
+      });
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        render(currentWeek);
+      });
+    }
+
+    setActiveWeek(currentWeek);
+    updateTitle(currentWeek);
+    fetchWeek(currentWeek);
+    try { history.replaceState({ detailsOpen: true, modal: 'book-coverage', week: currentWeek }, '', '#details'); } catch (err) { /* ignore */ }
+  } catch (err) {
+    console.error('[coverage] render error', err);
+    try { hideDetails(); } catch (_) { /* ignore */ }
+  }
+}
+
 function _formatISOToLocal(iso) {
   try {
     var d = new Date(iso);
@@ -1237,6 +1569,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if (st && st.modal === 'player') { try { openPlayerDetails(st.name, st.week || 'this', { noHistory: true }); return; } catch(_) {}
       }
       if (st && st.modal === 'compare') { try { openCompareCurves(st.week || 'this', { noHistory: true }); return; } catch(_) {}
+      if (st && st.modal === 'book-coverage') { try { openBookCoverage(st.week || 'this'); return; } catch(_) {} }
       }
       var overlay = document.getElementById('detailsOverlay');
       if (overlay && !overlay.classList.contains('hidden')) hideDetails();
