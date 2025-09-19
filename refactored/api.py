@@ -19,7 +19,7 @@ from typing import Callable
 
 from . import ratelimit
 from . import services  # for detail endpoints
-from .services import compute_projections, build_lineup, build_lineup_diffs, list_defenses, build_dashboard
+from .services import compute_projections, compute_book_coverage, build_lineup, build_lineup_diffs, list_defenses, build_dashboard
 
 # Module-level debug flag (defaults to False). Can be enabled via --debug CLI.
 _DEBUG_FLAG = False
@@ -137,6 +137,21 @@ def application(environ, start_response):
             _dprint(f"[api] projections user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh}")
             data = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model)
             _dprint(f"[api] projections done players={len(data.get('players', []))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, "200 OK", data)
+
+        if path == "/book-coverage":
+            username = q("username", "wesnicol")
+            season = q("season", "2025")
+            week = q("week", "this")
+            region = q("region", "us")
+            model = q("model", "const")
+            fresh = q("fresh", "0") in ("1", "true", "True")
+            mode = q("mode", "auto")
+            t0 = time.time()
+            _dprint(f"[api] book-coverage user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh}")
+            data = compute_book_coverage(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model)
+            rows = len((data.get('coverage') or {}).get('rows', []))
+            _dprint(f"[api] book-coverage done rows={rows} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
         if path == "/lineup":

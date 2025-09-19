@@ -65,6 +65,31 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(payload['players'][0]['name'], 'Test Player')
         self.assertIn('ratelimit', payload)
 
+    @patch('refactored.api.compute_book_coverage')
+    def test_book_coverage(self, mock_cov):
+        mock_cov.return_value = {
+            'week': 'this',
+            'coverage': {
+                'markets': ['player_anytime_td'],
+                'rows': [
+                    {
+                        'name': 'Test Player',
+                        'pos': 'WR',
+                        'team': 'BUF',
+                        'alias': 'test',
+                        'markets': {'player_anytime_td': 3},
+                        'total_books': 3,
+                        'incomplete': False,
+                    }
+                ],
+            },
+            'ratelimit': 'remaining=88%',
+        }
+        status, headers, payload = wsgi_get('/book-coverage?username=u&season=2025&week=this')
+        self.assertTrue(status.startswith('200'))
+        self.assertIn('coverage', payload)
+        self.assertIsInstance(payload.get('coverage', {}).get('rows', []), list)
+
     @patch('refactored.api.build_lineup')
     @patch('refactored.api.compute_projections')
     def test_lineup(self, mock_proj, mock_build):
