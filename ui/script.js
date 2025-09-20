@@ -50,58 +50,77 @@ function computeLineupFromPlayers(players, target) {
   for (const p of (players || [])) {
     if (buckets[p.pos]) buckets[p.pos].push(p);
   }
+  const targetKey = target || 'mid';
   const by = (t) => (a, b) => Number(b[t] || 0) - Number(a[t] || 0);
-  Object.keys(buckets).forEach(pos => buckets[pos].sort(by(target)));
-  const nameKey = (s) => String(s||'').toLowerCase().replace(/[\.'`-]/g,'').replace(/\s+/g,' ').trim();
+  Object.keys(buckets).forEach(pos => buckets[pos].sort(by(targetKey)));
+  const nameKey = (s) => String(s || '').toLowerCase().replace(/[\.'`-]/g, '').replace(/\s+/g, ' ').trim();
   const used = new Set();
-  const take = (pos, n) => {
-    const out = [];
-    for (const p of buckets[pos]) {
-      const key = nameKey(p.name);
-      if (!used.has(key)) { out.push(p); used.add(key); if (out.length === n) break; }
+  const claimFrom = (pos) => {
+    const pool = buckets[pos] || [];
+    for (const player of pool) {
+      const key = nameKey(player.name);
+      if (!used.has(key)) {
+        used.add(key);
+        return player;
+      }
     }
-    return out;
+    return null;
   };
-  const starters = {
-    QB: take('QB', 1),
-    WR: take('WR', 2),
-    RB: take('RB', 2),
-    TE: take('TE', 1)
-  };
-  // FLEX best remaining WR/RB/TE
-  const flexPool = [];
-  for (const pos of ['WR','RB','TE']) {
-    for (const p of buckets[pos]) { const key=nameKey(p.name); if (!used.has(key)) flexPool.push(p); }
-  }
-  flexPool.sort(by(target));
-  const FLEX = flexPool.slice(0, 1);
-  FLEX.forEach(p => used.add(nameKey(p.name)));
-
-  // Compose rows in the required order: QB, WR, WR, RB, RB, TE, FLEX
-  const rows = [];
+  const lineup = [];
   let total = 0;
-  const add = (slot, p) => {
-    const pts = Number(p[target] || 0);
-    total += pts;
-    rows.push({ slot, name: p.name, pos: p.pos, floor: Number(p.floor||0), mid: Number(p.mid||0), ceiling: Number(p.ceiling||0) });
+  const addRow = (slot, player) => {
+    if (!player) return;
+    total += Number(player[targetKey] || 0);
+    lineup.push({
+      slot,
+      name: player.name,
+      pos: player.pos,
+      floor: Number(player.floor || 0),
+      mid: Number(player.mid || 0),
+      ceiling: Number(player.ceiling || 0)
+    });
   };
-  starters.QB.forEach(p => add('QB', p));
-  if (starters.WR[0]) add('WR', starters.WR[0]);
-  if (starters.WR[1]) add('WR', starters.WR[1]);
-  if (starters.RB[0]) add('RB', starters.RB[0]);
-  if (starters.RB[1]) add('RB', starters.RB[1]);
-  starters.TE.forEach(p => add('TE', p));
-  FLEX.forEach(p => add('FLEX', p));
-
-  // Bench: include everyone else, even zeros
+  addRow('QB', claimFrom('QB'));
+  addRow('WR1', claimFrom('WR'));
+  addRow('WR2', claimFrom('WR'));
+  addRow('RB1', claimFrom('RB'));
+  addRow('RB2', claimFrom('RB'));
+  const flexCandidate = (() => {
+    let best = null;
+    for (const pos of ['WR', 'RB', 'TE']) {
+      const pool = buckets[pos] || [];
+      for (const player of pool) {
+        const key = nameKey(player.name);
+        if (used.has(key)) continue;
+        if (!best || Number(player[targetKey] || 0) > Number(best[targetKey] || 0)) {
+          best = player;
+        }
+      }
+    }
+    if (best) used.add(nameKey(best.name));
+    return best;
+  })();
+  addRow('FLEX', flexCandidate);
   const bench = [];
-  for (const pos of ['QB','WR','RB','TE']) {
-    for (const p of buckets[pos]) { const key=nameKey(p.name); if (!used.has(key)) bench.push(p); }
+  for (const player of (players || [])) {
+    const key = nameKey(player.name);
+    if (!used.has(key)) bench.push(player);
   }
-  bench.sort(by(target));
-  bench.forEach(p => rows.push({ slot: 'BENCH', name: p.name, pos: p.pos, floor: Number(p.floor||0), mid: Number(p.mid||0), ceiling: Number(p.ceiling||0) }));
-  return { target, lineup: rows, total_points: Number(total.toFixed(2)) };
+  bench.sort(by(targetKey));
+  bench.forEach(player => {
+    lineup.push({
+      slot: 'BENCH',
+      name: player.name,
+      pos: player.pos,
+      floor: Number(player.floor || 0),
+      mid: Number(player.mid || 0),
+      ceiling: Number(player.ceiling || 0)
+    });
+  });
+  return { target: targetKey, lineup, total_points: Number(total.toFixed(2)) };
 }
+
+
 
 function renderLineupFromPlayers(week) {
   const players = appCache.lineupPlayers[week] || [];

@@ -280,7 +280,8 @@ function openCompareCurves(week) {
         if ((pos==='ALL' || pos==='LINEUP') && typeof computeLineupFromPlayers==='function'){
           try { var lp = computeLineupFromPlayers(all, curTarget||'mid'); (lp.lineup||[]).forEach(function(r){ if (r.slot!=='BENCH') slotByName[r.name]=r.slot; }); pool = all.filter(function(p){ return !!slotByName[p.name]; }); } catch(e){}
         }
-        pool.sort(function(a,b){ return Number(b.mid||0) - Number(a.mid||0); });
+        var targetKey = curTarget || 'mid';
+        pool.sort(function(a,b){ return Number(b[targetKey]||0) - Number(a[targetKey]||0); });
         pool = pool.slice(0, 20);
         var z85=1.036;
         var minX = (window && window.GLOBAL_FP_RANGE ? Number(window.GLOBAL_FP_RANGE.minX)||0 : 0);
