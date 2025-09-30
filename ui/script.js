@@ -201,9 +201,9 @@ async function fetchJSON(url) {
 }
 
 function apiUrl(path, params = {}) {
-  const base = val('apiBase') || 'http://127.0.0.1:8000';
   const q = new URLSearchParams(params);
-  return `${base}${path}?${q.toString()}`;
+  const query = q.toString();
+  return `${path}${query ? `?${query}` : ''}`;
 }
 
 function getDataMode() {
@@ -512,7 +512,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function saveSettings() {
   try {
     const data = {
-      apiBase: ($('apiBase')||{}).value || '',
       username: ($('username')||{}).value || '',
       season: ($('season')||{}).value || '',
       dataMode: (document.querySelector('input[name="dataMode"]:checked')||{}).value || 'auto',
@@ -527,7 +526,6 @@ function loadSettings() {
     const raw = localStorage.getItem('ofdash.settings');
     if (!raw) return;
     const s = JSON.parse(raw);
-    if (s.apiBase && $('apiBase')) $('apiBase').value = s.apiBase;
     if (s.username && $('username')) $('username').value = s.username;
     if (s.season && $('season')) $('season').value = s.season;
     if (s.dataMode) {
@@ -542,7 +540,7 @@ function loadSettings() {
 }
 
 function attachSettingsListeners() {
-  ['apiBase','username','season'].forEach(id => { const el=$(id); if (el) el.addEventListener('change', saveSettings); });
+  ['username','season'].forEach(id => { const el=$(id); if (el) el.addEventListener('change', saveSettings); });
   document.querySelectorAll('input[name="dataMode"]').forEach(r => r.addEventListener('change', saveSettings));
   const ms = document.getElementById('modelSelect'); if (ms) ms.addEventListener('change', () => { try { const mf = document.getElementById('modelSelectFloating'); if (mf) mf.value = ms.value; saveSettings(); refreshAll(); } catch (e) {} });
   const mf = document.getElementById('modelSelectFloating'); if (mf) mf.addEventListener('change', () => { try { const ms2 = document.getElementById('modelSelect'); if (ms2) ms2.value = mf.value; saveSettings(); refreshAll(); } catch (e) {} });
