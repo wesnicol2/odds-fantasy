@@ -1,0 +1,10 @@
+services:
+  odds-fantasy:
+    build: .
+    image: odds-fantasy:latest
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    command: ['python', 'main.py']
+    restart: unless-stopped
