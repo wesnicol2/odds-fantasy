@@ -81,10 +81,11 @@ function computeLineupFromPlayers(players, target) {
     });
   };
   addRow('QB', claimFrom('QB'));
-  addRow('WR1', claimFrom('WR'));
-  addRow('WR2', claimFrom('WR'));
   addRow('RB1', claimFrom('RB'));
   addRow('RB2', claimFrom('RB'));
+  addRow('WR1', claimFrom('WR'));
+  addRow('WR2', claimFrom('WR'));
+  addRow('TE1', claimFrom('TE'));
   const flexCandidate = (() => {
     let best = null;
     for (const pos of ['WR', 'RB', 'TE']) {
@@ -574,5 +575,4 @@ function enableTableSort(table) {
     });
   } catch (e) { /* ignore */ }
 }
-
 
