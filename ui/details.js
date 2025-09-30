@@ -280,8 +280,24 @@ function openCompareCurves(week) {
         if ((pos==='ALL' || pos==='LINEUP') && typeof computeLineupFromPlayers==='function'){
           try { var lp = computeLineupFromPlayers(all, curTarget||'mid'); (lp.lineup||[]).forEach(function(r){ if (r.slot!=='BENCH') slotByName[r.name]=r.slot; }); pool = all.filter(function(p){ return !!slotByName[p.name]; }); } catch(e){}
         }
-        pool.sort(function(a,b){ return Number(b.mid||0) - Number(a.mid||0); });
-        pool = pool.slice(0, 20);
+        var targetKey = curTarget || 'mid';
+        if (pos === 'LINEUP') {
+          var slotPriority = ['QB','RB1','RB2','RB','WR1','WR2','WR','TE1','TE','FLEX'];
+          var slotRank = {};
+          slotPriority.forEach(function(slot, idx){ if (slotRank[slot] == null) { slotRank[slot] = idx; } });
+          pool.sort(function(a,b){
+            var slotA = slotByName[a.name] || '';
+            var slotB = slotByName[b.name] || '';
+            var rankA = Object.prototype.hasOwnProperty.call(slotRank, slotA) ? slotRank[slotA] : 999;
+            var rankB = Object.prototype.hasOwnProperty.call(slotRank, slotB) ? slotRank[slotB] : 999;
+            if (rankA !== rankB) { return rankA - rankB; }
+            if (slotA !== slotB) { return slotA.localeCompare(slotB); }
+            return a.name.localeCompare(b.name);
+          });
+        } else {
+          pool.sort(function(a,b){ return Number(b[targetKey]||0) - Number(a[targetKey]||0); });
+          pool = pool.slice(0, 20);
+        }
         var z85=1.036;
         var minX = (window && window.GLOBAL_FP_RANGE ? Number(window.GLOBAL_FP_RANGE.minX)||0 : 0);
         var maxX = (window && window.GLOBAL_FP_RANGE ? Number(window.GLOBAL_FP_RANGE.maxX)||1 : 1);
@@ -1911,5 +1927,4 @@ function _attachStatVisualHandlers(root) {
     });
   } catch (e) { /* ignore */ }
 }
-
 
