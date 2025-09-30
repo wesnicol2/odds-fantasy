@@ -334,20 +334,24 @@ function openCompareCurves(week) {
             };
           }
           var coverageHtml = buildCoverageMiniDots(coverageRow, coverageOrder);
-          var slot = slotByName[p.name] ? ('<span class="pill" title="Lineup slot">'+slotByName[p.name]+'</span> ') : '';
+          var slotLabel = slotByName[p.name] ? ('<span class="pill lineup-slot" title="Lineup slot">'+slotByName[p.name]+'</span>') : '';
           var floorVal = Number(p.floor || 0).toFixed(1);
           var midVal = Number(p.mid || 0).toFixed(1);
           var ceilVal = Number(p.ceiling || 0).toFixed(1);
-          var statsHtml = '<span class="fmc-group">' +
-            '<span class="fmc-item fmc-floor">F ' + floorVal + '</span>' +
-            '<span class="fmc-item fmc-mid">M ' + midVal + '</span>' +
+          var statsHtml = '<div class="player-fmc">' +
             '<span class="fmc-item fmc-ceiling">C ' + ceilVal + '</span>' +
-            '</span>';
+            '<span class="fmc-item fmc-mid">M ' + midVal + '</span>' +
+            '<span class="fmc-item fmc-floor">F ' + floorVal + '</span>' +
+            '</div>';
+          var coverageBlock = coverageHtml ? '<div class="player-coverage">'+coverageHtml+'</div>' : '';
           var detailsBtn = '<button class="mini details" data-name="'+_escapeHtml(p.name)+'" title="Details">&rsaquo;</button>';
           var nameBtn = '<button class="name-link" data-name="'+_escapeHtml(p.name)+'">'+_escapeHtml(p.name)+'</button>';
           return '<div class="player" data-idx="'+idx+'" data-name="'+_escapeHtml(p.name.toLowerCase())+'">'
-            + '<span class="left"><span class="dot" style="background:'+col+'"></span>'+slot+nameBtn+(coverageHtml || '')+'</span>'
-            + '<span class="right">'+statsHtml+' '+detailsBtn+'</span>'
+            + '<div class="player-header">'
+              + '<div class="player-title"><span class="dot" style="background:'+col+'"></span>' + (slotLabel ? slotLabel + ' ' : '') + nameBtn + '</div>'
+              + '<div class="player-actions">'+detailsBtn+'</div>'
+            + '</div>'
+            + '<div class="player-meta">' + coverageBlock + statsHtml + '</div>'
             + '</div>';
         }).join('');
         var svg = document.getElementById('cmpSvg');
