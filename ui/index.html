@@ -8,130 +8,116 @@
 </head>
 <body>
   <header>
-    <h1>Odds Fantasy Dashboard</h1>
+    <h1>Odds Fantasy</h1>
     <div class="controls">
       <span id="leagueIndicator" class="status hidden"></span>
-      <button id="btnChangeLeague" type="button">League / Team</button>
-      <label title="Only used when no league is configured -- click 'League / Team' above instead">
-        Username:
-        <input id="username" type="text" value="wesnicol" />
-      </label>
-      <label title="Only used when no league is configured -- click 'League / Team' above instead">
-        Season:
-        <input id="season" type="text" value="2025" />
-      </label>
-      <span>Data:</span>
-      <label><input type="radio" name="dataMode" value="auto" checked /> Auto (TTL)</label>
-      <label><input type="radio" name="dataMode" value="cache" /> Cache</label>
-      <label><input type="radio" name="dataMode" value="fresh" /> Fresh</label>
-      <label>
-        Model:
-        <select id="modelSelect">
-          <option value="const" selected>Constantini</option>
-          <option value="puelz">Puelz</option>
-          <option value="angelini">Angelini</option>
-          <option value="baseline">Baseline</option>
-        </select>
-      </label>
-      <span id="pingStatus" class="status"></span>
+      <button id="btnChangeLeague" type="button">Change</button>
       <span id="rlHeader" class="status"></span>
       <span id="netSpin" class="spinner hidden" title="Network activity"></span>
+      <button id="btnSettings" type="button" aria-label="Settings" title="Settings">&#9881;</button>
     </div>
   </header>
 
-  <main>
-    <section class="coverage-entry">
-      <h2>Book Coverage</h2>
-      <div class="btn-row">
-        <button id="btnBookCoverage">Show Book Coverage</button>
-      </div>
-    </section>
-
-    <section>
-      <h2>Lineups - This Week</h2><div class="btn-row"><button data-week="this" class="btn-compare-curves">Show Lineup</button></div><div id="lineup-this" class="results"></div>
-    </section>
-
-    <section>
-      <h2>Lineups - Next Week</h2><div class="btn-row"><button data-week="next" class="btn-compare-curves">Show Lineup</button></div><div id="lineup-next" class="results"></div>
-    </section>
-
-    <section>
-      <h2>Defenses - This Week</h2>
-      <div class="btn-row">
-        <button data-week="this" class="btn-defenses">Load Defenses (Owned + Available)</button>
-      </div>
-      <div id="defenses-this" class="results"></div>
-    </section>
-
-    <section>
-      <h2>Defenses - Next Week</h2>
-      <div class="btn-row">
-        <button data-week="next" class="btn-defenses">Load Defenses (Owned + Available)</button>
-      </div>
-      <div id="defenses-next" class="results"></div>
-    </section>
-
-    <section>
-      <h2>Raw Projections (Debug)</h2>
-      <div class="btn-row">
-        <button id="btnProjThis">Fetch Projections (This Week)</button>
-        <button id="btnProjNext">Fetch Projections (Next Week)</button>
-      </div>
-      <pre id="projectionsDebug" class="debug"></pre>
-    </section>
-
-    <section>
-      <h2>Draft Board (Pre-Season / All Players)</h2>
-      <p class="status">Not scoped to your roster -- every active QB/RB/WR/TE
-      on a team playing the selected week. "Week 1" / "Week 2" are anchored to
-      the earliest games found in the odds feed, not today's date (a draft
-      happens once, before the season, so "today" isn't a useful anchor the
-      way it is for the weekly lineup views below) -- the loaded date range
-      is shown once you load a week. This is a single week's market-implied
-      outlook, not a full-season projection: a real, useful signal for
-      role/opportunity, but not a replacement for season-long ADP/rankings.
-      Uses a smaller set of markets than the weekly views to limit Odds API
-      usage; only fetch this when you actually need it (see CONTRIBUTING.md).</p>
-      <div class="btn-row">
-        <button data-week="this" class="btn-draft-board">Load Week 1</button>
-        <button data-week="next" class="btn-draft-board">Load Week 2</button>
-      </div>
-      <div id="draft-board" class="results"></div>
-    </section>
-
-    <section>
-      <h2>Players - This Week</h2>
-      <div class="btn-row">
-        <button data-week="this" class="btn-players">Show Players</button>
-      </div>
-      <div id="players-this" class="results"></div>
-    </section>
-
-    <section>
-      <h2>Players - Next Week</h2>
-      <div class="btn-row">
-        <button data-week="next" class="btn-players">Show Players</button>
-      </div>
-      <div id="players-next" class="results"></div>
-    </section>
-  </main>
-
-  <footer>
-    <span id="rateLimit" class="status"></span>
-  </footer>
-
-  <!-- Floating model selector (always visible) -->
-  <div id="floatingModel" class="floating-controls" aria-label="Model selector" title="Choose probability model">
+  <!-- Settings popover: data mode, probability model, and the username/season
+       fallback identity path (only relevant if you skip league setup). -->
+  <div id="settingsPanel" class="settings-panel hidden">
     <label>
-      <span class="fm-label">Model</span>
-      <select id="modelSelectFloating">
+      <span>Data</span>
+      <select id="dataModeSelect">
+        <option value="auto" selected>Auto (TTL cache)</option>
+        <option value="cache">Cache only</option>
+        <option value="fresh">Force fresh</option>
+      </select>
+    </label>
+    <label>
+      <span>Model</span>
+      <select id="modelSelect">
         <option value="const" selected>Constantini</option>
         <option value="puelz">Puelz</option>
         <option value="angelini">Angelini</option>
         <option value="baseline">Baseline</option>
       </select>
     </label>
+    <div class="advanced-fallback">
+      <button id="btnShowFallbackId" type="button">Use username/season instead of a league</button>
+      <div id="fallbackIdFields" class="hidden">
+        <label>
+          <span>Username</span>
+          <input id="username" type="text" value="wesnicol" />
+        </label>
+        <label>
+          <span>Season</span>
+          <input id="season" type="text" value="" />
+        </label>
+        <p class="status">Only used when no league is configured -- click "Change" above to switch back to league mode.</p>
+      </div>
+    </div>
   </div>
+
+  <main>
+    <div class="btn-row mode-switch">
+      <button id="modeDraftBtn" class="toggle-btn" data-mode="draft">Draft Board</button>
+      <button id="modeWeeklyBtn" class="toggle-btn toggle-active" data-mode="weekly">Weekly</button>
+    </div>
+
+    <section id="panel-draft" class="hidden">
+      <p class="status">Every active QB/RB/WR/TE on a team playing the
+      selected week -- not scoped to your roster. "Week 1"/"Week 2" are
+      anchored to the earliest games in the odds feed, not today's date. A
+      single week's market-implied outlook, not a season-long projection.</p>
+      <div class="btn-row">
+        <button data-week="this" class="toggle-btn week-toggle toggle-active">Week 1</button>
+        <button data-week="next" class="toggle-btn week-toggle">Week 2</button>
+        <select id="draftPosFilter">
+          <option value="">All positions</option>
+          <option value="QB">QB</option>
+          <option value="RB">RB</option>
+          <option value="WR">WR</option>
+          <option value="TE">TE</option>
+        </select>
+      </div>
+      <div id="draft-board" class="results"></div>
+    </section>
+
+    <section id="panel-weekly">
+      <div class="btn-row">
+        <button data-week="this" class="toggle-btn week-toggle toggle-active">This Week</button>
+        <button data-week="next" class="toggle-btn week-toggle">Next Week</button>
+      </div>
+      <div class="btn-row">
+        <button data-view="lineup" class="toggle-btn view-toggle toggle-active">Lineup</button>
+        <button data-view="players" class="toggle-btn view-toggle">All Players</button>
+        <button data-view="defenses" class="toggle-btn view-toggle">Defenses</button>
+      </div>
+      <div class="btn-row" id="targetToggleRow">
+        <button data-target="floor" class="toggle-btn target-toggle">Floor</button>
+        <button data-target="mid" class="toggle-btn target-toggle toggle-active">Mid</button>
+        <button data-target="ceiling" class="toggle-btn target-toggle">Ceiling</button>
+      </div>
+      <div id="weekly-results" class="results"></div>
+    </section>
+
+    <div class="btn-row">
+      <button id="btnToggleAdvanced" type="button">Show Advanced Tools</button>
+    </div>
+    <section id="panel-advanced" class="hidden">
+      <h2>Advanced</h2>
+      <div class="btn-row">
+        <button id="btnBookCoverage">Book Coverage</button>
+        <button data-week="this" class="btn-compare-curves">Compare Curves (This Week)</button>
+        <button data-week="next" class="btn-compare-curves">Compare Curves (Next Week)</button>
+      </div>
+      <div class="btn-row">
+        <button id="btnProjThis">Raw Projections (This Week)</button>
+        <button id="btnProjNext">Raw Projections (Next Week)</button>
+      </div>
+      <pre id="projectionsDebug" class="debug"></pre>
+    </section>
+  </main>
+
+  <footer>
+    <span id="rateLimit" class="status"></span>
+  </footer>
 
   <!-- Global loading overlay -->
   <div id="globalLoading" class="overlay hidden">
@@ -141,7 +127,6 @@
     </div>
   </div>
 
-  
   <!-- League/team setup overlay -->
   <div id="leagueSetupOverlay" class="overlay hidden">
     <div class="overlay-box details-box">
@@ -154,7 +139,6 @@
           <p>Enter your Sleeper username to find your leagues.</p>
           <div class="btn-row">
             <input id="leagueUsernameInput" type="text" placeholder="Sleeper username" style="min-width:200px;" />
-            <input id="leagueSeasonInput" type="text" placeholder="Season" style="width:90px;" title="NFL season year, e.g. 2026" />
             <button id="leagueUserContinue" type="button">Continue</button>
           </div>
           <div id="leagueUserError" class="status" style="color:#f87171;"></div>
@@ -209,11 +193,4 @@
 <script src="/ui/script.js"></script>
   <script src="/ui/details.js"></script>
 </body>
-  
 </html>
-
-
-
-
-
-

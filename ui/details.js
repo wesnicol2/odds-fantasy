@@ -1614,63 +1614,49 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
 
-  function attachNameHandler(containerId, nameColIndex, week) {
-    var el = document.getElementById(containerId); if (!el) return;
-    el.addEventListener('click', function(e){
-      var td = e.target.closest('td'); if (!td) return;
-      if (td.cellIndex !== nameColIndex) return;
-      var nameEl = td.querySelector('.player-name'); var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : (td.textContent || '').trim(); if (!name) return;
-      openPlayerDetails(name, week);
-    });
-  }
-  attachNameHandler('lineup-this', 1, 'this');
-  attachNameHandler('lineup-next', 1, 'next');
-  attachNameHandler('players-this', 0, 'this');
-  attachNameHandler('players-next', 0, 'next');
-
-  // Also allow clicking Floor/Mid/Ceiling cells to open player details
-  function attachPlayerStatHandler(containerId, week, cols) {
-    var el = document.getElementById(containerId); if (!el) return;
-    el.addEventListener('click', function(e){
-      var td = e.target.closest('td'); if (!td) return;
-      if (!cols.includes(td.cellIndex)) return;
-      // Find the name cell in the same row depending on table layout
-      var tr = td.parentElement; if (!tr) return;
-      // Try typical layouts: lineup: name at index 1; players: name at index 0
-      var nameCell = tr.cells[1] || tr.cells[0]; var nameEl = nameCell ? nameCell.querySelector('.player-name') : null; var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : ((nameCell && nameCell.textContent) || '').trim(); if (!name) return;
-      // Determine week from containerId suffix
-      openPlayerDetails(name, week);
-    });
-  }
-  // lineup tables: columns [3,4,5] ; players tables: [2,3,4]
-  attachPlayerStatHandler('lineup-this', 'this', [3,4,5]);
-  attachPlayerStatHandler('lineup-next', 'next', [3,4,5]);
-  attachPlayerStatHandler('players-this', 'this', [2,3,4]);
-  attachPlayerStatHandler('players-next', 'next', [2,3,4]);
-
-  function attachDefenseHandler(containerId, week) {
+  // The main UI now has ONE results container per panel (#weekly-results,
+  // shared across the Lineup/All Players/Defenses views; #draft-board) that
+  // gets re-rendered in place as the week/view toggles change, instead of
+  // one static container per week. So rather than binding a handler per old
+  // per-week container with a hardcoded week, bind one delegated handler per
+  // container that reads the CURRENT week/view from script.js's small
+  // accessor globals at click time. Matching by the `.player-name` marker
+  // (present in every row renderLineup/renderPlayers produce) instead of a
+  // fixed column index also means this doesn't care whether the row it
+  // clicked came from the lineup table or the players table.
+  function attachWeeklyResultsHandler(containerId, getWeek, getView) {
     var el = document.getElementById(containerId); if (!el) return;
     el.addEventListener('click', function(e){
       var td = e.target.closest('td'); if (!td) return;
       var tr = td.parentElement; if (!tr) return;
-      // Allow clicking defense name (col 0) or implied median (col 3)
-      if (td.cellIndex === 0 || td.cellIndex === 3) {
-        var def = (tr.cells[0] && tr.cells[0].textContent || td.textContent || '').trim(); if (!def) return;
+      var week = (typeof getWeek === 'function' && getWeek()) || 'this';
+      var view = (typeof getView === 'function' && getView()) || 'lineup';
+      if (view === 'defenses') {
+        if (td.cellIndex !== 0 && td.cellIndex !== 3) return;
+        var def = (tr.cells[0] && tr.cells[0].textContent || '').trim(); if (!def) return;
+        e.stopPropagation();
         openDefenseDetails(def, week);
+        return;
       }
+      var nameEl = tr.querySelector('.player-name');
+      var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : '';
+      if (!name) return;
+      e.stopPropagation();
+      openPlayerDetails(name, week);
     });
   }
-  attachDefenseHandler('defenses-this', 'this');
-  attachDefenseHandler('defenses-next', 'next');
+  attachWeeklyResultsHandler('weekly-results', window.getCurrentWeeklyWeek, window.getCurrentWeeklyView);
+  attachWeeklyResultsHandler('draft-board', window.getCurrentDraftWeek, function () { return 'lineup'; });
 
-  // Global fallback: clicking any .player-name opens details (covers future tables)
+  // Global fallback for any other .player-name click (e.g. inside the
+  // Compare Curves / Book Coverage modals) that the handler above didn't
+  // already claim via stopPropagation.
   try {
     document.addEventListener('click', function(e){
       var el = e.target.closest('.player-name');
       if (!el) return;
       var name = (el.getAttribute('data-player') || el.textContent || '').trim();
       if (!name) return;
-      // Default to 'this' week when unknown
       openPlayerDetails(name, 'this');
     });
   } catch (e) {}
