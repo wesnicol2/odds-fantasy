@@ -55,13 +55,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model
 - `refactored/`: **This is the real application.** `refactored/api.py` is the
   entrypoint (`CMD` in the `Dockerfile`) — a stdlib WSGI server exposing
   `/health`, `/projections`, `/lineup`, `/lineup/diffs`, `/defenses`,
-  `/player/odds`, `/defense/odds`, and `/dashboard`, and serving the UI under
-  `/` and `/ui/*`. See `refactored/services.py` for the orchestration layer,
-  `refactored/range_model.py` + `refactored/prob_models.py` for how
-  betting-line probabilities become floor/mid/ceiling fantasy point ranges,
-  `refactored/aggregator.py` + `refactored/planner.py` for how odds are
-  fetched/grouped, and `refactored/odds_client.py` + `refactored/ratelimit.py`
-  for caching and Odds-API rate-limit tracking.
+  `/draft-board`, `/player/odds`, `/defense/odds`, and `/dashboard`, and
+  serving the UI under `/` and `/ui/*`. See `refactored/services.py` for the
+  orchestration layer, `refactored/range_model.py` + `refactored/prob_models.py`
+  for how betting-line probabilities become floor/mid/ceiling fantasy point
+  ranges, `refactored/aggregator.py` + `refactored/planner.py` for how odds
+  are fetched/grouped for your roster, `refactored/draft_prep.py` for the
+  same thing but for every player league-wide (pre-draft, before you have a
+  roster to scope to), and `refactored/odds_client.py` +
+  `refactored/ratelimit.py` for caching and Odds-API rate-limit tracking.
 - `config.py`: Loads environment configuration and defines shared constants
   (position→market mappings, Sleeper↔Odds-API name/team mappings, scoring
   key mappings).

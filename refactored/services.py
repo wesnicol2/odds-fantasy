@@ -14,6 +14,7 @@ from .aggregator import aggregate_by_week
 from .range_model import compute_fantasy_range, compute_defense_fantasy_range
 from . import odds_client
 from . import ratelimit
+from . import draft_prep
 from config import SLEEPER_TO_ODDSAPI_TEAM
 from predicted_stats import predict_stats_for_player
 from config import STAT_MARKET_MAPPING_SLEEPER, POSITION_STAT_CONFIG
@@ -461,6 +462,79 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     # store in cache
     _proj_cache[key] = (now, payload)
     compute_projections._cache = _proj_cache
+    return payload
+
+
+def compute_draft_board(
+    username: str,
+    season: str,
+    week: str = "this",
+    region: str = "us",
+    fresh: bool = False,
+    cache_mode: str = "auto",
+    model: str = "const",
+    positions: List[str] | None = None,
+) -> Dict:
+    """Floor/mid/ceiling for every active skill player on every team playing
+    in the target week -- not scoped to any roster. Meant for pre-draft prep,
+    when there's no roster to scope to yet (or the league's roster is still
+    empty). Reuses the exact same odds-devig -> quantile -> fantasy-points
+    pipeline as compute_projections(); the only real difference is where the
+    player list comes from (refactored/draft_prep.py, sourced from Sleeper's
+    full player DB) and that it uses a smaller, quota-conscious market set.
+    """
+    print(f"[services] compute_draft_board season={season} week={week} fresh={fresh} positions={positions}")
+    try:
+        roster = sleeper_api.get_user_sleeper_data(username, season)
+    except Exception as e:
+        print(f"[services] draft_board: sleeper scoring lookup failed: {e}")
+        roster = None
+    scoring_rules = (roster or {}).get("scoring_rules", {}) if roster else {}
+
+    eff_mode = 'fresh' if fresh else cache_mode
+    plan = draft_prep.plan_week_for_draft(week=week, regions=region, cache_mode=eff_mode)
+    odds_by_week = _fetch_odds({week: plan}, cache_mode=eff_mode, regions=region)
+    ev_odds = odds_by_week.get(week, {})
+
+    per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, plan)
+
+    info_by_alias: Dict[str, dict] = {}
+    for g in plan.values():
+        for p in g.players:
+            info_by_alias[p["alias"]] = p
+
+    from .range_model import compute_fantasy_range_model
+
+    pos_filter = {p.upper() for p in positions} if positions else None
+    board: List[dict] = []
+    for alias, by_book in per_player_odds.items():
+        pinfo = info_by_alias.get(alias, {})
+        pos = pinfo.get("primary_position")
+        if pos_filter and pos not in pos_filter:
+            continue
+        if (model or "baseline").lower() == "baseline":
+            floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+        else:
+            floor, mid, ceil, _ = compute_fantasy_range_model(by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model)
+        board.append({
+            "name": pinfo.get("full_name", alias),
+            "pos": pos,
+            "team": pinfo.get("editorial_team_full_name"),
+            "floor": round(floor, 2),
+            "mid": round(mid, 2),
+            "ceiling": round(ceil, 2),
+            "books_used": len(by_book.keys()),
+            "markets_used": len(per_player_summaries.get(alias, {})),
+        })
+
+    board.sort(key=lambda r: r["mid"], reverse=True)
+    payload = {
+        "week": week,
+        "players": board,
+        "ratelimit": ratelimit.format_status(),
+        "ratelimit_info": ratelimit.get_details(),
+    }
+    print(f"[services] compute_draft_board done players={len(board)}")
     return payload
 
 

@@ -79,6 +79,19 @@
     </section>
 
     <section>
+      <h2>Draft Board (Pre-Season / All Players)</h2>
+      <p class="status">Not scoped to your roster -- every active QB/RB/WR/TE
+      on a team playing the selected week. Uses a smaller set of markets than
+      the weekly views to limit Odds API usage; only fetch this when you
+      actually need it (see CONTRIBUTING.md).</p>
+      <div class="btn-row">
+        <button data-week="this" class="btn-draft-board">Load Draft Board (This Week)</button>
+        <button data-week="next" class="btn-draft-board">Load Draft Board (Next Week)</button>
+      </div>
+      <div id="draft-board" class="results"></div>
+    </section>
+
+    <section>
       <h2>Players - This Week</h2>
       <div class="btn-row">
         <button data-week="this" class="btn-players">Show Players</button>
