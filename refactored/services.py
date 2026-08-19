@@ -11,7 +11,7 @@ import sleeper_api
 from .weekly_windows import compute_week_windows
 from .planner import plan_relevant_games_and_markets
 from .aggregator import aggregate_by_week
-from .range_model import compute_fantasy_range
+from .range_model import compute_fantasy_range, compute_defense_fantasy_range
 from . import odds_client
 from . import ratelimit
 from config import SLEEPER_TO_ODDSAPI_TEAM
@@ -524,16 +524,30 @@ def compute_book_coverage(
     }
 
 
-def build_lineup(players: List[dict], target: str = "mid") -> Dict:
-    """Build lineup: QB1, WR2, RB2, FLEX1 (from WR/RB/TE), then BENCH.
+def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] | None = None) -> Dict:
+    """Build lineup: QB1, WR2, RB2, FLEX1 (from WR/RB/TE), DEF1, then BENCH.
 
     Always include players with zero projection in BENCH.
+
+    `defenses` is optional and should be rows shaped like `list_defenses()`
+    output (i.e. dicts with `defense`/`floor`/`mid`/`ceiling`) for the
+    caller's OWNED defenses only -- passing available (unowned) defenses
+    would let the lineup builder "start" a team you don't roster.
     """
-    print(f"[services] build_lineup target={target}")
-    buckets: Dict[str, List[dict]] = {"QB": [], "RB": [], "WR": [], "TE": []}
+    print(f"[services] build_lineup target={target} defenses={len(defenses or [])}")
+    buckets: Dict[str, List[dict]] = {"QB": [], "RB": [], "WR": [], "TE": [], "DEF": []}
     for p in players:
         if p.get("pos") in buckets:
             buckets[p["pos"]].append(p)
+    for d in (defenses or []):
+        buckets["DEF"].append({
+            "name": d.get("defense"),
+            "pos": "DEF",
+            "team": d.get("defense"),
+            "floor": d.get("floor"),
+            "mid": d.get("mid"),
+            "ceiling": d.get("ceiling"),
+        })
     for pos in buckets:
         # Ensure None values do not break sort comparisons
         buckets[pos].sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
@@ -554,6 +568,7 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
         "WR": take("WR", 2),
         "RB": take("RB", 2),
         "TE": take("TE", 1),
+        "DEF": take("DEF", 1),
     }
     # FLEX best remaining WR/RB/TE
     flex_pool = []
@@ -592,7 +607,7 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
             "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
         })
 
-    # Order: QB, WR, WR, RB, RB, TE, FLEX
+    # Order: QB, WR, WR, RB, RB, TE, FLEX, DEF
     for p in starters["QB"]: add_slot("QB", p)
     if len(starters["WR"]) > 0: add_slot("WR", starters["WR"][0])
     if len(starters["WR"]) > 1: add_slot("WR", starters["WR"][1])
@@ -600,10 +615,11 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
     if len(starters["RB"]) > 1: add_slot("RB", starters["RB"][1])
     for p in starters["TE"]: add_slot("TE", p)
     for p in flex: add_slot("FLEX", p)
+    for p in starters["DEF"]: add_slot("DEF", p)
 
     # Bench: remaining players by target (include zeros)
     bench: List[dict] = []
-    for pos in ("QB", "WR", "RB", "TE"):
+    for pos in ("QB", "WR", "RB", "TE", "DEF"):
         for item in buckets.get(pos, []):
             if item["name"] not in used:
                 bench.append(item)
@@ -632,10 +648,10 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
     return {"target": target, "lineup": rows, "total_points": round(total, 2)}
 
 
-def build_lineup_diffs(players: List[dict]) -> Dict:
-    base = build_lineup(players, target="mid")
-    floor = build_lineup(players, target="floor")
-    ceil = build_lineup(players, target="ceiling")
+def build_lineup_diffs(players: List[dict], defenses: List[dict] | None = None) -> Dict:
+    base = build_lineup(players, target="mid", defenses=defenses)
+    floor = build_lineup(players, target="floor", defenses=defenses)
+    ceil = build_lineup(players, target="ceiling", defenses=defenses)
 
     def diff(from_rows: List[dict], to_rows: List[dict]) -> List[dict]:
         out = []
@@ -712,6 +728,14 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     (this_start, this_end), (next_start, next_end) = compute_week_windows()
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
 
+    # Scoring rules for converting opponent implied totals into DEF fantasy points
+    try:
+        roster_for_scoring = sleeper_api.get_user_sleeper_data(username, season)
+        scoring_rules = (roster_for_scoring or {}).get("scoring_rules", {})
+    except Exception as e:
+        print(f"[services] defenses: scoring rules lookup failed: {e}")
+        scoring_rules = {}
+
     # Build ownership map across entire league
     team_to_owner, current_uid = _def_ownership_map(username, season)
     # All teams (full names)
@@ -787,17 +811,22 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
                 print(f"[services] defenses: no implied totals computed for team={team} game={gid}")
             if implieds:
                 implieds.sort()
-                mid = implieds[len(implieds)//2] if len(implieds) % 2 == 1 else (implieds[len(implieds)//2 -1] + implieds[len(implieds)//2])/2
+                n = len(implieds)
+                med = implieds[n // 2] if n % 2 == 1 else (implieds[n // 2 - 1] + implieds[n // 2]) / 2
+                def_floor, def_mid, def_ceiling = compute_defense_fantasy_range(med, scoring_rules)
                 owner_info = team_to_owner.get(team) or {}
                 out_rows.append({
                     "defense": team,
                     "opponent": opp,
                     "game_date": e["commence_time"],
-                    "implied_total_median": round(mid, 2),
+                    "implied_total_median": round(med, 2),
                     "book_count": len(implieds),
                     "source": source,
                     "owner": owner_info.get("name"),
                     "owned_by_current": bool(owner_info) and (owner_info.get("id") == current_uid),
+                    "floor": round(def_floor, 2),
+                    "mid": round(def_mid, 2),
+                    "ceiling": round(def_ceiling, 2),
                 })
 
     # Sort ascending by implied total (lower is better for defense)
@@ -842,21 +871,6 @@ def build_dashboard(
     if weeks in ("next", "both"):
         proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
 
-    # Build lineups from one projections call per week
-    lineups = {"this": None, "next": None}
-    if proj_this is not None:
-        lineups["this"] = {
-            "mid": build_lineup(proj_this.get("players", []), target="mid"),
-            "floor": build_lineup(proj_this.get("players", []), target="floor"),
-            "ceiling": build_lineup(proj_this.get("players", []), target="ceiling"),
-        }
-    if proj_next is not None:
-        lineups["next"] = {
-            "mid": build_lineup(proj_next.get("players", []), target="mid"),
-            "floor": build_lineup(proj_next.get("players", []), target="floor"),
-            "ceiling": build_lineup(proj_next.get("players", []), target="ceiling"),
-        }
-
     # Defenses scoped by weeks and scope parameter
     defs_this = None
     defs_next = None
@@ -864,6 +878,27 @@ def build_dashboard(
         defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
     if weeks in ("next", "both"):
         defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+
+    def _owned(defs_payload: dict | None) -> List[dict]:
+        rows = (defs_payload or {}).get("defenses", []) or []
+        return [d for d in rows if d.get("source") == "owned" or d.get("owned_by_current")]
+
+    # Build lineups from one projections call per week (DEF included when owned)
+    lineups = {"this": None, "next": None}
+    if proj_this is not None:
+        owned_this = _owned(defs_this)
+        lineups["this"] = {
+            "mid": build_lineup(proj_this.get("players", []), target="mid", defenses=owned_this),
+            "floor": build_lineup(proj_this.get("players", []), target="floor", defenses=owned_this),
+            "ceiling": build_lineup(proj_this.get("players", []), target="ceiling", defenses=owned_this),
+        }
+    if proj_next is not None:
+        owned_next = _owned(defs_next)
+        lineups["next"] = {
+            "mid": build_lineup(proj_next.get("players", []), target="mid", defenses=owned_next),
+            "floor": build_lineup(proj_next.get("players", []), target="floor", defenses=owned_next),
+            "ceiling": build_lineup(proj_next.get("players", []), target="ceiling", defenses=owned_next),
+        }
 
     # Choose latest ratelimit info
     rl_info = ratelimit.get_details()
@@ -895,7 +930,7 @@ def _norm_name(s: str) -> str:
         return s or ""
 
 
-def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "baseline") -> Dict:
+def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "const") -> Dict:
     """Return per-book odds and market summaries used for a single player.
 
     Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).

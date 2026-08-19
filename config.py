@@ -12,16 +12,6 @@ EVENTS_URL = f'{BASE_URL}/sports/americanfootball_nfl/events'
 # Data directory for saving various data
 DATA_DIR = './data'
 
-# Yahoo API OAuth 2.0 credentials
-YAHOO_CLIENT_ID = os.getenv('YAHOO_CLIENT_ID')
-YAHOO_CLIENT_SECRET = os.getenv('YAHOO_CLIENT_SECRET')
-YAHOO_REDIRECT_URI = os.getenv('YAHOO_REDIRECT_URI')
-YAHOO_AUTHORIZATION_BASE_URL = 'https://api.login.yahoo.com/oauth2/request_auth'
-YAHOO_TOKEN_URL = 'https://api.login.yahoo.com/oauth2/get_token'
-YAHOO_OAUTH_TOKEN_FILE = f'{DATA_DIR}/yahoo_token.json'  # File to save access and refresh tokens
-YAHOO_API_BASE_URL = "https://fantasysports.yahooapis.com/fantasy/v2"
-YAHOO_LEAGUE_ID = os.getenv('YAHOO_LEAGUE_ID')
-
 # Position-Stat Configuration (define relevant stats for each position) - These stats should be in Odds API format
 POSITION_STAT_CONFIG = {
     "QB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_pass_yds", "player_pass_yds_alternate", "player_pass_tds", "player_pass_tds_alternate", "player_interceptions"],

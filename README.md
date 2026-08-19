@@ -1,17 +1,19 @@
 # Fantasy Odds App
 
 ## Overview
-This project fetches player betting lines, converts them into projected fantasy points, and prints comparisons for quick decision-making.
+This project pulls NFL betting lines (player props + team spreads/totals) from
+The Odds API, converts them into de-vigged floor/mid/ceiling fantasy point
+projections for your Sleeper roster, and serves them through a small JSON API
+and web UI.
 
 ## Configuration
-The application relies on the following environment variables (populate them in your `.env` file or configure them directly in Docker/Unraid):
-- `API_KEY`
-- `YAHOO_CLIENT_ID`
-- `YAHOO_CLIENT_SECRET`
-- `YAHOO_REDIRECT_URI`
-- `YAHOO_LEAGUE_ID`
+The application relies on the following environment variables (populate them
+in your `.env` file or configure them directly in Docker/Unraid):
+- `API_KEY` — The Odds API key
 
-Only supply values you are comfortable sharing with the container. When running under Docker, pass them as environment variables or mount a file via `env_file`.
+Sleeper's API requires no auth (only a username). Only supply values you are
+comfortable sharing with the container. When running under Docker, pass them
+as environment variables or mount a file via `env_file`.
 
 ## Docker Workflow
 1. Copy your `.env` file into the project root (or ensure the required variables are defined elsewhere).
@@ -24,6 +26,7 @@ Only supply values you are comfortable sharing with the container. When running 
    docker run --rm \
      --name odds-fantasy \
      --env-file .env \
+     -p 8000:8000 \
      -v $(pwd)/data:/app/data \
      odds-fantasy
    ```
@@ -39,15 +42,41 @@ Override the command or environment variables in the compose file if you need to
 1. Copy the repo (or your packaged image) onto the server.
 2. From the Unraid Docker tab, add a new container and point it at the built image (`odds-fantasy:latest`) or the repository if you publish it elsewhere.
 3. Under the container configuration:
-   - Map `/app/data` to a persistent host path (for example `/mnt/user/appdata/odds-fantasy`).
-   - Add the environment variables listed above (Unraid exposes dedicated fields for them).
-   - If you want a non-default main invocation, edit the command to match.
-4. Apply/Start the container. Logs will show the script output.
+   - Map `/app/data` to a persistent host path (for example `/mnt/user/appdata/odds-fantasy/data`).
+   - Map container port `8000` to a host port (e.g. `8001`).
+   - Add the `API_KEY` environment variable.
+4. Apply/Start the container, then open `http://<unraid-ip>:<mapped-port>/` for the UI.
 
 ## Project Structure
-- `main.py`: Entry point for printing the defense opportunities table.
-- `config.py`: Loads environment configuration and defines shared constants.
-- `odds_api.py`, `sleeper_api.py`, `predicted_stats.py`: Data sources and transformation logic.
-- `data/`: Cached API responses (persist this directory across runs).
-- `tests/`: Unit tests.
-- `ui/`, `refactored/`: Experimental work you can ignore for container runtime.
+- `refactored/`: **This is the real application.** `refactored/api.py` is the
+  entrypoint (`CMD` in the `Dockerfile`) — a stdlib WSGI server exposing
+  `/health`, `/projections`, `/lineup`, `/lineup/diffs`, `/defenses`,
+  `/player/odds`, `/defense/odds`, and `/dashboard`, and serving the UI under
+  `/` and `/ui/*`. See `refactored/services.py` for the orchestration layer,
+  `refactored/range_model.py` + `refactored/prob_models.py` for how
+  betting-line probabilities become floor/mid/ceiling fantasy point ranges,
+  `refactored/aggregator.py` + `refactored/planner.py` for how odds are
+  fetched/grouped, and `refactored/odds_client.py` + `refactored/ratelimit.py`
+  for caching and Odds-API rate-limit tracking.
+- `config.py`: Loads environment configuration and defines shared constants
+  (position→market mappings, Sleeper↔Odds-API name/team mappings, scoring
+  key mappings).
+- `predicted_stats.py`: Shared de-vig + mean-stat-estimate helpers used by
+  `refactored/`.
+- `sleeper_api.py`: Sleeper API client (roster, scoring rules, league/owner data).
+- `ui/`: Static frontend served by `refactored/api.py`.
+- `data/`: Cached API responses and Sleeper player metadata (persist this
+  directory across runs). Odds cache entries auto-expire after `ODDS_TTL`
+  seconds (default 12h); pass `fresh=1` to any endpoint to bypass the cache.
+- `tests/`: Unit tests (`python -m pytest tests/`).
+- `test.py`: A small manual/ad-hoc script for poking at your Sleeper roster
+  from the command line — not part of the app, not covered by tests.
+
+## Known limitations
+- Kickers are fetched (see `POSITION_STAT_CONFIG["K"]`) but not yet converted
+  into fantasy point projections or included in the lineup builder.
+- Defense/Special-Teams floor/mid/ceiling only models the points-allowed
+  scoring bracket (derived from the opponent's spread/total-implied score).
+  Sacks, interceptions, fumble recoveries, and defensive/return TDs aren't
+  modeled — The Odds API doesn't offer team-level defensive props to price
+  them off of, so they're a known gap rather than an oversight.
