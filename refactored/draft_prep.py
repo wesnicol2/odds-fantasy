@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, List
+import datetime as _dt
+from typing import Dict, List, Optional, Tuple
 
 import sleeper_api
 from config import SLEEPER_TO_ODDSAPI_TEAM, SLEEPER_ODDS_API_PLAYER_NAME_MAPPING
 from .planner import PlannedGame
-from .weekly_windows import compute_week_windows, in_window
+from .weekly_windows import _prev_weekday, in_window
 from . import odds_client
 
 # Draft prep only covers positions the rest of the app already knows how to
@@ -67,15 +68,61 @@ def _all_active_players_by_team() -> Dict[str, List[dict]]:
     return by_team
 
 
+def _resolve_draft_week_window(
+    events: List[dict],
+    which: str = "this",
+    now_utc: Optional[_dt.datetime] = None,
+) -> Optional[Tuple[_dt.datetime, _dt.datetime]]:
+    """Resolve "Week 1" / "Week 2" for draft purposes.
+
+    Unlike the in-season lineup flow (weekly_windows.compute_week_windows,
+    anchored to "today"), a draft happens once, before the season starts --
+    "today" isn't a meaningful anchor. What matters is the earliest week with
+    any scheduled/priced games at all ("Week 1"), and the week after that
+    ("Week 2"), no matter how far today is from kickoff. Anchoring to "today"
+    instead (the original implementation) meant this silently returned
+    nothing whenever today's nearest Thu-Mon cycle didn't happen to contain
+    real games yet -- which is most of the pre-season.
+
+    Returns None if there are no upcoming games in `events` at all (e.g. the
+    new season's schedule/odds aren't posted yet) -- there's no "Week 1" to
+    anchor to in that case.
+    """
+    now_utc = now_utc or _dt.datetime.utcnow()
+    future_starts: List[_dt.datetime] = []
+    for e in events:
+        ts = e.get("commence_time")
+        if not ts:
+            continue
+        try:
+            dt = _dt.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            continue
+        if dt > now_utc:
+            future_starts.append(dt)
+    if not future_starts:
+        return None
+
+    week1_start = _prev_weekday(min(future_starts), 3)  # Thursday anchoring the earliest game
+    week_start = week1_start if which == "this" else week1_start + _dt.timedelta(days=7)
+    week_end = week_start + _dt.timedelta(days=4, hours=23, minutes=59, seconds=59)
+    return week_start, week_end
+
+
 def plan_week_for_draft(week: str = "this", regions: str = "us", cache_mode: str = "auto") -> Dict[str, PlannedGame]:
     """Like planner.plan_relevant_games_and_markets, but for every active
     skill player on every team playing in the target week -- not just one
     roster. Returns game_id -> PlannedGame for the requested window only.
-    """
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
-    start, end = (this_start, this_end) if week == "this" else (next_start, next_end)
 
+    `week="this"` means "Week 1" (the earliest week with scheduled games)
+    and `week="next"` means "Week 2" -- see _resolve_draft_week_window.
+    """
     events = odds_client.get_nfl_events(regions=regions, mode=cache_mode)
+    window = _resolve_draft_week_window(events, which=week)
+    if window is None:
+        return {}
+    start, end = window
+
     by_team = _all_active_players_by_team()
 
     plan: Dict[str, PlannedGame] = {}

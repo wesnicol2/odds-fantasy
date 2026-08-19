@@ -528,13 +528,32 @@ def compute_draft_board(
         })
 
     board.sort(key=lambda r: r["mid"], reverse=True)
+
+    # Surface the actual resolved date range so "Week 1"/"Week 2" is never
+    # ambiguous -- these are schedule-anchored (earliest games found), not
+    # anchored to today, so they won't line up with the calendar in any
+    # obvious way. See draft_prep._resolve_draft_week_window.
+    window_start = window_end = None
+    if plan:
+        game_starts = sorted(g.commence_time for g in plan.values())
+        window_start, window_end = game_starts[0], game_starts[-1]
+
     payload = {
         "week": week,
+        "window_start": window_start,
+        "window_end": window_end,
         "players": board,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }
-    print(f"[services] compute_draft_board done players={len(board)}")
+    if not plan:
+        payload["message"] = (
+            "No scheduled games found yet for this window. Draft-board weeks "
+            "are anchored to the earliest games in the odds feed, not "
+            "today's date -- check back once the season's schedule/odds are "
+            "posted (usually a couple weeks before Week 1)."
+        )
+    print(f"[services] compute_draft_board done players={len(board)} window=({window_start}..{window_end})")
     return payload
 
 
