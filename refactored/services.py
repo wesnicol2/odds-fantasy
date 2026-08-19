@@ -8,12 +8,13 @@ import os
 
 import sleeper_api
 
-from .weekly_windows import compute_week_windows
+from .weekly_windows import compute_week_windows, resolve_week_windows
 from .planner import plan_relevant_games_and_markets
 from .aggregator import aggregate_by_week
-from .range_model import compute_fantasy_range
+from .range_model import compute_fantasy_range, compute_defense_fantasy_range
 from . import odds_client
 from . import ratelimit
+from . import draft_prep
 from config import SLEEPER_TO_ODDSAPI_TEAM
 from predicted_stats import predict_stats_for_player
 from config import STAT_MARKET_MAPPING_SLEEPER, POSITION_STAT_CONFIG
@@ -31,9 +32,93 @@ COVERAGE_MARKET_ORDER = [
 ]
 
 
+def _resolve_identity(username: str, season: str, league_id: Optional[str] = None, roster_id: Optional[int] = None) -> dict:
+    """Resolve {'players', 'scoring_rules', ...} for the caller's team.
+
+    `league_id` (when given) is authoritative: an explicit league+team
+    selection beats the legacy username-based "first league for this user"
+    guess, which silently picks the wrong league for anyone in more than
+    one. Falls back to the username/season path when league_id isn't
+    provided, so existing callers keep working unchanged.
+    """
+    if league_id:
+        return sleeper_api.get_league_roster_data(league_id, roster_id=roster_id)
+    return sleeper_api.get_user_sleeper_data(username, season) or {}
+
+
+def resolve_user_leagues(username: str, season: str) -> Dict:
+    """List a Sleeper user's leagues for a season, for the "pick your
+    league" step of the identity flow. Powered by username (which everyone
+    already knows) rather than requiring you to dig a league ID out of a
+    Sleeper URL -- once a league is picked from this list, `resolve_league`
+    and everything downstream operates on its league_id, not the username.
+    """
+    try:
+        user_id = sleeper_api.get_user_id(username)
+    except Exception as e:
+        print(f"[services] resolve_user_leagues: user lookup failed for {username}: {e}")
+        return {"error": "user_not_found", "username": username}
+    try:
+        leagues = sleeper_api.get_user_leagues(user_id, season)
+    except Exception as e:
+        print(f"[services] resolve_user_leagues: league lookup failed for user_id={user_id}: {e}")
+        leagues = []
+    return {
+        "username": username,
+        "user_id": user_id,
+        "season": season,
+        "leagues": [
+            {
+                "league_id": l.get("league_id"),
+                "name": l.get("name"),
+                "status": l.get("status"),
+                "season": l.get("season"),
+            }
+            for l in (leagues or [])
+        ],
+    }
+
+
+def resolve_league(league_id: str) -> Dict:
+    """Given a Sleeper league ID, return everything the UI needs to drive
+    the "paste your league ID -> pick your team" flow:
+      - status: Sleeper's own "pre_draft" | "drafting" | "in_season" |
+        "complete" -- the actual source of truth for whether the league has
+        drafted yet, used to decide whether to default to the draft board
+        or the weekly lineup views.
+      - teams: one entry per roster, for a team picker.
+    """
+    try:
+        league = sleeper_api.get_league(league_id)
+    except Exception as e:
+        print(f"[services] resolve_league: lookup failed for {league_id}: {e}")
+        return {"error": "league_not_found", "league_id": league_id}
+    try:
+        teams = sleeper_api.get_league_teams(league_id)
+    except Exception as e:
+        print(f"[services] resolve_league: team list failed for {league_id}: {e}")
+        teams = []
+    return {
+        "league_id": league_id,
+        "name": league.get("name"),
+        "season": league.get("season"),
+        "status": league.get("status"),
+        "teams": teams,
+    }
+
+
 def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
     (this_start, this_end), (next_start, next_end) = compute_week_windows(now_utc)
     return (this_start, this_end) if which == "this" else (next_start, next_end)
+
+
+# Shown whenever resolve_week_windows() finds no games at all -- neither in
+# today's calendar window nor anywhere later in the odds feed (the schedule
+# for the target season/week isn't posted yet). See weekly_windows.py.
+NO_GAMES_SCHEDULED_MESSAGE = (
+    "No scheduled games found yet for this week. Check back once the "
+    "season's schedule/odds are posted."
+)
 
 
 def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, regions: str = "us") -> Dict[str, Dict[str, list]]:
@@ -69,12 +154,12 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, reg
     return out
 
 
-def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto", model: str = "const") -> Dict:
-    print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh}")
+def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto", model: str = "const", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
+    print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh} league_id={league_id} roster_id={roster_id}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _proj_cache = getattr(compute_projections, "_cache", {})
-    key = (username, season, week, region, model)
+    key = (username, season, week, region, model, league_id, roster_id)
     now = time.time()
     if not fresh and key in _proj_cache:
         ts, payload = _proj_cache[key]
@@ -82,7 +167,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             print(f"[services] compute_projections cache hit key={key} age={int(now-ts)}s")
             return payload
     try:
-        roster = sleeper_api.get_user_sleeper_data(username, season)
+        roster = _resolve_identity(username, season, league_id, roster_id)
     except Exception as e:
         print(f"[services] sleeper error: {e}")
         # Graceful fallback: continue with empty roster so UI can load
@@ -91,8 +176,17 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
 
     # Plan games only for requested week
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
     eff_mode = 'fresh' if fresh else cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {
+            "players": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+            "message": NO_GAMES_SCHEDULED_MESSAGE,
+        }
+    (this_start, this_end), (next_start, next_end) = windows
     plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
     plan = {week: plan_all.get(week, {})}
 
@@ -464,6 +558,104 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     return payload
 
 
+def compute_draft_board(
+    username: str,
+    season: str,
+    week: str = "this",
+    region: str = "us",
+    fresh: bool = False,
+    cache_mode: str = "auto",
+    model: str = "const",
+    positions: List[str] | None = None,
+    league_id: Optional[str] = None,
+    roster_id: Optional[int] = None,
+) -> Dict:
+    """Floor/mid/ceiling for every active skill player on every team playing
+    in the target week -- not scoped to any roster. Meant for pre-draft prep,
+    when there's no roster to scope to yet (or the league's roster is still
+    empty). Reuses the exact same odds-devig -> quantile -> fantasy-points
+    pipeline as compute_projections(); the only real difference is where the
+    player list comes from (refactored/draft_prep.py, sourced from Sleeper's
+    full player DB) and that it uses a smaller, quota-conscious market set.
+
+    Only `scoring_rules` is needed here (there's no roster to scope the
+    player list to -- that's the whole point), so this works fine with just
+    a league_id and no roster_id, i.e. before a team has been picked.
+    """
+    print(f"[services] compute_draft_board season={season} week={week} fresh={fresh} positions={positions} league_id={league_id}")
+    try:
+        roster = _resolve_identity(username, season, league_id, roster_id)
+    except Exception as e:
+        print(f"[services] draft_board: sleeper scoring lookup failed: {e}")
+        roster = None
+    scoring_rules = (roster or {}).get("scoring_rules", {}) if roster else {}
+
+    eff_mode = 'fresh' if fresh else cache_mode
+    plan = draft_prep.plan_week_for_draft(week=week, regions=region, cache_mode=eff_mode)
+    odds_by_week = _fetch_odds({week: plan}, cache_mode=eff_mode, regions=region)
+    ev_odds = odds_by_week.get(week, {})
+
+    per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, plan)
+
+    info_by_alias: Dict[str, dict] = {}
+    for g in plan.values():
+        for p in g.players:
+            info_by_alias[p["alias"]] = p
+
+    from .range_model import compute_fantasy_range_model
+
+    pos_filter = {p.upper() for p in positions} if positions else None
+    board: List[dict] = []
+    for alias, by_book in per_player_odds.items():
+        pinfo = info_by_alias.get(alias, {})
+        pos = pinfo.get("primary_position")
+        if pos_filter and pos not in pos_filter:
+            continue
+        if (model or "baseline").lower() == "baseline":
+            floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+        else:
+            floor, mid, ceil, _ = compute_fantasy_range_model(by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model)
+        board.append({
+            "name": pinfo.get("full_name", alias),
+            "pos": pos,
+            "team": pinfo.get("editorial_team_full_name"),
+            "floor": round(floor, 2),
+            "mid": round(mid, 2),
+            "ceiling": round(ceil, 2),
+            "books_used": len(by_book.keys()),
+            "markets_used": len(per_player_summaries.get(alias, {})),
+        })
+
+    board.sort(key=lambda r: r["mid"], reverse=True)
+
+    # Surface the actual resolved date range so "Week 1"/"Week 2" is never
+    # ambiguous -- these are schedule-anchored (earliest games found), not
+    # anchored to today, so they won't line up with the calendar in any
+    # obvious way. See draft_prep._resolve_draft_week_window.
+    window_start = window_end = None
+    if plan:
+        game_starts = sorted(g.commence_time for g in plan.values())
+        window_start, window_end = game_starts[0], game_starts[-1]
+
+    payload = {
+        "week": week,
+        "window_start": window_start,
+        "window_end": window_end,
+        "players": board,
+        "ratelimit": ratelimit.format_status(),
+        "ratelimit_info": ratelimit.get_details(),
+    }
+    if not plan:
+        payload["message"] = (
+            "No scheduled games found yet for this window. Draft-board weeks "
+            "are anchored to the earliest games in the odds feed, not "
+            "today's date -- check back once the season's schedule/odds are "
+            "posted (usually a couple weeks before Week 1)."
+        )
+    print(f"[services] compute_draft_board done players={len(board)} window=({window_start}..{window_end})")
+    return payload
+
+
 def compute_book_coverage(
     username: str,
     season: str,
@@ -472,6 +664,8 @@ def compute_book_coverage(
     fresh: bool = False,
     cache_mode: str = "auto",
     model: str = "const",
+    league_id: Optional[str] = None,
+    roster_id: Optional[int] = None,
 ) -> Dict:
     data = compute_projections(
         username=username,
@@ -481,6 +675,8 @@ def compute_book_coverage(
         fresh=fresh,
         cache_mode=cache_mode,
         model=model,
+        league_id=league_id,
+        roster_id=roster_id,
     )
     coverage = data.get("book_coverage") or {}
     markets = list(coverage.get("markets") or COVERAGE_MARKET_ORDER)
@@ -524,16 +720,30 @@ def compute_book_coverage(
     }
 
 
-def build_lineup(players: List[dict], target: str = "mid") -> Dict:
-    """Build lineup: QB1, WR2, RB2, FLEX1 (from WR/RB/TE), then BENCH.
+def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] | None = None) -> Dict:
+    """Build lineup: QB1, WR2, RB2, FLEX1 (from WR/RB/TE), DEF1, then BENCH.
 
     Always include players with zero projection in BENCH.
+
+    `defenses` is optional and should be rows shaped like `list_defenses()`
+    output (i.e. dicts with `defense`/`floor`/`mid`/`ceiling`) for the
+    caller's OWNED defenses only -- passing available (unowned) defenses
+    would let the lineup builder "start" a team you don't roster.
     """
-    print(f"[services] build_lineup target={target}")
-    buckets: Dict[str, List[dict]] = {"QB": [], "RB": [], "WR": [], "TE": []}
+    print(f"[services] build_lineup target={target} defenses={len(defenses or [])}")
+    buckets: Dict[str, List[dict]] = {"QB": [], "RB": [], "WR": [], "TE": [], "DEF": []}
     for p in players:
         if p.get("pos") in buckets:
             buckets[p["pos"]].append(p)
+    for d in (defenses or []):
+        buckets["DEF"].append({
+            "name": d.get("defense"),
+            "pos": "DEF",
+            "team": d.get("defense"),
+            "floor": d.get("floor"),
+            "mid": d.get("mid"),
+            "ceiling": d.get("ceiling"),
+        })
     for pos in buckets:
         # Ensure None values do not break sort comparisons
         buckets[pos].sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
@@ -554,6 +764,7 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
         "WR": take("WR", 2),
         "RB": take("RB", 2),
         "TE": take("TE", 1),
+        "DEF": take("DEF", 1),
     }
     # FLEX best remaining WR/RB/TE
     flex_pool = []
@@ -590,9 +801,15 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
             "floor": round(_num(p.get("floor", 0.0)), 2),
             "mid": round(_num(p.get("mid", 0.0)), 2),
             "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
+            # so the UI can distinguish "actually projected for ~0" from
+            # "no odds coverage, this number is meaningless" -- carried
+            # through from compute_projections' players_out, not computed
+            # freshly here (DEF rows built directly in build_lineup won't
+            # have it, which is fine: they always come from real odds).
+            "incomplete": bool(p.get("incomplete")),
         })
 
-    # Order: QB, WR, WR, RB, RB, TE, FLEX
+    # Order: QB, WR, WR, RB, RB, TE, FLEX, DEF
     for p in starters["QB"]: add_slot("QB", p)
     if len(starters["WR"]) > 0: add_slot("WR", starters["WR"][0])
     if len(starters["WR"]) > 1: add_slot("WR", starters["WR"][1])
@@ -600,10 +817,11 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
     if len(starters["RB"]) > 1: add_slot("RB", starters["RB"][1])
     for p in starters["TE"]: add_slot("TE", p)
     for p in flex: add_slot("FLEX", p)
+    for p in starters["DEF"]: add_slot("DEF", p)
 
     # Bench: remaining players by target (include zeros)
     bench: List[dict] = []
-    for pos in ("QB", "WR", "RB", "TE"):
+    for pos in ("QB", "WR", "RB", "TE", "DEF"):
         for item in buckets.get(pos, []):
             if item["name"] not in used:
                 bench.append(item)
@@ -632,10 +850,10 @@ def build_lineup(players: List[dict], target: str = "mid") -> Dict:
     return {"target": target, "lineup": rows, "total_points": round(total, 2)}
 
 
-def build_lineup_diffs(players: List[dict]) -> Dict:
-    base = build_lineup(players, target="mid")
-    floor = build_lineup(players, target="floor")
-    ceil = build_lineup(players, target="ceiling")
+def build_lineup_diffs(players: List[dict], defenses: List[dict] | None = None) -> Dict:
+    base = build_lineup(players, target="mid", defenses=defenses)
+    floor = build_lineup(players, target="floor", defenses=defenses)
+    ceil = build_lineup(players, target="ceiling", defenses=defenses)
 
     def diff(from_rows: List[dict], to_rows: List[dict]) -> List[dict]:
         out = []
@@ -661,14 +879,31 @@ def _implied_total(game_total: float, team_spread: float) -> float:
     return game_total / 2.0 - team_spread / 2.0
 
 
-def _def_ownership_map(username: str, season: str) -> Tuple[dict, str | None]:
-    """Return (team_fullname -> {id, name}, current_user_id)."""
+def _def_ownership_map(username: str, season: str, league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Tuple[dict, str | None]:
+    """Return (team_fullname -> {id, name}, current_owner_id).
+
+    current_owner_id identifies "you" for the owned_by_current flag in
+    list_defenses -- resolved from the explicit roster_id when a league_id
+    is given (the authoritative path, since it doesn't depend on guessing
+    which of a user's leagues is the right one), or from the legacy
+    username-based Sleeper user_id lookup otherwise.
+    """
     try:
-        league_id, user_id = sleeper_api.get_league_id_for_user(username, season)
-        if not league_id:
+        user_id = None
+        if league_id:
+            lid = league_id
+        else:
+            lid, user_id = sleeper_api.get_league_id_for_user(username, season)
+        if not lid:
             return {}, None
-        rosters = sleeper_api.get_league_rosters(league_id)
-        users = sleeper_api.get_league_users(league_id)
+        rosters = sleeper_api.get_league_rosters(lid)
+        users = sleeper_api.get_league_users(lid)
+
+        current_owner_id = user_id
+        if league_id and roster_id is not None:
+            match = next((r for r in (rosters or []) if r.get('roster_id') == roster_id), None)
+            current_owner_id = match.get('owner_id') if match else None
+
         # Map owner_id -> display name (fallback to username/id)
         owner_name: dict = {}
         for u in users or []:
@@ -691,29 +926,47 @@ def _def_ownership_map(username: str, season: str) -> Tuple[dict, str | None]:
                         team_to_owner[full] = {"id": oid, "name": disp}
                 except Exception:
                     continue
-        return team_to_owner, user_id
+        return team_to_owner, current_owner_id
     except Exception as e:
         print(f"[services] def ownership mapping error: {e}")
         return {}, None
 
 
-def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us") -> Dict:
-    print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh}")
+def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
+    print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh} league_id={league_id} roster_id={roster_id}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _def_cache = getattr(list_defenses, "_cache", {})
-    key = (username, season, week, scope)
+    key = (username, season, week, scope, league_id, roster_id)
     now = time.time()
     if not fresh and key in _def_cache:
         ts, payload = _def_cache[key]
         if now - ts < ttl:
             print(f"[services] list_defenses cache hit key={key} age={int(now-ts)}s")
             return payload
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
+    eff_mode = 'fresh' if fresh else cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {
+            "defenses": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+            "message": NO_GAMES_SCHEDULED_MESSAGE,
+        }
+    (this_start, this_end), (next_start, next_end) = windows
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
 
+    # Scoring rules for converting opponent implied totals into DEF fantasy points
+    try:
+        roster_for_scoring = _resolve_identity(username, season, league_id, roster_id)
+        scoring_rules = (roster_for_scoring or {}).get("scoring_rules", {})
+    except Exception as e:
+        print(f"[services] defenses: scoring rules lookup failed: {e}")
+        scoring_rules = {}
+
     # Build ownership map across entire league
-    team_to_owner, current_uid = _def_ownership_map(username, season)
+    team_to_owner, current_uid = _def_ownership_map(username, season, league_id, roster_id)
     # All teams (full names)
     all_teams = list(SLEEPER_TO_ODDSAPI_TEAM.values())
     # Scope handling remains, but default 'both' -> include all
@@ -728,8 +981,6 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             team_list.append((t, "available"))
 
     # Filter events in window
-    eff_mode = 'fresh' if fresh else cache_mode
-    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
 
     # Prefetch odds per event once to avoid duplicate calls per team
@@ -787,17 +1038,22 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
                 print(f"[services] defenses: no implied totals computed for team={team} game={gid}")
             if implieds:
                 implieds.sort()
-                mid = implieds[len(implieds)//2] if len(implieds) % 2 == 1 else (implieds[len(implieds)//2 -1] + implieds[len(implieds)//2])/2
+                n = len(implieds)
+                med = implieds[n // 2] if n % 2 == 1 else (implieds[n // 2 - 1] + implieds[n // 2]) / 2
+                def_floor, def_mid, def_ceiling = compute_defense_fantasy_range(med, scoring_rules)
                 owner_info = team_to_owner.get(team) or {}
                 out_rows.append({
                     "defense": team,
                     "opponent": opp,
                     "game_date": e["commence_time"],
-                    "implied_total_median": round(mid, 2),
+                    "implied_total_median": round(med, 2),
                     "book_count": len(implieds),
                     "source": source,
                     "owner": owner_info.get("name"),
                     "owned_by_current": bool(owner_info) and (owner_info.get("id") == current_uid),
+                    "floor": round(def_floor, 2),
+                    "mid": round(def_mid, 2),
+                    "ceiling": round(def_ceiling, 2),
                 })
 
     # Sort ascending by implied total (lower is better for defense)
@@ -818,6 +1074,8 @@ def build_dashboard(
     def_scope: str = "owned",  # 'owned' | 'available' | 'both'
     include_players: bool = True,
     model: str = "const",
+    league_id: Optional[str] = None,
+    roster_id: Optional[int] = None,
 ) -> Dict:
     """Build a single payload for UI: lineups and defenses with optional scoping.
 
@@ -838,32 +1096,38 @@ def build_dashboard(
     proj_this = None
     proj_next = None
     if weeks in ("this", "both"):
-        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
+        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model, league_id=league_id, roster_id=roster_id)
     if weeks in ("next", "both"):
-        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
-
-    # Build lineups from one projections call per week
-    lineups = {"this": None, "next": None}
-    if proj_this is not None:
-        lineups["this"] = {
-            "mid": build_lineup(proj_this.get("players", []), target="mid"),
-            "floor": build_lineup(proj_this.get("players", []), target="floor"),
-            "ceiling": build_lineup(proj_this.get("players", []), target="ceiling"),
-        }
-    if proj_next is not None:
-        lineups["next"] = {
-            "mid": build_lineup(proj_next.get("players", []), target="mid"),
-            "floor": build_lineup(proj_next.get("players", []), target="floor"),
-            "ceiling": build_lineup(proj_next.get("players", []), target="ceiling"),
-        }
+        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model, league_id=league_id, roster_id=roster_id)
 
     # Defenses scoped by weeks and scope parameter
     defs_this = None
     defs_next = None
     if weeks in ("this", "both"):
-        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), league_id=league_id, roster_id=roster_id)
     if weeks in ("next", "both"):
-        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), league_id=league_id, roster_id=roster_id)
+
+    def _owned(defs_payload: dict | None) -> List[dict]:
+        rows = (defs_payload or {}).get("defenses", []) or []
+        return [d for d in rows if d.get("source") == "owned" or d.get("owned_by_current")]
+
+    # Build lineups from one projections call per week (DEF included when owned)
+    lineups = {"this": None, "next": None}
+    if proj_this is not None:
+        owned_this = _owned(defs_this)
+        lineups["this"] = {
+            "mid": build_lineup(proj_this.get("players", []), target="mid", defenses=owned_this),
+            "floor": build_lineup(proj_this.get("players", []), target="floor", defenses=owned_this),
+            "ceiling": build_lineup(proj_this.get("players", []), target="ceiling", defenses=owned_this),
+        }
+    if proj_next is not None:
+        owned_next = _owned(defs_next)
+        lineups["next"] = {
+            "mid": build_lineup(proj_next.get("players", []), target="mid", defenses=owned_next),
+            "floor": build_lineup(proj_next.get("players", []), target="floor", defenses=owned_next),
+            "ceiling": build_lineup(proj_next.get("players", []), target="ceiling", defenses=owned_next),
+        }
 
     # Choose latest ratelimit info
     rl_info = ratelimit.get_details()
@@ -895,17 +1159,20 @@ def _norm_name(s: str) -> str:
         return s or ""
 
 
-def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "baseline") -> Dict:
+def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "const", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
     """Return per-book odds and market summaries used for a single player.
 
     Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).
     """
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
     eff_mode = cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {"player": {"name": name}, "markets": {}, "primary_order": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "message": NO_GAMES_SCHEDULED_MESSAGE}
+    (this_start, this_end), (next_start, next_end) = windows
     # Roster & planning (to get scoring rules and player mapping)
-    roster = sleeper_api.get_user_sleeper_data(username, season)
+    roster = _resolve_identity(username, season, league_id, roster_id)
     scoring_rules = roster.get("scoring_rules", {}) if roster else {}
-    windows = (this_start, this_end) if week == "this" else (next_start, next_end)
     plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
     planned = plan_all.get(week, {})
     # Fetch odds for planned games
@@ -1217,11 +1484,14 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
 
     Sorted by implied total ascending per game, includes medians.
     """
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
     eff_mode = cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {"defense": defense, "week": week, "games": [], "raw_odds": {}, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "message": NO_GAMES_SCHEDULED_MESSAGE}
+    (this_start, this_end), (next_start, next_end) = windows
     # Window and events
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
-    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
     # Find games with this defense
     games = [e for e in window_events if defense in (e.get("home_team"), e.get("away_team"))]

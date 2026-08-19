@@ -1,5 +1,5 @@
 import datetime as _dt
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 
 def _next_weekday(base: _dt.datetime, weekday: int) -> _dt.datetime:
@@ -59,3 +59,59 @@ def in_window(ts_iso_utc: str, window: Tuple[_dt.datetime, _dt.datetime]) -> boo
         ts = ts_iso_utc.rstrip("Z")
         dt = _dt.datetime.fromisoformat(ts)
     return start <= dt <= end
+
+
+def earliest_future_week_start(events: List[dict], now_utc: Optional[_dt.datetime] = None) -> Optional[_dt.datetime]:
+    """Thursday anchoring the earliest not-yet-started game in `events`, or
+    None if there are no games left to play (e.g. schedule/odds not posted
+    yet). Shared by draft_prep's "Week 1" anchoring and
+    resolve_week_windows' pre-season fallback below -- both need "the week
+    of the soonest real game," just for different reasons.
+    """
+    now_utc = now_utc or _dt.datetime.utcnow()
+    future_starts: List[_dt.datetime] = []
+    for e in events:
+        ts = e.get("commence_time")
+        if not ts:
+            continue
+        try:
+            d = _dt.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            continue
+        if d > now_utc:
+            future_starts.append(d)
+    if not future_starts:
+        return None
+    return _prev_weekday(min(future_starts), 3)
+
+
+def resolve_week_windows(
+    events: List[dict], now_utc: Optional[_dt.datetime] = None
+) -> Optional[Tuple[Tuple[_dt.datetime, _dt.datetime], Tuple[_dt.datetime, _dt.datetime]]]:
+    """Like compute_week_windows, but falls forward to the schedule when
+    today's calendar-anchored "this" window has no real games in it.
+
+    compute_week_windows() alone is right for the normal in-season case (you
+    want the slate relative to today), but during the pre-season gap between
+    today and the season opener, today's nearest Thu-Mon cycle has no games
+    at all -- the Odds API only lists regular-season games -- so the plain
+    calendar window silently comes back empty. When that happens, fall
+    forward to the week of the earliest scheduled game instead (same idea as
+    draft_prep._resolve_draft_week_window, which anchors unconditionally
+    since a draft only ever happens pre-season).
+
+    Returns None if there are no games in `events` at all -- there's nothing
+    to fall forward to.
+    """
+    now_utc = now_utc or _dt.datetime.utcnow()
+    calendar_this, calendar_next = compute_week_windows(now_utc)
+    if any(e.get("commence_time") and in_window(e["commence_time"], calendar_this) for e in events):
+        return calendar_this, calendar_next
+
+    week1_start = earliest_future_week_start(events, now_utc)
+    if week1_start is None:
+        return None
+    this_end = week1_start + _dt.timedelta(days=4, hours=23, minutes=59, seconds=59)
+    next_start = week1_start + _dt.timedelta(days=7)
+    next_end = next_start + _dt.timedelta(days=4, hours=23, minutes=59, seconds=59)
+    return (week1_start, this_end), (next_start, next_end)

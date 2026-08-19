@@ -272,6 +272,21 @@ def _lognormal_quantile(mu: float, sigma: float, q: float) -> float:
     return math.exp(mu + sigma * z)
 
 
+def poisson_quantile(lam: float, q: float) -> float:
+    """Smallest integer k such that P(X <= k) >= q for X ~ Poisson(lam)."""
+    if lam is None or lam <= 0:
+        return 0.0
+    target = min(max(q, 1e-6), 1 - 1e-9)
+    k = 0
+    term = math.exp(-lam)
+    c = term
+    while c < target and k < 1000:
+        k += 1
+        term *= lam / k
+        c += term
+    return float(k)
+
+
 def _poisson_fit_lambda(points: List[Tuple[int, float]]) -> Optional[float]:
     # Fit lambda to minimize squared CDF error at given (k, F(k)) anchor points
     if not points:
@@ -329,17 +344,7 @@ def model_angelini_quantiles(per_bookmaker_odds: Dict, market_key: str, fallback
                     pts.append((int(round(xs[j])), float(F[j])))
                 lam = _poisson_fit_lambda(pts)
                 if lam is not None:
-                    # find k such that CDF(k) ~ 0.15
-                    target = 0.15
-                    k = 0
-                    c = 0.0
-                    term = math.exp(-lam)
-                    c = term
-                    while c < target and k < 1000:
-                        k += 1
-                        term *= lam / k
-                        c += term
-                    q15 = float(k)
+                    q15 = poisson_quantile(lam, 0.15)
             else:
                 # lognormal fit using two lowest anchors
                 mu_sigma = _fit_lognormal_from_two_points(max(xs[0], 1e-6), F[0], max(xs[1], 1e-6), F[1]) if len(xs) >= 2 else None
@@ -354,18 +359,7 @@ def model_angelini_quantiles(per_bookmaker_odds: Dict, market_key: str, fallback
                     pts.append((int(round(xs[j])), float(F[j])))
                 lam = _poisson_fit_lambda(pts)
                 if lam is not None:
-                    # invert for target 0.85
-                    target = 0.85
-                    # simple search
-                    k = 0
-                    c = 0.0
-                    term = math.exp(-lam)
-                    c = term
-                    while c < target and k < 1000:
-                        k += 1
-                        term *= lam / k
-                        c += term
-                    q85 = float(k)
+                    q85 = poisson_quantile(lam, 0.85)
             else:
                 mu_sigma = _fit_lognormal_from_two_points(max(xs[-2], 1e-6), F[-2], max(xs[-1], 1e-6), F[-1]) if len(xs) >= 2 else None
                 if mu_sigma:

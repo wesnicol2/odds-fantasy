@@ -210,7 +210,7 @@ function _renderFpVisual(floor, mid, ceil) {
 function openCompareCurves(week) {
   try {
     showDetails('Compare Curves', '<div class="status"><span class="spinner"></span> Loading curves...</div>');
-  var projUrl = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const')) });
+  var projUrl = apiUrl('/projections', { ...identityParams(), week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const')) });
     fetchJSON(projUrl).then(function(res){
       if (!res.ok) { hideDetails(); alert('Failed to load projections'); return; }
       var all = (res.data && res.data.players) || [];
@@ -597,8 +597,7 @@ function openBookCoverage(initialWeek) {
       }
       wrap.innerHTML = '<div class="status"><span class="spinner"></span> Loading coverage...</div>';
       var params = {
-        username: (typeof val === 'function' ? (val('username') || 'wesnicol') : 'wesnicol'),
-        season: (typeof val === 'function' ? (val('season') || '2025') : '2025'),
+        ...identityParams(),
         week: w,
         mode: (typeof getDataMode === 'function' ? getDataMode() : 'auto'),
         model: (typeof getModel === 'function' ? getModel() : 'const')
@@ -864,8 +863,7 @@ async function openPlayerDetails(name, week, opts) {
   }
   // Fetch odds detail + projections for fantasy points trio
   var oddsUrl = apiUrl('/player/odds', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
+    ...identityParams(),
     week: week,
     name: name,
     region: 'us,us2',
@@ -873,8 +871,7 @@ async function openPlayerDetails(name, week, opts) {
     model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
   });
   var projUrl = apiUrl('/projections', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
+    ...identityParams(),
     week: week,
     mode: getDataMode(),
     model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
@@ -1177,8 +1174,7 @@ function _renderDebugStatDetail(data, mkey) {
       try {
         var st = (history && history.state) || {};
         var oddsUrlB = apiUrl('/player/odds', {
-          username: val('username') || 'wesnicol',
-          season: val('season') || '2025',
+          ...identityParams(),
           week: (st && st.week) || 'this',
           name: (data && data.player && data.player.name) || '',
           region: 'us,us2',
@@ -1218,8 +1214,7 @@ function _renderDebugStatDetail(data, mkey) {
         try {
           var st = (history && history.state) || {};
           var oddsUrl = apiUrl('/player/odds', {
-            username: val('username') || 'wesnicol',
-            season: val('season') || '2025',
+            ...identityParams(),
             week: (st && st.week) || 'this',
             name: (data && data.player && data.player.name) || '',
             region: 'us,us2',
@@ -1412,8 +1407,7 @@ function _renderStatGraph(title, baseKey, m, summaryThreshold, bookPoints) {
 async function openDefenseDetails(defense, week) {
   showDetails('Defense Details', '<div class="status"><span class="spinner"></span> Loading...</div>');
   var url = apiUrl('/defense/odds', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
+    ...identityParams(),
     week: week,
     defense: defense,
     region: 'us,us2',
@@ -1620,63 +1614,49 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
 
-  function attachNameHandler(containerId, nameColIndex, week) {
-    var el = document.getElementById(containerId); if (!el) return;
-    el.addEventListener('click', function(e){
-      var td = e.target.closest('td'); if (!td) return;
-      if (td.cellIndex !== nameColIndex) return;
-      var nameEl = td.querySelector('.player-name'); var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : (td.textContent || '').trim(); if (!name) return;
-      openPlayerDetails(name, week);
-    });
-  }
-  attachNameHandler('lineup-this', 1, 'this');
-  attachNameHandler('lineup-next', 1, 'next');
-  attachNameHandler('players-this', 0, 'this');
-  attachNameHandler('players-next', 0, 'next');
-
-  // Also allow clicking Floor/Mid/Ceiling cells to open player details
-  function attachPlayerStatHandler(containerId, week, cols) {
-    var el = document.getElementById(containerId); if (!el) return;
-    el.addEventListener('click', function(e){
-      var td = e.target.closest('td'); if (!td) return;
-      if (!cols.includes(td.cellIndex)) return;
-      // Find the name cell in the same row depending on table layout
-      var tr = td.parentElement; if (!tr) return;
-      // Try typical layouts: lineup: name at index 1; players: name at index 0
-      var nameCell = tr.cells[1] || tr.cells[0]; var nameEl = nameCell ? nameCell.querySelector('.player-name') : null; var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : ((nameCell && nameCell.textContent) || '').trim(); if (!name) return;
-      // Determine week from containerId suffix
-      openPlayerDetails(name, week);
-    });
-  }
-  // lineup tables: columns [3,4,5] ; players tables: [2,3,4]
-  attachPlayerStatHandler('lineup-this', 'this', [3,4,5]);
-  attachPlayerStatHandler('lineup-next', 'next', [3,4,5]);
-  attachPlayerStatHandler('players-this', 'this', [2,3,4]);
-  attachPlayerStatHandler('players-next', 'next', [2,3,4]);
-
-  function attachDefenseHandler(containerId, week) {
+  // The main UI now has ONE results container per panel (#weekly-results,
+  // shared across the Lineup/All Players/Defenses views; #draft-board) that
+  // gets re-rendered in place as the week/view toggles change, instead of
+  // one static container per week. So rather than binding a handler per old
+  // per-week container with a hardcoded week, bind one delegated handler per
+  // container that reads the CURRENT week/view from script.js's small
+  // accessor globals at click time. Matching by the `.player-name` marker
+  // (present in every row renderLineup/renderPlayers produce) instead of a
+  // fixed column index also means this doesn't care whether the row it
+  // clicked came from the lineup table or the players table.
+  function attachWeeklyResultsHandler(containerId, getWeek, getView) {
     var el = document.getElementById(containerId); if (!el) return;
     el.addEventListener('click', function(e){
       var td = e.target.closest('td'); if (!td) return;
       var tr = td.parentElement; if (!tr) return;
-      // Allow clicking defense name (col 0) or implied median (col 3)
-      if (td.cellIndex === 0 || td.cellIndex === 3) {
-        var def = (tr.cells[0] && tr.cells[0].textContent || td.textContent || '').trim(); if (!def) return;
+      var week = (typeof getWeek === 'function' && getWeek()) || 'this';
+      var view = (typeof getView === 'function' && getView()) || 'lineup';
+      if (view === 'defenses') {
+        if (td.cellIndex !== 0 && td.cellIndex !== 3) return;
+        var def = (tr.cells[0] && tr.cells[0].textContent || '').trim(); if (!def) return;
+        e.stopPropagation();
         openDefenseDetails(def, week);
+        return;
       }
+      var nameEl = tr.querySelector('.player-name');
+      var name = nameEl ? (nameEl.getAttribute('data-player') || nameEl.textContent || '').trim() : '';
+      if (!name) return;
+      e.stopPropagation();
+      openPlayerDetails(name, week);
     });
   }
-  attachDefenseHandler('defenses-this', 'this');
-  attachDefenseHandler('defenses-next', 'next');
+  attachWeeklyResultsHandler('weekly-results', window.getCurrentWeeklyWeek, window.getCurrentWeeklyView);
+  attachWeeklyResultsHandler('draft-board', window.getCurrentDraftWeek, function () { return 'lineup'; });
 
-  // Global fallback: clicking any .player-name opens details (covers future tables)
+  // Global fallback for any other .player-name click (e.g. inside the
+  // Compare Curves / Book Coverage modals) that the handler above didn't
+  // already claim via stopPropagation.
   try {
     document.addEventListener('click', function(e){
       var el = e.target.closest('.player-name');
       if (!el) return;
       var name = (el.getAttribute('data-player') || el.textContent || '').trim();
       if (!name) return;
-      // Default to 'this' week when unknown
       openPlayerDetails(name, 'this');
     });
   } catch (e) {}
@@ -1713,131 +1693,17 @@ document.addEventListener('DOMContentLoaded', function(){
   };
 })();
 
-// ---- UI overrides to highlight incomplete players and avoid zero placeholders ----
-// We override rendering helpers defined in script.js to add badges and dashes for missing stats.
-(function(){
-  // Defensive checks in case functions are renamed
-  function fmtCell(v, inc) { return inc ? 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â' : Number(v||0).toFixed(2); }
-
-  // Override renderPlayers to show incomplete badge and dashes
-  if (typeof window.renderPlayers === 'function') {
-    const _orig = window.renderPlayers;
-    window.renderPlayers = function(containerId, players) {
-      try {
-        const c = document.getElementById(containerId);
-        const rows = Array.isArray(players) ? players.slice() : [];
-        if (!c) return _orig(containerId, players);
-        if (!rows.length) { c.innerHTML = '<div class="status">No players found.</div>'; return; }
-        rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
-        const body = rows.map(r => {
-          const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
-          const nameHtml = inc ? (r.name + ' <span class="pill pill"warn- title="Odds missing; stats incomplete">incomplete</span>') : r.name;
-          return '<tr>'
-            + '<td>' + (inc ? ('<span class="incomplete"name->' + nameHtml + '</span>') : nameHtml) + '</td>'
-            + '<td>' + (r.pos || '') + '</td>'
-            + '<td>' + fmtCell(r.floor, inc) + '</td>'
-            + '<td>' + fmtCell(r.mid, inc) + '</td>'
-            + '<td>' + fmtCell(r.ceiling, inc) + '</td>'
-            + '</tr>';
-        }).join('');
-        c.innerHTML = '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>' + body + '</tbody></table>';
-      } catch (e) { try { _orig(containerId, players); } catch (_) {} }
-    }
-  }
-
-  // Override computeLineupFromPlayers to propagate incomplete flags
-  if (typeof window.computeLineupFromPlayers === 'function') {
-    window.computeLineupFromPlayers = function(players, target) {
-      const buckets = { QB: [], RB: [], WR: [], TE: [] };
-      for (const p of (players || [])) {
-        if (buckets[p.pos]) buckets[p.pos].push(p);
-      }
-      const by = (t) => (a, b) => Number(b[t] || 0) - Number(a[t] || 0);
-      Object.keys(buckets).forEach(pos => buckets[pos].sort(by(target)));
-      const used = new Set();
-      const take = (pos, n) => {
-        const out = [];
-        for (const p of buckets[pos]) {
-          if (!used.has(p.name)) { out.push(p); used.add(p.name); if (out.length === n) break; }
-        }
-        return out;
-      };
-      const lineup = { QB: take('QB', 1), RB: take('RB', 2), WR: take('WR', 2), TE: take('TE', 1) };
-      const flexPool = [];
-      for (const pos of ['WR','RB','TE']) {
-        for (const p of buckets[pos]) if (!used.has(p.name)) flexPool.push(p);
-      }
-      flexPool.sort(by(target));
-      lineup.FLEX = flexPool.slice(0, 1);
-      const rows = [];
-      let total = 0;
-      const add = (slot, p, countTotal=true) => {
-        const pts = Number(p[target] || 0);
-        if (countTotal) total += pts;
-        rows.push({ slot, name: p.name, pos: p.pos, floor: (p.floor!=null?Number(p.floor):null), mid: (p.mid!=null?Number(p.mid):null), ceiling: (p.ceiling!=null?Number(p.ceiling):null), incomplete: !!p.incomplete });
-      };
-      lineup.QB.forEach(p => add('QB', p));
-      lineup.RB.forEach(p => add('RB', p));
-      lineup.WR.forEach(p => add('WR', p));
-      lineup.TE.forEach(p => add('TE', p));
-      lineup.FLEX.forEach(p => add('FLEX', p));
-      // Append bench (all remaining players by target), but do not add to total
-      const bench = [];
-      for (const pos of ['QB','RB','WR','TE']) {
-        for (const p of buckets[pos]) if (!used.has(p.name)) bench.push(p);
-      }
-      bench.sort(by(target));
-      bench.forEach(p => add('BENCH', p, false));
-      return { target, lineup: rows, total_points: Number(total.toFixed(2)) };
-      }
-  }
-
-  // Override renderLineup to show incomplete badges and dashes
-  if (typeof window.renderLineup === 'function') {
-    const _origRL = window.renderLineup;
-    window.renderLineup = function(containerId, title, payload) {
-      try {
-        const c = document.getElementById(containerId);
-        const rows = (payload && payload.lineup) || [];
-        const target = (payload && payload.target) || 'mid';
-        const total = Number((payload && payload.total_points) || 0);
-        const ratelimit = (payload && payload.ratelimit) || '';
-        const headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th>';
-        const body = rows.map(r => {
-          const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
-          const nameHtml = inc ? (r.name + ' <span class="pill pill"warn- title="Odds missing; stats incomplete">incomplete</span>') : r.name;
-          const fmt = (v) => inc ? 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â' : Number(v||0).toFixed(2);
-          return '<tr>'
-            + '<td>' + (r.slot||'') + '</td>'
-            + '<td>' + (inc ? ('<span class="incomplete"name->' + nameHtml + '</span>') : nameHtml) + '</td>'
-            + '<td>' + (r.pos||'') + '</td>'
-            + '<td>' + fmt(r.floor) + '</td>'
-            + '<td>' + fmt(r.mid) + '</td>'
-            + '<td>' + fmt(r.ceiling) + '</td>'
-            + '</tr>';
-        }).join('');
-        c.innerHTML = [
-          `<h3>${title} - target: ${target} (total: ${total.toFixed(2)})</h3>`,
-          `<table><thead><tr>${headerCols}</tr></thead><tbody>`,
-          body,
-          '</tbody></table>',
-          `<div class="status">RateLimit: ${ratelimit}</div>`
-        ].join('\n');
-      } catch (e) { try { _origRL(containerId, title, payload); } catch (_) {} }
-    }
-  }
-})();
-
-// Load overrides (for clearer incomplete indicators and bench rows)
-try {
-  document.addEventListener('DOMContentLoaded', function(){
-    try {
-      var s = document.createElement('script');
-      s.src = '/ui/overrides.js';
-      document.body.appendChild(s);
-    } catch (e) { /* ignore */ }
-  });
-} catch (e) { /* ignore */ }
+// Note: "incomplete" badge rendering (players/lineup rows missing odds
+// coverage) lives directly in script.js's renderPlayers/renderLineup now --
+// see that file. It used to live here as a pair of runtime overrides (one
+// inline, one dynamically loaded from a since-deleted /ui/overrides.js,
+// found via a real headless-browser console-error check -- an earlier
+// cleanup pass that deleted overrides.js as "unreferenced by index.html"
+// missed that this file injected a <script src="/ui/overrides.js"> at
+// runtime, which a grep over index.html's static <script> tags won't catch.
+// The inline copy that lived here also had corrupted markup from some
+// earlier edit (mojibake'd em-dash, malformed class attributes like
+// `class="pill pill"warn-`), so it wasn't safe to just keep as-is either.
 
 
 

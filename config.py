@@ -1,8 +1,29 @@
 import os
+import datetime as _dt
 from dotenv import load_dotenv
 
 # Load environment variables from the .env file
 load_dotenv()
+
+
+def current_nfl_season() -> str:
+    """Best-guess current NFL season year, for defaulting `season` params.
+
+    Sleeper labels a league by the year its season *starts* (e.g. a league
+    playing Sep 2026 -> Jan 2027 has season="2026"). Treat Jan/Feb as still
+    part of the previous season (so a Jan 2027 default doesn't jump ahead
+    to "2027" before that season even exists on Sleeper), March onward as
+    the new one.
+    """
+    now = _dt.datetime.utcnow()
+    year = now.year if now.month >= 3 else now.year - 1
+    return str(year)
+
+
+# A hardcoded "2025" default here would silently go stale every offseason
+# (it did -- this app was still defaulting to 2025 in August 2026). Compute
+# it instead.
+DEFAULT_SEASON = current_nfl_season()
 
 # API configuration for The Odds API
 API_KEY = os.getenv('API_KEY')
@@ -11,16 +32,6 @@ EVENTS_URL = f'{BASE_URL}/sports/americanfootball_nfl/events'
 
 # Data directory for saving various data
 DATA_DIR = './data'
-
-# Yahoo API OAuth 2.0 credentials
-YAHOO_CLIENT_ID = os.getenv('YAHOO_CLIENT_ID')
-YAHOO_CLIENT_SECRET = os.getenv('YAHOO_CLIENT_SECRET')
-YAHOO_REDIRECT_URI = os.getenv('YAHOO_REDIRECT_URI')
-YAHOO_AUTHORIZATION_BASE_URL = 'https://api.login.yahoo.com/oauth2/request_auth'
-YAHOO_TOKEN_URL = 'https://api.login.yahoo.com/oauth2/get_token'
-YAHOO_OAUTH_TOKEN_FILE = f'{DATA_DIR}/yahoo_token.json'  # File to save access and refresh tokens
-YAHOO_API_BASE_URL = "https://fantasysports.yahooapis.com/fantasy/v2"
-YAHOO_LEAGUE_ID = os.getenv('YAHOO_LEAGUE_ID')
 
 # Position-Stat Configuration (define relevant stats for each position) - These stats should be in Odds API format
 POSITION_STAT_CONFIG = {

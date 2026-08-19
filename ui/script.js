@@ -1,20 +1,18 @@
-﻿// Simple debug logger
+// Simple debug logger
 const DEBUG = true; // toggle to enable/disable UI debug logs
 function dbg(...args) { if (DEBUG && console && console.log) console.log('[ui]', ...args); }
 
 function $(id) { return document.getElementById(id); }
 function val(id) { return ($(id) ? $(id).value : '').trim(); }
 
-// In-memory cache for preloaded data
+// In-memory cache for preloaded data, keyed the same way the API is: by week.
 const appCache = {
   lineups: { this: {}, next: {} },
   defenses: { this: null, next: null },
   projections: { this: null, next: null },
+  draftBoard: { this: null, next: null },
   lastRateLimit: null,
 };
-// Store raw players for local lineup building
-appCache.lineupPlayers = { this: null, next: null };
-const selectedTarget = { this: 'mid', next: 'mid' };
 
 // Track network activity to drive header spinner
 let _inflight = 0;
@@ -25,6 +23,200 @@ function _updateNetSpin() {
 }
 function _incNet() { _inflight++; _updateNetSpin(); }
 function _decNet() { _inflight = Math.max(0, _inflight - 1); _updateNetSpin(); }
+
+// --- League/team identity -----------------------------------------------
+// Cookies (not localStorage) per the requested design: league_id/roster_id
+// need to survive across the league-setup modal and be readable by every
+// fetch call site without threading extra state through. `identityParams()`
+// is the single place that decides identity for a request: league_id +
+// roster_id (explicit, unambiguous) win over username/season (legacy
+// fallback -- and username-based Sleeper lookup silently picks "your first
+// league" for that username, which is wrong for anyone in more than one).
+function setCookie(name, value, days) {
+  const maxAge = days ? `; max-age=${days * 24 * 60 * 60}` : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}${maxAge}; path=/; SameSite=Lax`;
+}
+function getCookie(name) {
+  const escaped = name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1');
+  const match = document.cookie.match(new RegExp('(?:^|; )' + escaped + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+function deleteCookie(name) {
+  document.cookie = `${name}=; path=/; max-age=0`;
+}
+function identityParams() {
+  const leagueId = getCookie('league_id');
+  const rosterId = getCookie('roster_id');
+  if (leagueId && rosterId) return { league_id: leagueId, roster_id: rosterId };
+  return { username: val('username') || 'wesnicol', season: val('season') || currentNflSeason() };
+}
+
+function currentNflSeason() {
+  // Mirrors config.current_nfl_season() in Python: Sleeper labels a league
+  // by the year its season starts, and Jan/Feb still belongs to last season.
+  // Never shown as a field -- there's no reason to ask the user for this.
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  return String((now.getUTCMonth() + 1) >= 3 ? y : y - 1);
+}
+
+// League setup, 3 steps: enter Sleeper username (cookie'd) -> pick which of
+// your leagues (its league_id gets cookie'd) -> pick your team in it
+// (roster_id cookie'd). The league's own Sleeper `status` then decides
+// whether to default to the draft board (pre_draft/drafting) or the weekly
+// lineup view (in_season/complete/anything else). Username here is only
+// ever used to list leagues to choose from -- once a league_id is picked,
+// everything downstream is keyed off league_id+roster_id, not username.
+const PRE_DRAFT_STATUSES = ['pre_draft', 'drafting'];
+
+function _openLeagueOverlay() {
+  $('leagueSetupOverlay').classList.remove('hidden');
+}
+
+function hideLeagueSetupModal() {
+  $('leagueSetupOverlay').classList.add('hidden');
+}
+
+function showLeagueSetupModal() {
+  _openLeagueOverlay();
+  $('leagueStepUser').classList.remove('hidden');
+  $('leagueStepLeague').classList.add('hidden');
+  $('leagueStepTeam').classList.add('hidden');
+  $('leagueUserError').textContent = '';
+  const existingUser = getCookie('sleeper_username');
+  if (existingUser) $('leagueUsernameInput').value = existingUser;
+}
+
+async function submitUsername() {
+  const username = ($('leagueUsernameInput').value || '').trim();
+  const season = currentNflSeason();
+  const errEl = $('leagueUserError');
+  errEl.textContent = '';
+  if (!username) { errEl.textContent = 'Please enter your Sleeper username.'; return; }
+  errEl.textContent = 'Looking up leagues...';
+  const { ok, data } = await fetchJSON(apiUrl('/user/leagues', { username, season }));
+  if (!ok || data.error) {
+    errEl.textContent = "Couldn't find that Sleeper username -- double check the spelling.";
+    return;
+  }
+  if (!data.leagues || !data.leagues.length) {
+    errEl.textContent = `No leagues found for "${username}" in ${season}.`;
+    return;
+  }
+  errEl.textContent = '';
+  setCookie('sleeper_username', username, 365);
+  populateLeaguePicker(data);
+}
+
+function populateLeaguePicker(leaguesData) {
+  _openLeagueOverlay();
+  $('leagueStepUser').classList.add('hidden');
+  $('leagueStepLeague').classList.remove('hidden');
+  $('leagueStepTeam').classList.add('hidden');
+  $('leagueLeagueError').textContent = '';
+  $('leagueLeaguePrompt').textContent = `Which league, ${leaguesData.username}?`;
+  const sel = $('leagueLeagueSelect');
+  const leagues = leaguesData.leagues || [];
+  sel.innerHTML = '<option value="">-- Select a league --</option>' +
+    leagues.map(l => `<option value="${l.league_id}">${(l.name || l.league_id)} (${l.status || 'unknown status'})</option>`).join('');
+  const existingLeague = getCookie('league_id');
+  if (existingLeague && leagues.some(l => String(l.league_id) === String(existingLeague))) {
+    sel.value = existingLeague;
+  }
+}
+
+async function submitLeaguePick() {
+  const sel = $('leagueLeagueSelect');
+  const errEl = $('leagueLeagueError');
+  errEl.textContent = '';
+  if (!sel.value) { errEl.textContent = 'Please pick a league.'; return; }
+  errEl.textContent = 'Loading teams...';
+  const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: sel.value }));
+  if (!ok || data.error) { errEl.textContent = 'Failed to load that league. Try again.'; return; }
+  errEl.textContent = '';
+  setCookie('league_id', sel.value, 365);
+  populateTeamPicker(data);
+}
+
+function populateTeamPicker(leagueData) {
+  _openLeagueOverlay();
+  $('leagueStepUser').classList.add('hidden');
+  $('leagueStepLeague').classList.add('hidden');
+  $('leagueStepTeam').classList.remove('hidden');
+  $('leagueTeamError').textContent = '';
+  $('leagueTeamPrompt').textContent = `Which team is yours in "${leagueData.name || 'this league'}"?`;
+  const sel = $('leagueTeamSelect');
+  const teams = leagueData.teams || [];
+  sel.innerHTML = '<option value="">-- Select your team --</option>' +
+    teams.map(t => `<option value="${t.roster_id}">${(t.team_name || ('Team ' + t.roster_id))}</option>`).join('');
+  const existingRoster = getCookie('roster_id');
+  if (existingRoster && teams.some(t => String(t.roster_id) === String(existingRoster))) {
+    sel.value = existingRoster;
+  }
+}
+
+function submitTeamPick() {
+  const sel = $('leagueTeamSelect');
+  if (!sel.value) { $('leagueTeamError').textContent = 'Please pick your team.'; return; }
+  setCookie('roster_id', sel.value, 365);
+  hideLeagueSetupModal();
+  applyResolvedLeagueModeAndRefresh(getCookie('league_id'));
+}
+
+function updateLeagueIndicator(leagueData) {
+  const el = $('leagueIndicator');
+  if (!el) return;
+  const rosterId = getCookie('roster_id');
+  const team = (leagueData.teams || []).find(t => String(t.roster_id) === String(rosterId));
+  const statusLabel = PRE_DRAFT_STATUSES.includes(leagueData.status) ? 'pre-draft' : (leagueData.status || '');
+  el.textContent = `${leagueData.name || leagueData.league_id} · ${team ? team.team_name : '?'} · ${statusLabel}`;
+  el.classList.remove('hidden');
+}
+
+async function applyResolvedLeagueModeAndRefresh(leagueId) {
+  const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: leagueId }));
+  if (!ok || data.error) {
+    // Stale/broken cookie (e.g. league deleted) -- restart setup from scratch.
+    deleteCookie('league_id');
+    deleteCookie('roster_id');
+    showLeagueSetupModal();
+    return;
+  }
+  updateLeagueIndicator(data);
+  const preSeason = PRE_DRAFT_STATUSES.includes(data.status);
+  dbg('applyResolvedLeagueModeAndRefresh', { status: data.status, preSeason });
+  setMode(preSeason ? 'draft' : 'weekly');
+}
+
+async function initLeagueFlow() {
+  const leagueId = getCookie('league_id');
+  if (!leagueId) {
+    // No league picked yet. If we already know the username (e.g. picked a
+    // league before but never finished team selection, or cleared just the
+    // league_id cookie), skip straight to the league list instead of
+    // asking for the username again.
+    const savedUsername = getCookie('sleeper_username');
+    if (savedUsername) {
+      const { ok, data } = await fetchJSON(apiUrl('/user/leagues', { username: savedUsername, season: currentNflSeason() }));
+      if (ok && !data.error && data.leagues && data.leagues.length) {
+        populateLeaguePicker(data);
+        return;
+      }
+    }
+    showLeagueSetupModal();
+    return;
+  }
+  const rosterId = getCookie('roster_id');
+  if (!rosterId) {
+    // League already known but no team picked yet -- resume at the team
+    // step instead of starting over.
+    const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: leagueId }));
+    if (!ok || data.error) { deleteCookie('league_id'); showLeagueSetupModal(); return; }
+    populateTeamPicker(data);
+    return;
+  }
+  await applyResolvedLeagueModeAndRefresh(leagueId);
+}
 
 function setStatus(el, msg) { if (el) el.textContent = msg || ''; }
 
@@ -44,7 +236,11 @@ function updateRateLimitDisplays(payload) {
   setStatus($('rlHeader'), str);
 }
 
-// Build lineup locally from projections
+// Build a lineup client-side from an already-fetched player list. Used only
+// by the Compare Curves modal's LINEUP tab (details.js) as a preview, not by
+// the primary Lineup view (which calls the server-authoritative /lineup
+// endpoint -- see refreshWeeklyView -- so it correctly includes DEF and
+// matches what /lineup/diffs compares against).
 function computeLineupFromPlayers(players, target) {
   const buckets = { QB: [], RB: [], WR: [], TE: [] };
   for (const p of (players || [])) {
@@ -121,49 +317,6 @@ function computeLineupFromPlayers(players, target) {
   return { target: targetKey, lineup, total_points: Number(total.toFixed(2)) };
 }
 
-
-
-function renderLineupFromPlayers(week) {
-  const players = appCache.lineupPlayers[week] || [];
-  const target = selectedTarget[week] || 'mid';
-  const payload = computeLineupFromPlayers(players, target);
-  const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
-  const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
-  renderLineup(containerId, title, payload);
-  addLineupControls(week, 'players', target);
-  // Make headers clickable to switch target
-  const c = document.getElementById(containerId);
-  if (!c) return;
-  c.querySelectorAll('th').forEach(th => {
-    const txt = (th.textContent || '').toLowerCase();
-    if (['floor','mid','ceiling'].some(k => txt.includes(k))) {
-      th.style.cursor = 'pointer';
-      th.onclick = () => {
-        if (txt.includes('floor')) selectedTarget[week] = 'floor';
-        else if (txt.includes('mid')) selectedTarget[week] = 'mid';
-        else if (txt.includes('ceiling')) selectedTarget[week] = 'ceiling';
-        renderLineupFromPlayers(week);
-      };
-    }
-  });
-}
-
-async function showLineup(week) {
-  if (!appCache.lineupPlayers[week]) {
-    const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
-    showContainerLoading(containerId, 'Loading lineup...');
-    const mode = getDataMode();
-  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
-    const { ok, data } = await fetchJSON(url);
-    if (!ok) { document.getElementById(containerId).innerHTML = '<div class=\"status\">Failed to load lineup.</div>'; return; }
-    appCache.lineupPlayers[week] = data.players || [];
-    appCache.lastRateLimit = data;
-    selectedTarget[week] = 'mid';
-  }
-  renderLineupFromPlayers(week);
-  updateRateLimitDisplays(appCache.lastRateLimit || {});
-}
-
 // UI loading helpers
 function disableAllButtons(disabled) {
   document.querySelectorAll('button').forEach(btn => { btn.disabled = !!disabled; });
@@ -207,18 +360,30 @@ function apiUrl(path, params = {}) {
 }
 
 function getDataMode() {
-  const el = document.querySelector('md-radio[name="dataMode"][checked]') || document.querySelector('input[name="dataMode"]:checked');
-  if (!el) return 'auto';
-  return el.value || el.getAttribute('value') || 'auto';
+  const el = $('dataModeSelect');
+  return (el && el.value) ? el.value : 'auto';
 }
 
 function getModel() {
-  const elFloat = document.getElementById('modelSelectFloating');
-  if (elFloat && elFloat.value) return elFloat.value;
-  const el = document.getElementById('modelSelect');
+  const el = $('modelSelect');
   return (el && el.value) ? el.value : 'const';
 }
 
+// A player/lineup row is "incomplete" when the backend had no odds coverage
+// to project from -- floor/mid/ceiling are 0 (or null) because there's
+// nothing to compute from, not because the player is actually projected for
+// zero. Flag it visibly instead of rendering a plain, misleading "0.00".
+function _isIncompleteRow(r) {
+  return !!r.incomplete || (r.mid == null && r.floor == null && r.ceiling == null);
+}
+function _statCell(v, incomplete) {
+  return incomplete ? '—' : Number(v || 0).toFixed(2);
+}
+function _nameCell(r, incomplete) {
+  const nameSpan = `<span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span>`;
+  if (!incomplete) return nameSpan;
+  return `<span class="incomplete-name">${nameSpan} <span class="pill pill-warn" title="No odds coverage found -- stats unavailable">incomplete</span></span>`;
+}
 
 function renderLineup(containerId, title, payload) {
   const c = $(containerId);
@@ -228,15 +393,18 @@ function renderLineup(containerId, title, payload) {
   const ratelimit = payload?.ratelimit || '';
   dbg('renderLineup', { containerId, title, count: rows.length, target, total });
   const headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th>';
-  const rowHtml = rows.map(r => `
+  const rowHtml = rows.map(r => {
+    const inc = _isIncompleteRow(r);
+    return `
     <tr>
       <td>${r.slot}</td>
-      <td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td>
+      <td>${_nameCell(r, inc)}</td>
       <td>${r.pos}</td>
-      <td>${Number(r.floor).toFixed(2)}</td>
-      <td>${Number(r.mid).toFixed(2)}</td>
-      <td>${Number(r.ceiling).toFixed(2)}</td>
-    </tr>`);
+      <td>${_statCell(r.floor, inc)}</td>
+      <td>${_statCell(r.mid, inc)}</td>
+      <td>${_statCell(r.ceiling, inc)}</td>
+    </tr>`;
+  });
   const table = [
     `<h3>${title} — target: ${target} (total: ${total.toFixed(2)})</h3>`,
     `<table><thead><tr>${headerCols}</tr></thead><tbody>`,
@@ -245,6 +413,7 @@ function renderLineup(containerId, title, payload) {
     `<div class="status">RateLimit: ${ratelimit}</div>`
   ].join('\n');
   c.innerHTML = table;
+  try { enableTableSort(c.querySelector('table')); } catch (e) {}
 }
 
 function renderDefenses(containerId, payload) {
@@ -255,44 +424,22 @@ function renderDefenses(containerId, payload) {
     c.innerHTML = '<div class="status">No defenses found for this week.</div>';
     return;
   }
-  // Ensure sorted by opponent implied total ascending (server already sorts, but keep safe)
   rows.sort((a, b) => (Number(a.implied_total_median) - Number(b.implied_total_median)) || (Number(b.book_count) - Number(a.book_count)));
   const table = [
-    '<table><thead><tr><th>Defense</th><th>Owner</th><th>Opponent</th><th>Game Date</th><th>Opp Implied</th><th># Books</th><th>Source</th></tr></thead><tbody>',
+    '<table><thead><tr><th>Defense</th><th>Owner</th><th>Opponent</th><th>Game Date</th><th>Opp Implied</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>',
     ...rows.map(r => {
       const owner = r.owner ? String(r.owner) : '';
       const mine = !!r.owned_by_current;
       const taken = !!(r.owner);
       const cls = mine ? 'def-row def-mine' : (taken ? 'def-row def-taken' : 'def-row def-available');
-      return `<tr class="${cls}"><td>${r.defense}</td><td>${owner || '-'}</td><td>${r.opponent}</td><td>${r.game_date}</td><td>${Number(r.implied_total_median).toFixed(2)}</td><td>${r.book_count}</td><td>${r.source}</td></tr>`;
+      const fmt = (v) => (v == null ? '-' : Number(v).toFixed(2));
+      return `<tr class="${cls}"><td>${r.defense}</td><td>${owner || '-'}</td><td>${r.opponent}</td><td>${r.game_date}</td><td>${fmt(r.implied_total_median)}</td><td>${fmt(r.floor)}</td><td>${fmt(r.mid)}</td><td>${fmt(r.ceiling)}</td></tr>`;
     }),
     '</tbody></table>',
     `<div class="status">RateLimit: ${payload.ratelimit || ''}</div>`
   ].join('\n');
   c.innerHTML = table;
-}
-
-async function loadLineup(week, target) {
-  // Use cached data preloaded on refresh
-  const cached = appCache.lineups?.[week]?.[target];
-  const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
-  const title = week === 'this' ? 'This Week Lineup' : 'Next Week Lineup';
-  if (!cached) {
-    dbg('loadLineup:no-cache', { week, target });
-    showContainerLoading(containerId, 'Loading lineup...');
-  const mode = getDataMode();
-  const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, mode, model: getModel() });
-    const { ok, data } = await fetchJSON(url);
-    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load lineup.</div>'; return; }
-    appCache.lineups[week] = appCache.lineups[week] || {};
-    appCache.lineups[week][target] = data;
-    renderLineup(containerId, title, data);
-    updateRateLimitDisplays(data);
-    return;
-  }
-  renderLineup(containerId, title, cached);
-  addLineupControls(week, 'api', target);
-  updateRateLimitDisplays(appCache.lastRateLimit || cached);
+  try { enableTableSort(c.querySelector('table')); } catch (e) {}
 }
 
 function renderPlayers(containerId, players) {
@@ -302,152 +449,149 @@ function renderPlayers(containerId, players) {
     c.innerHTML = '<div class="status">No players found.</div>';
     return;
   }
-  // Sort by mid descending
   rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
   const table = [
     '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>',
-    ...rows.map(r => `<tr><td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`),
+    ...rows.map(r => {
+      const inc = _isIncompleteRow(r);
+      return `<tr><td>${_nameCell(r, inc)}</td><td>${r.pos}</td><td>${_statCell(r.floor, inc)}</td><td>${_statCell(r.mid, inc)}</td><td>${_statCell(r.ceiling, inc)}</td></tr>`;
+    }),
     '</tbody></table>'
   ].join('\n');
   c.innerHTML = table;
+  try { enableTableSort(c.querySelector('table')); } catch (e) {}
 }
 
-// Inject lineup controls (Refresh, Close) into container
-function addLineupControls(week, source, target) {
-  try {
-    const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
-    const c = $(containerId);
-    if (!c) return;
-    // Remove existing controls to avoid duplicates
-    const old = c.querySelector('.lineup-controls');
-    if (old && old.parentNode) old.parentNode.removeChild(old);
-    const controls = document.createElement('div');
-    controls.className = 'btn-row lineup-controls';
-    controls.innerHTML = `
-      <button onclick="window._refreshLineup('${week}','${target||'mid'}','${source||'api'}')">Refresh</button>
-      <button onclick="window._closeLineup('${week}')">Close</button>
-    `;
-    c.insertAdjacentElement('afterbegin', controls);
-  } catch (e) {
-    console.error('[ui] addLineupControls:error', e);
-  }
-}
+// --- Weekly panel (Lineup / All Players / Defenses, This/Next Week) -----
+const weeklyState = { week: 'this', view: 'lineup', target: 'mid' };
+window.getCurrentWeeklyWeek = () => weeklyState.week;
+window.getCurrentWeeklyView = () => weeklyState.view;
 
-// Global helpers used by controls
-window._closeLineup = function(week) {
-  const id = (week === 'this' ? 'lineup-this' : 'lineup-next');
-  const el = $(id);
-  if (el) el.innerHTML = '';
-};
-
-window._refreshLineup = async function(week, target, source) {
-  try {
-    if (source === 'players') {
-      // Force re-fetch projections and re-render local lineup
-      appCache.lineupPlayers[week] = null;
-      await showLineup(week);
-    } else {
-      // Force re-fetch lineup from API by clearing cache
-      if (appCache.lineups[week]) delete appCache.lineups[week][target||'mid'];
-      await loadLineup(week, target||'mid');
-    }
-  } catch (e) {
-    console.error('[ui] _refreshLineup:error', e);
-  }
-};
-
-async function showPlayers(week) {
-  const cached = appCache.projections?.[week];
-  const containerId = week === 'this' ? 'players-this' : 'players-next';
-  if (!cached) {
-    dbg('showPlayers:no-cache', { week });
-    showContainerLoading(containerId, 'Loading players...');
+async function refreshWeeklyView() {
+  const { week, view, target } = weeklyState;
+  const containerId = 'weekly-results';
   const mode = getDataMode();
-  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
-    const { ok, data } = await fetchJSON(url);
+  const model = getModel();
+
+  if (view === 'lineup') {
+    const cached = appCache.lineups?.[week]?.[target];
+    if (cached) {
+      renderLineup(containerId, week === 'this' ? 'This Week Lineup' : 'Next Week Lineup', cached);
+      updateRateLimitDisplays(cached);
+      return;
+    }
+    showContainerLoading(containerId, 'Loading lineup...');
+    const { ok, data } = await fetchJSON(apiUrl('/lineup', { ...identityParams(), week, target, mode, model }));
+    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load lineup.</div>'; return; }
+    appCache.lineups[week] = appCache.lineups[week] || {};
+    appCache.lineups[week][target] = data;
+    appCache.lastRateLimit = data;
+    renderLineup(containerId, week === 'this' ? 'This Week Lineup' : 'Next Week Lineup', data);
+    updateRateLimitDisplays(data);
+  } else if (view === 'players') {
+    const cached = appCache.projections?.[week];
+    if (cached) { renderPlayers(containerId, cached.players || []); updateRateLimitDisplays(appCache.lastRateLimit || {}); return; }
+    showContainerLoading(containerId, 'Loading players...');
+    const { ok, data } = await fetchJSON(apiUrl('/projections', { ...identityParams(), week, mode, model }));
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load players.</div>'; return; }
     appCache.projections[week] = data;
+    appCache.lastRateLimit = data;
     renderPlayers(containerId, data.players || []);
+    updateRateLimitDisplays(data);
+  } else if (view === 'defenses') {
+    const cached = appCache.defenses?.[week];
+    if (cached) { renderDefenses(containerId, cached); updateRateLimitDisplays(appCache.lastRateLimit || cached); return; }
+    showContainerLoading(containerId, 'Loading defenses...');
+    const { ok, data } = await fetchJSON(apiUrl('/defenses', { ...identityParams(), week, scope: 'both', mode }));
+    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load defenses.</div>'; return; }
+    appCache.defenses[week] = data;
+    appCache.lastRateLimit = data;
+    renderDefenses(containerId, data);
+    updateRateLimitDisplays(data);
+  }
+}
+
+// --- Draft board panel (Week 1 / Week 2, position filter) ----------------
+const draftState = { week: 'this' };
+window.getCurrentDraftWeek = () => draftState.week;
+
+function _renderDraftBoard(containerId, data) {
+  // "Week 1"/"Week 2" are schedule-anchored (earliest games in the odds
+  // feed), not tied to today's date -- always show the resolved date range
+  // (or the "nothing scheduled yet" message) so it's never ambiguous what's
+  // actually loaded. renderPlayers() owns the table itself; this just adds
+  // a header in front of it.
+  const posFilter = ($('draftPosFilter') || {}).value || '';
+  const players = posFilter ? (data.players || []).filter(p => p.pos === posFilter) : (data.players || []);
+  renderPlayers(containerId, players);
+  const c = $(containerId);
+  if (!c) return;
+  let header = '';
+  if (data.message) {
+    header = `<div class="status draft-board-note">${data.message}</div>`;
+  } else if (data.window_start && data.window_end) {
+    const fmt = (iso) => {
+      try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+      catch (e) { return iso; }
+    };
+    header = `<div class="status draft-board-note">Games: ${fmt(data.window_start)} – ${fmt(data.window_end)}</div>`;
+  }
+  if (header) c.insertAdjacentHTML('afterbegin', header);
+}
+
+async function showDraftBoard(week) {
+  // Intentionally not scoped to any roster -- see /draft-board in the API
+  // and CONTRIBUTING.md's "Odds API quota awareness" section. Fetched once
+  // per week and cached client-side; the position filter re-filters the
+  // cached board instead of re-fetching (the API doesn't fetch fewer games
+  // for a narrower position filter, so there's no cost benefit to a
+  // server round-trip on every filter change).
+  draftState.week = week;
+  const cached = appCache.draftBoard?.[week];
+  const containerId = 'draft-board';
+  if (!cached) {
+    dbg('showDraftBoard:no-cache', { week });
+    showContainerLoading(containerId, 'Loading draft board (this can take a bit -- it covers every team playing this week)...');
+    const url = apiUrl('/draft-board', { ...identityParams(), week, mode: getDataMode(), model: getModel() });
+    const { ok, data } = await fetchJSON(url);
+    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load draft board.</div>'; return; }
+    appCache.draftBoard[week] = data;
+    appCache.lastRateLimit = data;
+    _renderDraftBoard(containerId, data);
     updateRateLimitDisplays(data);
     return;
   }
-  renderPlayers(containerId, cached.players || []);
+  _renderDraftBoard(containerId, cached);
   updateRateLimitDisplays(appCache.lastRateLimit || {});
 }
 
-async function loadDefenses(week) {
-  const cached = appCache.defenses?.[week];
-  const containerId = week === 'this' ? 'defenses-this' : 'defenses-next';
-  if (!cached) {
-    dbg('loadDefenses:no-cache', { week });
-    showContainerLoading(containerId, 'Loading defenses...');
-  const mode = getDataMode();
-  const url = apiUrl('/defenses', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, scope: 'both', mode });
-    const { ok, data } = await fetchJSON(url);
-    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load defenses.</div>'; return; }
-    appCache.defenses[week] = data;
-    renderDefenses(containerId, data);
-    updateRateLimitDisplays(data);
-    return;
-  }
-  renderDefenses(containerId, cached);
-  updateRateLimitDisplays(appCache.lastRateLimit || cached);
+// --- Mode switch (Draft Board vs Weekly) ----------------------------------
+function setMode(mode) {
+  const isDraft = mode === 'draft';
+  $('panel-draft').classList.toggle('hidden', !isDraft);
+  $('panel-weekly').classList.toggle('hidden', isDraft);
+  $('modeDraftBtn').classList.toggle('toggle-active', isDraft);
+  $('modeWeeklyBtn').classList.toggle('toggle-active', !isDraft);
+  if (isDraft) showDraftBoard(draftState.week);
+  else refreshWeeklyView();
 }
 
-async function refreshAll() {
-  const username = val('username') || 'wesnicol';
-  const season = val('season') || '2025';
-  const mode = getDataMode();
-  const url = apiUrl('/dashboard', { username, season, mode, weeks: 'this', def_scope: 'owned', include_players: '1', model: getModel() });
-  dbg('refreshAll:start', { url, username, season });
-  setStatus($('pingStatus'), 'Refreshing...');
-  showGlobalLoading('Refreshing dashboard...');
-  disableAllButtons(true);
-  try {
-    const { ok, data } = await fetchJSON(url);
-    if (!ok) throw new Error('Request failed: ' + url);
-    // Populate cache
-    appCache.lineups.this.mid = data?.lineups?.this?.mid || null;
-    appCache.lineups.this.floor = data?.lineups?.this?.floor || null;
-    appCache.lineups.this.ceiling = data?.lineups?.this?.ceiling || null;
-    appCache.lineups.next.mid = data?.lineups?.next?.mid || null;
-    appCache.lineups.next.floor = data?.lineups?.next?.floor || null;
-    appCache.lineups.next.ceiling = data?.lineups?.next?.ceiling || null;
-    appCache.defenses.this = data?.defenses?.this || null;
-    appCache.defenses.next = data?.defenses?.next || null;
-    appCache.projections.this = data?.projections?.this || null;
-    appCache.projections.next = data?.projections?.next || null;
-    appCache.lastRateLimit = data;
-    setStatus($('pingStatus'), 'Ready');
-    dbg('refreshAll:cache-filled', {
-      lineups_this: Object.keys(appCache.lineups.this).length,
-      lineups_next: Object.keys(appCache.lineups.next).length,
-      defenses_this: !!appCache.defenses.this,
-      defenses_next: !!appCache.defenses.next,
-      players_this: (data?.projections?.this?.players || []).length,
-      players_next: (data?.projections?.next?.players || []).length,
-    });
-    // Render defaults
-    loadLineup('this', 'mid');
-    loadDefenses('this');
-  } catch (e) {
-    console.error('[ui] refreshAll:error', e);
-    alert('Refresh failed. Check API base URL and server.');
-    setStatus($('pingStatus'), 'Error');
-  } finally {
-    hideGlobalLoading();
-    disableAllButtons(false);
-  }
+// Refresh whichever panel is currently visible. Also called by details.js
+// after a model change inside a player-detail popup, so it stays meaningful
+// as "refresh the background view under the new model" rather than a no-op.
+function refreshAll() {
+  const draftVisible = !$('panel-draft').classList.contains('hidden');
+  // Invalidate caches so the new model/data-mode actually takes effect.
+  appCache.lineups = { this: {}, next: {} };
+  appCache.defenses = { this: null, next: null };
+  appCache.projections = { this: null, next: null };
+  appCache.draftBoard = { this: null, next: null };
+  if (draftVisible) showDraftBoard(draftState.week);
+  else refreshWeeklyView();
 }
 
 async function dbgProjections(week) {
-  const url = apiUrl('/projections', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
-    week,
-    mode: getDataMode(),
-    model: getModel()
-  });
+  const url = apiUrl('/projections', { ...identityParams(), week, mode: getDataMode(), model: getModel() });
   showContainerLoading('projectionsDebug', 'Loading projections...');
   const { ok, data } = await fetchJSON(url);
   if (!ok) { dbg('dbgProjections:fail', { week, url }); return alert('Failed to load projections'); }
@@ -458,44 +602,127 @@ async function dbgProjections(week) {
 // Wire handlers
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
-  // Help (More Info) overlay wiring
-  try {
-    const btnHelp = document.getElementById('btnHelp');
-    const help = document.getElementById('helpOverlay');
-    const helpClose = document.getElementById('helpClose');
-    if (btnHelp && help) {
-      btnHelp.addEventListener('click', () => { try { help.classList.remove('hidden'); } catch (e) {} });
-    }
-    if (helpClose && help) {
-      helpClose.addEventListener('click', () => { try { help.classList.add('hidden'); } catch (e) {} });
-    }
-  } catch (e) { /* ignore */ }
   attachSettingsListeners();
-  try { const v = getModel(); const ms = document.getElementById('modelSelect'); const mf = document.getElementById('modelSelectFloating'); if (ms) ms.value = v; if (mf) mf.value = v; } catch (e) {}
-  
-  // Removed: legacy number-only lineup view button
-  document.querySelectorAll('.btn-defenses').forEach(btn => {
-    btn.addEventListener('click', () => loadDefenses(btn.dataset.week));
-  });
+
+  // Settings popover
+  const btnSettings = $('btnSettings');
+  const settingsPanel = $('settingsPanel');
+  if (btnSettings && settingsPanel) {
+    btnSettings.addEventListener('click', (e) => { e.stopPropagation(); settingsPanel.classList.toggle('open'); });
+    document.addEventListener('click', (e) => {
+      if (!settingsPanel.classList.contains('open')) return;
+      if (settingsPanel.contains(e.target) || e.target === btnSettings) return;
+      settingsPanel.classList.remove('open');
+    });
+  }
+  const btnShowFallbackId = $('btnShowFallbackId');
+  const fallbackIdFields = $('fallbackIdFields');
+  if (btnShowFallbackId && fallbackIdFields) {
+    btnShowFallbackId.addEventListener('click', () => fallbackIdFields.classList.toggle('hidden'));
+  }
+
+  // Mode switch
+  const modeDraftBtn = $('modeDraftBtn');
+  const modeWeeklyBtn = $('modeWeeklyBtn');
+  if (modeDraftBtn) modeDraftBtn.addEventListener('click', () => setMode('draft'));
+  if (modeWeeklyBtn) modeWeeklyBtn.addEventListener('click', () => setMode('weekly'));
+
+  // Draft panel toggles
+  const draftPanel = $('panel-draft');
+  if (draftPanel) {
+    draftPanel.querySelectorAll('.week-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        draftPanel.querySelectorAll('.week-toggle').forEach(b => b.classList.toggle('toggle-active', b === btn));
+        showDraftBoard(btn.dataset.week);
+      });
+    });
+  }
+  const draftPosFilter = $('draftPosFilter');
+  if (draftPosFilter) draftPosFilter.addEventListener('change', () => showDraftBoard(draftState.week));
+
+  // Weekly panel toggles
+  const weeklyPanel = $('panel-weekly');
+  if (weeklyPanel) {
+    weeklyPanel.querySelectorAll('.week-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        weeklyState.week = btn.dataset.week;
+        weeklyPanel.querySelectorAll('.week-toggle').forEach(b => b.classList.toggle('toggle-active', b === btn));
+        refreshWeeklyView();
+      });
+    });
+    weeklyPanel.querySelectorAll('.view-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        weeklyState.view = btn.dataset.view;
+        weeklyPanel.querySelectorAll('.view-toggle').forEach(b => b.classList.toggle('toggle-active', b === btn));
+        const targetRow = $('targetToggleRow');
+        if (targetRow) targetRow.classList.toggle('hidden', weeklyState.view !== 'lineup');
+        refreshWeeklyView();
+      });
+    });
+    weeklyPanel.querySelectorAll('.target-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        weeklyState.target = btn.dataset.target;
+        weeklyPanel.querySelectorAll('.target-toggle').forEach(b => b.classList.toggle('toggle-active', b === btn));
+        refreshWeeklyView();
+      });
+    });
+  }
+
+  // Advanced tools (collapsed by default)
+  const btnToggleAdvanced = $('btnToggleAdvanced');
+  const panelAdvanced = $('panel-advanced');
+  if (btnToggleAdvanced && panelAdvanced) {
+    btnToggleAdvanced.addEventListener('click', () => {
+      const nowHidden = panelAdvanced.classList.toggle('hidden');
+      btnToggleAdvanced.textContent = nowHidden ? 'Show Advanced Tools' : 'Hide Advanced Tools';
+    });
+  }
   document.querySelectorAll('.btn-compare-curves').forEach(btn => {
     btn.addEventListener('click', () => {
       try { if (typeof openCompareCurves === 'function') openCompareCurves(btn.dataset.week || 'this'); } catch (e) { console.error(e); }
     });
   });
-  const btnBookCoverage = document.getElementById('btnBookCoverage');
+  const btnBookCoverage = $('btnBookCoverage');
   if (btnBookCoverage) {
     btnBookCoverage.addEventListener('click', () => {
       try { if (typeof openBookCoverage === 'function') openBookCoverage('this'); } catch (e) { console.error(e); }
     });
   }
-  document.querySelectorAll('.btn-players').forEach(btn => {
-    btn.addEventListener('click', () => showPlayers(btn.dataset.week));
-  });
+  const btnProjThis = $('btnProjThis');
+  const btnProjNext = $('btnProjNext');
   if (btnProjThis) btnProjThis.addEventListener('click', () => dbgProjections('this'));
   if (btnProjNext) btnProjNext.addEventListener('click', () => dbgProjections('next'));
+
+  // League/team setup flow: username -> league -> team
+  const leagueUserContinue = $('leagueUserContinue');
+  if (leagueUserContinue) leagueUserContinue.addEventListener('click', () => submitUsername());
+  const leagueUsernameInput = $('leagueUsernameInput');
+  if (leagueUsernameInput) leagueUsernameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitUsername(); });
+
+  const leagueLeagueContinue = $('leagueLeagueContinue');
+  if (leagueLeagueContinue) leagueLeagueContinue.addEventListener('click', () => submitLeaguePick());
+  const leagueLeagueBack = $('leagueLeagueBack');
+  if (leagueLeagueBack) leagueLeagueBack.addEventListener('click', () => {
+    $('leagueStepLeague').classList.add('hidden');
+    $('leagueStepUser').classList.remove('hidden');
+  });
+
+  const leagueTeamContinue = $('leagueTeamContinue');
+  if (leagueTeamContinue) leagueTeamContinue.addEventListener('click', () => submitTeamPick());
+  const leagueTeamBack = $('leagueTeamBack');
+  if (leagueTeamBack) leagueTeamBack.addEventListener('click', () => {
+    $('leagueStepTeam').classList.add('hidden');
+    $('leagueStepLeague').classList.remove('hidden');
+  });
+
+  const leagueSetupClose = $('leagueSetupClose');
+  if (leagueSetupClose) leagueSetupClose.addEventListener('click', () => hideLeagueSetupModal());
+  const btnChangeLeague = $('btnChangeLeague');
+  if (btnChangeLeague) btnChangeLeague.addEventListener('click', () => showLeagueSetupModal());
+
   dbg('DOMContentLoaded');
-  // Click 'Refresh' to load dashboard data when you want to fetch.
-  // Global error surfacing for visibility
+  initLeagueFlow();
+
   window.addEventListener('error', (e) => {
     console.error('[ui] window.error', e?.error || e?.message || e);
   });
@@ -504,18 +731,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-
-
-
-
 // Persist basic settings in localStorage
 function saveSettings() {
   try {
     const data = {
       username: ($('username')||{}).value || '',
       season: ($('season')||{}).value || '',
-      dataMode: (document.querySelector('input[name="dataMode"]:checked')||{}).value || 'auto',
-      model: getModel() || 'const',
+      dataMode: getDataMode(),
+      model: getModel(),
     };
     localStorage.setItem('ofdash.settings', JSON.stringify(data));
   } catch (e) { /* ignore */ }
@@ -528,22 +751,15 @@ function loadSettings() {
     const s = JSON.parse(raw);
     if (s.username && $('username')) $('username').value = s.username;
     if (s.season && $('season')) $('season').value = s.season;
-    if (s.dataMode) {
-      const radio = document.querySelector('input[name="dataMode"][value="'+s.dataMode+'"]');
-      if (radio) radio.checked = true;
-    }
-    if (s.model) {
-      const ms = document.getElementById('modelSelect'); if (ms) ms.value = s.model;
-      const mf = document.getElementById('modelSelectFloating'); if (mf) mf.value = s.model;
-    }
+    if (s.dataMode) { const dm = $('dataModeSelect'); if (dm) dm.value = s.dataMode; }
+    if (s.model) { const ms = $('modelSelect'); if (ms) ms.value = s.model; }
   } catch (e) { /* ignore */ }
 }
 
 function attachSettingsListeners() {
   ['username','season'].forEach(id => { const el=$(id); if (el) el.addEventListener('change', saveSettings); });
-  document.querySelectorAll('input[name="dataMode"]').forEach(r => r.addEventListener('change', saveSettings));
-  const ms = document.getElementById('modelSelect'); if (ms) ms.addEventListener('change', () => { try { const mf = document.getElementById('modelSelectFloating'); if (mf) mf.value = ms.value; saveSettings(); refreshAll(); } catch (e) {} });
-  const mf = document.getElementById('modelSelectFloating'); if (mf) mf.addEventListener('change', () => { try { const ms2 = document.getElementById('modelSelect'); if (ms2) ms2.value = mf.value; saveSettings(); refreshAll(); } catch (e) {} });
+  const dm = $('dataModeSelect'); if (dm) dm.addEventListener('change', () => { saveSettings(); refreshAll(); });
+  const ms = $('modelSelect'); if (ms) ms.addEventListener('change', () => { saveSettings(); refreshAll(); });
 }
 
 // Enable simple table sorting on click
@@ -573,4 +789,3 @@ function enableTableSort(table) {
     });
   } catch (e) { /* ignore */ }
 }
-

@@ -90,13 +90,15 @@ class ApiTestCase(unittest.TestCase):
         self.assertIn('coverage', payload)
         self.assertIsInstance(payload.get('coverage', {}).get('rows', []), list)
 
+    @patch('refactored.api.list_defenses')
     @patch('refactored.api.build_lineup')
     @patch('refactored.api.compute_projections')
-    def test_lineup(self, mock_proj, mock_build):
+    def test_lineup(self, mock_proj, mock_build, mock_defs):
         mock_proj.return_value = {
             'players': [{'name': 'QB A', 'pos': 'QB', 'mid': 18.0}],
             'ratelimit': 'remaining=90%'
         }
+        mock_defs.return_value = {'defenses': []}
         mock_build.return_value = {
             'target': 'mid',
             'lineup': [{'slot': 'QB', 'name': 'QB A', 'pos': 'QB', 'points': 18.0}],
@@ -106,11 +108,15 @@ class ApiTestCase(unittest.TestCase):
         self.assertTrue(status.startswith('200'))
         self.assertEqual(payload['target'], 'mid')
         self.assertGreaterEqual(len(payload['lineup']), 1)
+        # Defenses are looked up scoped to the caller's own roster only
+        self.assertEqual(mock_defs.call_args.kwargs.get('scope'), 'owned')
 
+    @patch('refactored.api.list_defenses')
     @patch('refactored.api.build_lineup_diffs')
     @patch('refactored.api.compute_projections')
-    def test_lineup_diffs(self, mock_proj, mock_diffs):
+    def test_lineup_diffs(self, mock_proj, mock_diffs, mock_defs):
         mock_proj.return_value = {'players': [], 'ratelimit': 'remaining=80%'}
+        mock_defs.return_value = {'defenses': []}
         mock_diffs.return_value = {
             'from': {'lineup': []},
             'floor_changes': [{'slot': 'FLEX', 'from': 'X', 'to': 'Y'}],
@@ -132,6 +138,81 @@ class ApiTestCase(unittest.TestCase):
         status, headers, payload = wsgi_get('/defenses?username=u&season=2025&week=this&scope=both')
         self.assertTrue(status.startswith('200'))
         self.assertIsInstance(payload.get('defenses'), list)
+
+    @patch('refactored.api.compute_draft_board')
+    def test_draft_board(self, mock_board):
+        mock_board.return_value = {
+            'week': 'this',
+            'players': [
+                {'name': 'Josh Allen', 'pos': 'QB', 'team': 'Buffalo Bills', 'floor': 15.0, 'mid': 20.0, 'ceiling': 26.0},
+            ],
+            'ratelimit': 'remaining=95%',
+        }
+        status, headers, payload = wsgi_get('/draft-board?username=u&season=2025&week=this&positions=QB,RB')
+        self.assertTrue(status.startswith('200'))
+        self.assertIsInstance(payload.get('players'), list)
+        self.assertEqual(payload['players'][0]['name'], 'Josh Allen')
+        # positions query param should be parsed into a list and passed through
+        self.assertEqual(mock_board.call_args.kwargs.get('positions'), ['QB', 'RB'])
+
+    @patch('refactored.api.resolve_user_leagues')
+    def test_user_leagues(self, mock_resolve):
+        mock_resolve.return_value = {
+            'username': 'wesnicol',
+            'user_id': 'u1',
+            'season': '2026',
+            'leagues': [{'league_id': '123', 'name': 'My League', 'status': 'pre_draft', 'season': '2026'}],
+        }
+        status, headers, payload = wsgi_get('/user/leagues?username=wesnicol&season=2026')
+        self.assertTrue(status.startswith('200'))
+        self.assertEqual(len(payload['leagues']), 1)
+
+    def test_user_leagues_requires_username(self):
+        status, headers, payload = wsgi_get('/user/leagues')
+        self.assertTrue(status.startswith('400'))
+
+    @patch('refactored.api.resolve_user_leagues')
+    def test_user_leagues_not_found(self, mock_resolve):
+        mock_resolve.return_value = {'error': 'user_not_found', 'username': 'nobody'}
+        status, headers, payload = wsgi_get('/user/leagues?username=nobody')
+        self.assertTrue(status.startswith('404'))
+
+    @patch('refactored.api.resolve_league')
+    def test_league_resolve(self, mock_resolve):
+        mock_resolve.return_value = {
+            'league_id': '123',
+            'name': 'My League',
+            'season': '2026',
+            'status': 'pre_draft',
+            'teams': [{'roster_id': 1, 'owner_id': 'u1', 'team_name': 'Alice', 'display_name': 'Alice'}],
+        }
+        status, headers, payload = wsgi_get('/league/resolve?league_id=123')
+        self.assertTrue(status.startswith('200'))
+        self.assertEqual(payload['status'], 'pre_draft')
+        self.assertEqual(len(payload['teams']), 1)
+
+    def test_league_resolve_requires_league_id(self):
+        status, headers, payload = wsgi_get('/league/resolve')
+        self.assertTrue(status.startswith('400'))
+
+    @patch('refactored.api.resolve_league')
+    def test_league_resolve_not_found(self, mock_resolve):
+        mock_resolve.return_value = {'error': 'league_not_found', 'league_id': 'bogus'}
+        status, headers, payload = wsgi_get('/league/resolve?league_id=bogus')
+        self.assertTrue(status.startswith('404'))
+
+    @patch('refactored.api.list_defenses')
+    @patch('refactored.api.build_lineup')
+    @patch('refactored.api.compute_projections')
+    def test_lineup_passes_league_id_and_roster_id_through(self, mock_proj, mock_build, mock_defs):
+        mock_proj.return_value = {'players': [], 'ratelimit': 'remaining=90%'}
+        mock_defs.return_value = {'defenses': []}
+        mock_build.return_value = {'target': 'mid', 'lineup': [], 'total_points': 0}
+        wsgi_get('/lineup?league_id=LEAGUE123&roster_id=5&week=this&target=mid')
+        self.assertEqual(mock_proj.call_args.kwargs.get('league_id'), 'LEAGUE123')
+        self.assertEqual(mock_proj.call_args.kwargs.get('roster_id'), 5)
+        self.assertEqual(mock_defs.call_args.kwargs.get('league_id'), 'LEAGUE123')
+        self.assertEqual(mock_defs.call_args.kwargs.get('roster_id'), 5)
 
     def test_not_found(self):
         status, headers, payload = wsgi_get('/nope')
