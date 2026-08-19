@@ -1,8 +1,29 @@
 import os
+import datetime as _dt
 from dotenv import load_dotenv
 
 # Load environment variables from the .env file
 load_dotenv()
+
+
+def current_nfl_season() -> str:
+    """Best-guess current NFL season year, for defaulting `season` params.
+
+    Sleeper labels a league by the year its season *starts* (e.g. a league
+    playing Sep 2026 -> Jan 2027 has season="2026"). Treat Jan/Feb as still
+    part of the previous season (so a Jan 2027 default doesn't jump ahead
+    to "2027" before that season even exists on Sleeper), March onward as
+    the new one.
+    """
+    now = _dt.datetime.utcnow()
+    year = now.year if now.month >= 3 else now.year - 1
+    return str(year)
+
+
+# A hardcoded "2025" default here would silently go stale every offseason
+# (it did -- this app was still defaulting to 2025 in August 2026). Compute
+# it instead.
+DEFAULT_SEASON = current_nfl_season()
 
 # API configuration for The Odds API
 API_KEY = os.getenv('API_KEY')

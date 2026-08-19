@@ -46,6 +46,39 @@ def _resolve_identity(username: str, season: str, league_id: Optional[str] = Non
     return sleeper_api.get_user_sleeper_data(username, season) or {}
 
 
+def resolve_user_leagues(username: str, season: str) -> Dict:
+    """List a Sleeper user's leagues for a season, for the "pick your
+    league" step of the identity flow. Powered by username (which everyone
+    already knows) rather than requiring you to dig a league ID out of a
+    Sleeper URL -- once a league is picked from this list, `resolve_league`
+    and everything downstream operates on its league_id, not the username.
+    """
+    try:
+        user_id = sleeper_api.get_user_id(username)
+    except Exception as e:
+        print(f"[services] resolve_user_leagues: user lookup failed for {username}: {e}")
+        return {"error": "user_not_found", "username": username}
+    try:
+        leagues = sleeper_api.get_user_leagues(user_id, season)
+    except Exception as e:
+        print(f"[services] resolve_user_leagues: league lookup failed for user_id={user_id}: {e}")
+        leagues = []
+    return {
+        "username": username,
+        "user_id": user_id,
+        "season": season,
+        "leagues": [
+            {
+                "league_id": l.get("league_id"),
+                "name": l.get("name"),
+                "status": l.get("status"),
+                "season": l.get("season"),
+            }
+            for l in (leagues or [])
+        ],
+    }
+
+
 def resolve_league(league_id: str) -> Dict:
     """Given a Sleeper league ID, return everything the UI needs to drive
     the "paste your league ID -> pick your team" flow:

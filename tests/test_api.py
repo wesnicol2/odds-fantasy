@@ -155,6 +155,28 @@ class ApiTestCase(unittest.TestCase):
         # positions query param should be parsed into a list and passed through
         self.assertEqual(mock_board.call_args.kwargs.get('positions'), ['QB', 'RB'])
 
+    @patch('refactored.api.resolve_user_leagues')
+    def test_user_leagues(self, mock_resolve):
+        mock_resolve.return_value = {
+            'username': 'wesnicol',
+            'user_id': 'u1',
+            'season': '2026',
+            'leagues': [{'league_id': '123', 'name': 'My League', 'status': 'pre_draft', 'season': '2026'}],
+        }
+        status, headers, payload = wsgi_get('/user/leagues?username=wesnicol&season=2026')
+        self.assertTrue(status.startswith('200'))
+        self.assertEqual(len(payload['leagues']), 1)
+
+    def test_user_leagues_requires_username(self):
+        status, headers, payload = wsgi_get('/user/leagues')
+        self.assertTrue(status.startswith('400'))
+
+    @patch('refactored.api.resolve_user_leagues')
+    def test_user_leagues_not_found(self, mock_resolve):
+        mock_resolve.return_value = {'error': 'user_not_found', 'username': 'nobody'}
+        status, headers, payload = wsgi_get('/user/leagues?username=nobody')
+        self.assertTrue(status.startswith('404'))
+
     @patch('refactored.api.resolve_league')
     def test_league_resolve(self, mock_resolve):
         mock_resolve.return_value = {

@@ -83,6 +83,52 @@ class GetLeagueRosterDataTest(unittest.TestCase):
         mock_enhanced.assert_called_once_with({"roster_id": 2, "players": ["p2"]})
 
 
+class ResolveUserLeaguesTest(unittest.TestCase):
+    @patch("refactored.services.sleeper_api.get_user_leagues")
+    @patch("refactored.services.sleeper_api.get_user_id")
+    def test_returns_trimmed_league_list(self, mock_user_id, mock_leagues):
+        from refactored.services import resolve_user_leagues
+        mock_user_id.return_value = "u123"
+        mock_leagues.return_value = [
+            {"league_id": "L1", "name": "Dynasty Dudes", "status": "in_season", "season": "2026", "extra_junk": True},
+            {"league_id": "L2", "name": "Redraft Rivals", "status": "pre_draft", "season": "2026"},
+        ]
+        result = resolve_user_leagues("wesnicol", "2026")
+        self.assertEqual(result["user_id"], "u123")
+        self.assertEqual(len(result["leagues"]), 2)
+        self.assertEqual(result["leagues"][0], {"league_id": "L1", "name": "Dynasty Dudes", "status": "in_season", "season": "2026"})
+        mock_leagues.assert_called_once_with("u123", "2026")
+
+    @patch("refactored.services.sleeper_api.get_user_id")
+    def test_unknown_username_returns_error_not_exception(self, mock_user_id):
+        from refactored.services import resolve_user_leagues
+        mock_user_id.side_effect = Exception("404 not found")
+        result = resolve_user_leagues("nobody", "2026")
+        self.assertEqual(result["error"], "user_not_found")
+
+    @patch("refactored.services.sleeper_api.get_user_leagues")
+    @patch("refactored.services.sleeper_api.get_user_id")
+    def test_no_leagues_for_season_returns_empty_list_not_error(self, mock_user_id, mock_leagues):
+        from refactored.services import resolve_user_leagues
+        mock_user_id.return_value = "u123"
+        mock_leagues.return_value = []
+        result = resolve_user_leagues("wesnicol", "2019")
+        self.assertNotIn("error", result)
+        self.assertEqual(result["leagues"], [])
+
+
+class CurrentNflSeasonTest(unittest.TestCase):
+    def test_current_season_matches_expected_default(self):
+        # Sanity check against the real clock rather than hardcoding a
+        # brittle expected year -- just verify the Jan/Feb-is-still-last-
+        # season rule is actually applied.
+        import config
+        now = __import__("datetime").datetime.utcnow()
+        expected = str(now.year if now.month >= 3 else now.year - 1)
+        self.assertEqual(config.current_nfl_season(), expected)
+        self.assertEqual(config.DEFAULT_SEASON, expected)
+
+
 class ResolveIdentityPriorityTest(unittest.TestCase):
     """When both a league_id and a username/season are available, league_id
     must win -- it's explicit and unambiguous, whereas username-based

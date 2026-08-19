@@ -150,18 +150,25 @@
         <button id="leagueSetupClose" class="close-btn" aria-label="Close">✕</button>
       </div>
       <div class="details-body">
-        <div id="leagueStepId">
-          <p>Enter your Sleeper League ID. The app uses this (not your
-          username) to know which league's scoring rules to use and whether
-          it's drafted yet -- a username can belong to more than one league,
-          which a league ID never ambiguously does.</p>
-          <p class="status">Find it in your league's Sleeper URL:
-          sleeper.com/leagues/<b>&lt;league_id&gt;</b>/team</p>
+        <div id="leagueStepUser">
+          <p>Enter your Sleeper username to find your leagues.</p>
           <div class="btn-row">
-            <input id="leagueIdInput" type="text" placeholder="e.g. 1191596293294682112" style="min-width:260px;" />
-            <button id="leagueIdContinue" type="button">Continue</button>
+            <input id="leagueUsernameInput" type="text" placeholder="Sleeper username" style="min-width:200px;" />
+            <input id="leagueSeasonInput" type="text" placeholder="Season" style="width:90px;" title="NFL season year, e.g. 2026" />
+            <button id="leagueUserContinue" type="button">Continue</button>
           </div>
-          <div id="leagueIdError" class="status" style="color:#f87171;"></div>
+          <div id="leagueUserError" class="status" style="color:#f87171;"></div>
+        </div>
+        <div id="leagueStepLeague" class="hidden">
+          <p id="leagueLeaguePrompt">Which league?</p>
+          <div class="btn-row">
+            <select id="leagueLeagueSelect" style="min-width:280px;"></select>
+          </div>
+          <div class="btn-row">
+            <button id="leagueLeagueBack" type="button">Back</button>
+            <button id="leagueLeagueContinue" type="button">Continue</button>
+          </div>
+          <div id="leagueLeagueError" class="status" style="color:#f87171;"></div>
         </div>
         <div id="leagueStepTeam" class="hidden">
           <p id="leagueTeamPrompt">Which team is yours?</p>

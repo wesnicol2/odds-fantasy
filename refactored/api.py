@@ -19,7 +19,8 @@ from typing import Callable
 
 from . import ratelimit
 from . import services  # for detail endpoints
-from .services import compute_projections, compute_book_coverage, build_lineup, build_lineup_diffs, list_defenses, build_dashboard, compute_draft_board, resolve_league
+from .services import compute_projections, compute_book_coverage, build_lineup, build_lineup_diffs, list_defenses, build_dashboard, compute_draft_board, resolve_league, resolve_user_leagues
+from config import DEFAULT_SEASON
 
 # Module-level debug flag (defaults to False). Can be enabled via --debug CLI.
 _DEBUG_FLAG = False
@@ -138,6 +139,18 @@ def application(environ, start_response):
             _dprint("[api] GET /health")
             return _json_response(start_response, "200 OK", {"status": "ok", "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()})
 
+        if path == "/user/leagues":
+            username = q("username", "")
+            season = q("season", DEFAULT_SEASON)
+            t0 = time.time()
+            _dprint(f"[api] user/leagues username={username} season={season}")
+            if not username:
+                return _json_response(start_response, "400 Bad Request", {"error": "username_required"})
+            data = resolve_user_leagues(username, season)
+            status = "404 Not Found" if data.get("error") else "200 OK"
+            _dprint(f"[api] user/leagues done leagues={len(data.get('leagues', []))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, status, data)
+
         if path == "/league/resolve":
             league_id = q("league_id", "")
             t0 = time.time()
@@ -151,7 +164,7 @@ def application(environ, start_response):
 
         if path == "/projections":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
             model = q("model", "const")
@@ -166,7 +179,7 @@ def application(environ, start_response):
 
         if path == "/book-coverage":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
             model = q("model", "const")
@@ -182,7 +195,7 @@ def application(environ, start_response):
 
         if path == "/lineup":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             target = q("target", "mid")
             region = q("region", "us")
@@ -202,7 +215,7 @@ def application(environ, start_response):
 
         if path == "/lineup/diffs":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
             model = q("model", "const")
@@ -221,7 +234,7 @@ def application(environ, start_response):
 
         if path == "/defenses":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             scope = q("scope", "both")
             region = q("region", "us")
@@ -236,7 +249,7 @@ def application(environ, start_response):
 
         if path == "/player/odds":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
             name = q("name", "")
@@ -251,7 +264,7 @@ def application(environ, start_response):
 
         if path == "/defense/odds":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             defense = q("defense", "")
             region = q("region", "us")
@@ -264,7 +277,7 @@ def application(environ, start_response):
 
         if path == "/draft-board":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
             model = q("model", "const")
@@ -281,7 +294,7 @@ def application(environ, start_response):
 
         if path == "/dashboard":
             username = q("username", "wesnicol")
-            season = q("season", "2025")
+            season = q("season", DEFAULT_SEASON)
             region = q("region", "us")
             model = q("model", "const")
             fresh = q("fresh", "0") in ("1", "true", "True")
@@ -325,6 +338,7 @@ def main():
 Starting Odds Fantasy API
 Endpoints:
   GET /health
+  GET /user/leagues?username=&season=  (leagues for a Sleeper username, for the league picker)
   GET /league/resolve?league_id=  (status + team list, for the league/team picker)
   GET /projections?username=&season=&week=this|next&fresh=0|1  (or league_id=&roster_id=)
   GET /lineup?username=&season=&week=this|next&target=mid|floor|ceiling&fresh=0|1

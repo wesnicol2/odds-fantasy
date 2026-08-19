@@ -54,48 +54,98 @@ function identityParams() {
   return { username: val('username') || 'wesnicol', season: val('season') || '2025' };
 }
 
-// League setup: paste league ID (cookie'd) -> pick your team from a dropdown
-// (cookie'd) -> the league's own Sleeper `status` decides whether to default
-// to the draft board (pre_draft/drafting) or the weekly lineup view
-// (in_season/complete/anything else).
+// League setup, 3 steps: enter Sleeper username (cookie'd) -> pick which of
+// your leagues (its league_id gets cookie'd) -> pick your team in it
+// (roster_id cookie'd). The league's own Sleeper `status` then decides
+// whether to default to the draft board (pre_draft/drafting) or the weekly
+// lineup view (in_season/complete/anything else). Username here is only
+// ever used to list leagues to choose from -- once a league_id is picked,
+// everything downstream is keyed off league_id+roster_id, not username.
 const PRE_DRAFT_STATUSES = ['pre_draft', 'drafting'];
 
-function showLeagueSetupModal(opts) {
-  opts = opts || {};
+function currentNflSeason() {
+  // Mirrors config.current_nfl_season() in Python: Sleeper labels a league
+  // by the year its season starts, and Jan/Feb still belongs to last season.
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  return String((now.getUTCMonth() + 1) >= 3 ? y : y - 1);
+}
+
+function _openLeagueOverlay() {
   $('leagueSetupOverlay').classList.remove('hidden');
-  if (opts.step === 'team' && opts._resolvedData) {
-    populateTeamPicker(opts._resolvedData);
-  } else {
-    $('leagueStepId').classList.remove('hidden');
-    $('leagueStepTeam').classList.add('hidden');
-    $('leagueIdError').textContent = '';
-    const existing = getCookie('league_id');
-    if (existing) $('leagueIdInput').value = existing;
-  }
 }
 
 function hideLeagueSetupModal() {
   $('leagueSetupOverlay').classList.add('hidden');
 }
 
-async function submitLeagueId() {
-  const leagueId = ($('leagueIdInput').value || '').trim();
-  const errEl = $('leagueIdError');
+function showLeagueSetupModal() {
+  _openLeagueOverlay();
+  $('leagueStepUser').classList.remove('hidden');
+  $('leagueStepLeague').classList.add('hidden');
+  $('leagueStepTeam').classList.add('hidden');
+  $('leagueUserError').textContent = '';
+  const existingUser = getCookie('sleeper_username');
+  if (existingUser) $('leagueUsernameInput').value = existingUser;
+  const seasonInput = $('leagueSeasonInput');
+  if (seasonInput && !seasonInput.value) seasonInput.value = currentNflSeason();
+}
+
+async function submitUsername() {
+  const username = ($('leagueUsernameInput').value || '').trim();
+  const season = ($('leagueSeasonInput').value || '').trim() || currentNflSeason();
+  const errEl = $('leagueUserError');
   errEl.textContent = '';
-  if (!leagueId) { errEl.textContent = 'Please enter a league ID.'; return; }
-  errEl.textContent = 'Looking up league...';
-  const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: leagueId }));
+  if (!username) { errEl.textContent = 'Please enter your Sleeper username.'; return; }
+  errEl.textContent = 'Looking up leagues...';
+  const { ok, data } = await fetchJSON(apiUrl('/user/leagues', { username, season }));
   if (!ok || data.error) {
-    errEl.textContent = "Couldn't find that league -- double check the ID from your Sleeper league URL.";
+    errEl.textContent = "Couldn't find that Sleeper username -- double check the spelling.";
+    return;
+  }
+  if (!data.leagues || !data.leagues.length) {
+    errEl.textContent = `No leagues found for "${username}" in ${season}. Try a different season above.`;
     return;
   }
   errEl.textContent = '';
-  setCookie('league_id', leagueId, 365);
+  setCookie('sleeper_username', username, 365);
+  populateLeaguePicker(data);
+}
+
+function populateLeaguePicker(leaguesData) {
+  _openLeagueOverlay();
+  $('leagueStepUser').classList.add('hidden');
+  $('leagueStepLeague').classList.remove('hidden');
+  $('leagueStepTeam').classList.add('hidden');
+  $('leagueLeagueError').textContent = '';
+  $('leagueLeaguePrompt').textContent = `Which league, ${leaguesData.username}?`;
+  const sel = $('leagueLeagueSelect');
+  const leagues = leaguesData.leagues || [];
+  sel.innerHTML = '<option value="">-- Select a league --</option>' +
+    leagues.map(l => `<option value="${l.league_id}">${(l.name || l.league_id)} (${l.status || 'unknown status'})</option>`).join('');
+  const existingLeague = getCookie('league_id');
+  if (existingLeague && leagues.some(l => String(l.league_id) === String(existingLeague))) {
+    sel.value = existingLeague;
+  }
+}
+
+async function submitLeaguePick() {
+  const sel = $('leagueLeagueSelect');
+  const errEl = $('leagueLeagueError');
+  errEl.textContent = '';
+  if (!sel.value) { errEl.textContent = 'Please pick a league.'; return; }
+  errEl.textContent = 'Loading teams...';
+  const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: sel.value }));
+  if (!ok || data.error) { errEl.textContent = 'Failed to load that league. Try again.'; return; }
+  errEl.textContent = '';
+  setCookie('league_id', sel.value, 365);
   populateTeamPicker(data);
 }
 
 function populateTeamPicker(leagueData) {
-  $('leagueStepId').classList.add('hidden');
+  _openLeagueOverlay();
+  $('leagueStepUser').classList.add('hidden');
+  $('leagueStepLeague').classList.add('hidden');
   $('leagueStepTeam').classList.remove('hidden');
   $('leagueTeamError').textContent = '';
   $('leagueTeamPrompt').textContent = `Which team is yours in "${leagueData.name || 'this league'}"?`;
@@ -151,16 +201,28 @@ async function applyResolvedLeagueModeAndRefresh(leagueId) {
 async function initLeagueFlow() {
   const leagueId = getCookie('league_id');
   if (!leagueId) {
+    // No league picked yet. If we already know the username (e.g. picked a
+    // league before but never finished team selection, or cleared just the
+    // league_id cookie), skip straight to the league list instead of
+    // asking for the username again.
+    const savedUsername = getCookie('sleeper_username');
+    if (savedUsername) {
+      const { ok, data } = await fetchJSON(apiUrl('/user/leagues', { username: savedUsername, season: currentNflSeason() }));
+      if (ok && !data.error && data.leagues && data.leagues.length) {
+        populateLeaguePicker(data);
+        return;
+      }
+    }
     showLeagueSetupModal();
     return;
   }
   const rosterId = getCookie('roster_id');
   if (!rosterId) {
-    // League already known but no team picked yet -- resume at step 2
-    // instead of asking for the league ID again.
+    // League already known but no team picked yet -- resume at the team
+    // step instead of starting over.
     const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: leagueId }));
     if (!ok || data.error) { deleteCookie('league_id'); showLeagueSetupModal(); return; }
-    showLeagueSetupModal({ step: 'team', _resolvedData: data });
+    populateTeamPicker(data);
     return;
   }
   await applyResolvedLeagueModeAndRefresh(leagueId);
@@ -679,18 +741,30 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnProjThis) btnProjThis.addEventListener('click', () => dbgProjections('this'));
   if (btnProjNext) btnProjNext.addEventListener('click', () => dbgProjections('next'));
 
-  // League/team setup flow
-  const leagueIdContinue = document.getElementById('leagueIdContinue');
-  if (leagueIdContinue) leagueIdContinue.addEventListener('click', () => submitLeagueId());
-  const leagueIdInput = document.getElementById('leagueIdInput');
-  if (leagueIdInput) leagueIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLeagueId(); });
+  // League/team setup flow: username -> league -> team
+  const leagueUserContinue = document.getElementById('leagueUserContinue');
+  if (leagueUserContinue) leagueUserContinue.addEventListener('click', () => submitUsername());
+  const leagueUsernameInput = document.getElementById('leagueUsernameInput');
+  if (leagueUsernameInput) leagueUsernameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitUsername(); });
+  const leagueSeasonInput = document.getElementById('leagueSeasonInput');
+  if (leagueSeasonInput) leagueSeasonInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitUsername(); });
+
+  const leagueLeagueContinue = document.getElementById('leagueLeagueContinue');
+  if (leagueLeagueContinue) leagueLeagueContinue.addEventListener('click', () => submitLeaguePick());
+  const leagueLeagueBack = document.getElementById('leagueLeagueBack');
+  if (leagueLeagueBack) leagueLeagueBack.addEventListener('click', () => {
+    document.getElementById('leagueStepLeague').classList.add('hidden');
+    document.getElementById('leagueStepUser').classList.remove('hidden');
+  });
+
   const leagueTeamContinue = document.getElementById('leagueTeamContinue');
   if (leagueTeamContinue) leagueTeamContinue.addEventListener('click', () => submitTeamPick());
   const leagueTeamBack = document.getElementById('leagueTeamBack');
   if (leagueTeamBack) leagueTeamBack.addEventListener('click', () => {
     document.getElementById('leagueStepTeam').classList.add('hidden');
-    document.getElementById('leagueStepId').classList.remove('hidden');
+    document.getElementById('leagueStepLeague').classList.remove('hidden');
   });
+
   const leagueSetupClose = document.getElementById('leagueSetupClose');
   if (leagueSetupClose) leagueSetupClose.addEventListener('click', () => hideLeagueSetupModal());
   const btnChangeLeague = document.getElementById('btnChangeLeague');
