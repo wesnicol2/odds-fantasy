@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 import sleeper_api
 from config import SLEEPER_TO_ODDSAPI_TEAM, SLEEPER_ODDS_API_PLAYER_NAME_MAPPING
 from .planner import PlannedGame
-from .weekly_windows import _prev_weekday, in_window
+from .weekly_windows import earliest_future_week_start, in_window
 from . import odds_client
 
 # Draft prep only covers positions the rest of the app already knows how to
@@ -89,21 +89,10 @@ def _resolve_draft_week_window(
     anchor to in that case.
     """
     now_utc = now_utc or _dt.datetime.utcnow()
-    future_starts: List[_dt.datetime] = []
-    for e in events:
-        ts = e.get("commence_time")
-        if not ts:
-            continue
-        try:
-            dt = _dt.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
-        except Exception:
-            continue
-        if dt > now_utc:
-            future_starts.append(dt)
-    if not future_starts:
+    week1_start = earliest_future_week_start(events, now_utc)
+    if week1_start is None:
         return None
 
-    week1_start = _prev_weekday(min(future_starts), 3)  # Thursday anchoring the earliest game
     week_start = week1_start if which == "this" else week1_start + _dt.timedelta(days=7)
     week_end = week_start + _dt.timedelta(days=4, hours=23, minutes=59, seconds=59)
     return week_start, week_end

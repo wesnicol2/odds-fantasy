@@ -8,7 +8,7 @@ import os
 
 import sleeper_api
 
-from .weekly_windows import compute_week_windows
+from .weekly_windows import compute_week_windows, resolve_week_windows
 from .planner import plan_relevant_games_and_markets
 from .aggregator import aggregate_by_week
 from .range_model import compute_fantasy_range, compute_defense_fantasy_range
@@ -112,6 +112,15 @@ def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
     return (this_start, this_end) if which == "this" else (next_start, next_end)
 
 
+# Shown whenever resolve_week_windows() finds no games at all -- neither in
+# today's calendar window nor anywhere later in the odds feed (the schedule
+# for the target season/week isn't posted yet). See weekly_windows.py.
+NO_GAMES_SCHEDULED_MESSAGE = (
+    "No scheduled games found yet for this week. Check back once the "
+    "season's schedule/odds are posted."
+)
+
+
 def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, regions: str = "us") -> Dict[str, Dict[str, list]]:
     """Fetch event odds concurrently per week for planned games.
 
@@ -167,8 +176,17 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
 
     # Plan games only for requested week
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
     eff_mode = 'fresh' if fresh else cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {
+            "players": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+            "message": NO_GAMES_SCHEDULED_MESSAGE,
+        }
+    (this_start, this_end), (next_start, next_end) = windows
     plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
     plan = {week: plan_all.get(week, {})}
 
@@ -926,7 +944,17 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
         if now - ts < ttl:
             print(f"[services] list_defenses cache hit key={key} age={int(now-ts)}s")
             return payload
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
+    eff_mode = 'fresh' if fresh else cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {
+            "defenses": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+            "message": NO_GAMES_SCHEDULED_MESSAGE,
+        }
+    (this_start, this_end), (next_start, next_end) = windows
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
 
     # Scoring rules for converting opponent implied totals into DEF fantasy points
@@ -953,8 +981,6 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             team_list.append((t, "available"))
 
     # Filter events in window
-    eff_mode = 'fresh' if fresh else cache_mode
-    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
 
     # Prefetch odds per event once to avoid duplicate calls per team
@@ -1138,12 +1164,15 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
 
     Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).
     """
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
     eff_mode = cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {"player": {"name": name}, "markets": {}, "primary_order": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "message": NO_GAMES_SCHEDULED_MESSAGE}
+    (this_start, this_end), (next_start, next_end) = windows
     # Roster & planning (to get scoring rules and player mapping)
     roster = _resolve_identity(username, season, league_id, roster_id)
     scoring_rules = roster.get("scoring_rules", {}) if roster else {}
-    windows = (this_start, this_end) if week == "this" else (next_start, next_end)
     plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
     planned = plan_all.get(week, {})
     # Fetch odds for planned games
@@ -1455,11 +1484,14 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
 
     Sorted by implied total ascending per game, includes medians.
     """
-    (this_start, this_end), (next_start, next_end) = compute_week_windows()
     eff_mode = cache_mode
+    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
+    windows = resolve_week_windows(events)
+    if windows is None:
+        return {"defense": defense, "week": week, "games": [], "raw_odds": {}, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "message": NO_GAMES_SCHEDULED_MESSAGE}
+    (this_start, this_end), (next_start, next_end) = windows
     # Window and events
     start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
-    events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
     # Find games with this defense
     games = [e for e in window_events if defense in (e.get("home_team"), e.get("away_team"))]
