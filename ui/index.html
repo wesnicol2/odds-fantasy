@@ -81,12 +81,18 @@
     <section>
       <h2>Draft Board (Pre-Season / All Players)</h2>
       <p class="status">Not scoped to your roster -- every active QB/RB/WR/TE
-      on a team playing the selected week. Uses a smaller set of markets than
-      the weekly views to limit Odds API usage; only fetch this when you
-      actually need it (see CONTRIBUTING.md).</p>
+      on a team playing the selected week. "Week 1" / "Week 2" are anchored to
+      the earliest games found in the odds feed, not today's date (a draft
+      happens once, before the season, so "today" isn't a useful anchor the
+      way it is for the weekly lineup views below) -- the loaded date range
+      is shown once you load a week. This is a single week's market-implied
+      outlook, not a full-season projection: a real, useful signal for
+      role/opportunity, but not a replacement for season-long ADP/rankings.
+      Uses a smaller set of markets than the weekly views to limit Odds API
+      usage; only fetch this when you actually need it (see CONTRIBUTING.md).</p>
       <div class="btn-row">
-        <button data-week="this" class="btn-draft-board">Load Draft Board (This Week)</button>
-        <button data-week="next" class="btn-draft-board">Load Draft Board (Next Week)</button>
+        <button data-week="this" class="btn-draft-board">Load Week 1</button>
+        <button data-week="next" class="btn-draft-board">Load Week 2</button>
       </div>
       <div id="draft-board" class="results"></div>
     </section>

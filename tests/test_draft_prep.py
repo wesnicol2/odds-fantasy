@@ -1,3 +1,4 @@
+import datetime as dt
 import os
 import sys
 import unittest
@@ -33,45 +34,94 @@ class ActivePlayersByTeamTest(unittest.TestCase):
         self.assertNotIn(None, by_team)
 
 
+def _ts(d: dt.datetime) -> str:
+    return d.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class ResolveDraftWeekWindowTest(unittest.TestCase):
+    """Draft weeks are anchored to the earliest scheduled game, not to
+    "today" -- a draft happens once, before the season starts, so "today"
+    isn't a meaningful reference point the way it is for the in-season
+    lineup views (weekly_windows.compute_week_windows)."""
+
+    def test_none_when_no_upcoming_games(self):
+        now = dt.datetime(2026, 8, 19)
+        past_game = {"commence_time": _ts(now - dt.timedelta(days=5))}
+        self.assertIsNone(draft_prep._resolve_draft_week_window([past_game], which="this", now_utc=now))
+
+    def test_week1_anchors_to_earliest_future_game_not_today(self):
+        # "Today" is deep in the off-season; the earliest real game is over
+        # a month out. Week 1 should anchor to that game, not to today.
+        now = dt.datetime(2026, 8, 19)
+        earliest_game = dt.datetime(2026, 9, 10, 20, 0, 0)  # ~3 weeks out
+        events = [{"commence_time": _ts(earliest_game)}]
+
+        window = draft_prep._resolve_draft_week_window(events, which="this", now_utc=now)
+        self.assertIsNotNone(window)
+        start, end = window
+        self.assertLessEqual(start, earliest_game)
+        self.assertLessEqual(earliest_game, end)
+        # Window should NOT be anchored anywhere near "today"
+        self.assertGreater(start, now + dt.timedelta(days=14))
+
+    def test_week2_is_exactly_one_week_after_week1(self):
+        now = dt.datetime(2026, 8, 19)
+        earliest_game = dt.datetime(2026, 9, 10, 20, 0, 0)
+        events = [{"commence_time": _ts(earliest_game)}]
+
+        week1_start, _ = draft_prep._resolve_draft_week_window(events, which="this", now_utc=now)
+        week2_start, _ = draft_prep._resolve_draft_week_window(events, which="next", now_utc=now)
+        self.assertEqual(week2_start - week1_start, dt.timedelta(days=7))
+
+
 class PlanWeekForDraftTest(unittest.TestCase):
     @patch("refactored.draft_prep.odds_client.get_nfl_events")
     @patch("refactored.draft_prep.sleeper_api.get_players")
-    def test_builds_plan_only_for_in_window_games_with_players(self, mock_get_players, mock_get_events):
+    def test_builds_plan_for_week1_and_week2_separately(self, mock_get_players, mock_get_events):
         mock_get_players.return_value = FAKE_SLEEPER_PLAYERS
-        from refactored.weekly_windows import compute_week_windows
-        (this_start, this_end), _ = compute_week_windows()
-        in_window_ts = (this_start.replace(hour=13)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        out_of_window_ts = (this_end.replace(year=this_end.year + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = dt.datetime.utcnow()
+        week1_ts = _ts(now + dt.timedelta(days=10))
+        week2_ts = _ts(now + dt.timedelta(days=17))
         mock_get_events.return_value = [
             {
-                "id": "game-in-window",
+                "id": "game-week1",
                 "home_team": "Buffalo Bills",
                 "away_team": "Kansas City Chiefs",
-                "commence_time": in_window_ts,
+                "commence_time": week1_ts,
             },
             {
-                "id": "game-out-of-window",
+                "id": "game-week2",
                 "home_team": "Buffalo Bills",
                 "away_team": "Kansas City Chiefs",
-                "commence_time": out_of_window_ts,
+                "commence_time": week2_ts,
             },
             {
                 "id": "game-no-relevant-players",
                 "home_team": "Some Other Team",
                 "away_team": "Another Team",
-                "commence_time": in_window_ts,
+                "commence_time": week1_ts,
             },
         ]
 
-        plan = draft_prep.plan_week_for_draft(week="this")
+        week1_plan = draft_prep.plan_week_for_draft(week="this")
+        week2_plan = draft_prep.plan_week_for_draft(week="next")
 
-        self.assertIn("game-in-window", plan)
-        self.assertNotIn("game-out-of-window", plan)
-        self.assertNotIn("game-no-relevant-players", plan)
-        game = plan["game-in-window"]
+        self.assertIn("game-week1", week1_plan)
+        self.assertNotIn("game-week2", week1_plan)
+        self.assertNotIn("game-no-relevant-players", week1_plan)
+
+        self.assertIn("game-week2", week2_plan)
+        self.assertNotIn("game-week1", week2_plan)
+
+        game = week1_plan["game-week1"]
         self.assertEqual(set(game.markets), set(draft_prep.CORE_DRAFT_MARKETS))
         player_names = {p["full_name"] for p in game.players}
         self.assertEqual(player_names, {"Josh Allen", "James Cook", "Patrick Mahomes"})
+
+    @patch("refactored.draft_prep.odds_client.get_nfl_events")
+    def test_empty_plan_when_no_games_scheduled_yet(self, mock_get_events):
+        mock_get_events.return_value = []
+        self.assertEqual(draft_prep.plan_week_for_draft(week="this"), {})
 
 
 if __name__ == "__main__":

@@ -376,6 +376,28 @@ async function showPlayers(week) {
   updateRateLimitDisplays(appCache.lastRateLimit || {});
 }
 
+function _renderDraftBoard(containerId, data) {
+  // "Week 1"/"Week 2" are schedule-anchored (earliest games in the odds
+  // feed), not tied to today's date -- always show the resolved date range
+  // (or the "nothing scheduled yet" message) so it's never ambiguous what's
+  // actually loaded. renderPlayers() owns the table itself; this just adds
+  // a header in front of it.
+  renderPlayers(containerId, data.players || []);
+  const c = $(containerId);
+  if (!c) return;
+  let header = '';
+  if (data.message) {
+    header = `<div class="status draft-board-note">${data.message}</div>`;
+  } else if (data.window_start && data.window_end) {
+    const fmt = (iso) => {
+      try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+      catch (e) { return iso; }
+    };
+    header = `<div class="status draft-board-note">Games: ${fmt(data.window_start)} – ${fmt(data.window_end)}</div>`;
+  }
+  if (header) c.insertAdjacentHTML('afterbegin', header);
+}
+
 async function showDraftBoard(week) {
   // Intentionally not scoped to any roster -- see /draft-board in the API
   // and CONTRIBUTING.md's "Odds API quota awareness" section. Only fetched
@@ -391,11 +413,11 @@ async function showDraftBoard(week) {
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load draft board.</div>'; return; }
     appCache.draftBoard[week] = data;
-    renderPlayers(containerId, data.players || []);
+    _renderDraftBoard(containerId, data);
     updateRateLimitDisplays(data);
     return;
   }
-  renderPlayers(containerId, cached.players || []);
+  _renderDraftBoard(containerId, cached);
   updateRateLimitDisplays(appCache.lastRateLimit || {});
 }
 
