@@ -52,23 +52,27 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model
 (`feature/*` / `dev/*` / `main`) and repo-hygiene rules.
 
 ## League / team identity
-The UI identifies "you" by Sleeper **league ID + team**, not username: on
-first load it prompts for your league ID (stored as a cookie), then a
-dropdown to pick which roster is yours (also cookie'd). This is deliberately
-more precise than username-based lookup, which just grabs "the first league
-this username is in" and silently picks the wrong league for anyone in more
-than one. The league's own Sleeper `status` (`pre_draft`/`drafting` vs.
-`in_season`/`complete`) decides whether the UI defaults to the draft board or
-the weekly lineup view. `GET /league/resolve?league_id=` (status + team list)
-is what powers this; every other endpoint accepts `league_id`+`roster_id` as
-an alternative to `username`+`season`, with `league_id` taking priority when
-both are present (see `services._resolve_identity`). The username/season
-fields still work as a fallback for anyone who hasn't set up a league.
+The UI identifies "you" by Sleeper **league + team**, resolved by league ID
+under the hood (not username) once picked -- but the picking itself starts
+from your Sleeper username, since nobody has their league ID memorized. On
+first load: enter your username (`GET /user/leagues?username=&season=` lists
+every league it finds) -> pick which league (its league_id gets cookie'd) ->
+pick which roster is yours in it (roster_id also cookie'd). This is more
+precise than resolving everything from username alone, which just grabs "the
+first league this username is in" and silently picks the wrong league for
+anyone in more than one -- the username step here is purely a lookup
+convenience, not the identity itself. The chosen league's own Sleeper
+`status` (`pre_draft`/`drafting` vs. `in_season`/`complete`) decides whether
+the UI defaults to the draft board or the weekly lineup view. Every endpoint
+accepts `league_id`+`roster_id` as an alternative to `username`+`season`,
+with `league_id` taking priority when both are present (see
+`services._resolve_identity`). The header's username/season fields still
+work as a fallback for anyone who hasn't set up a league.
 
 ## Project Structure
 - `refactored/`: **This is the real application.** `refactored/api.py` is the
   entrypoint (`CMD` in the `Dockerfile`) — a stdlib WSGI server exposing
-  `/health`, `/league/resolve`, `/projections`, `/lineup`, `/lineup/diffs`,
+  `/health`, `/user/leagues`, `/league/resolve`, `/projections`, `/lineup`, `/lineup/diffs`,
   `/defenses`, `/draft-board`, `/player/odds`, `/defense/odds`, and
   `/dashboard`, and serving the UI under `/` and `/ui/*`. See
   `refactored/services.py` for the orchestration layer,
