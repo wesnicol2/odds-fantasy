@@ -32,6 +32,48 @@ COVERAGE_MARKET_ORDER = [
 ]
 
 
+def _resolve_identity(username: str, season: str, league_id: Optional[str] = None, roster_id: Optional[int] = None) -> dict:
+    """Resolve {'players', 'scoring_rules', ...} for the caller's team.
+
+    `league_id` (when given) is authoritative: an explicit league+team
+    selection beats the legacy username-based "first league for this user"
+    guess, which silently picks the wrong league for anyone in more than
+    one. Falls back to the username/season path when league_id isn't
+    provided, so existing callers keep working unchanged.
+    """
+    if league_id:
+        return sleeper_api.get_league_roster_data(league_id, roster_id=roster_id)
+    return sleeper_api.get_user_sleeper_data(username, season) or {}
+
+
+def resolve_league(league_id: str) -> Dict:
+    """Given a Sleeper league ID, return everything the UI needs to drive
+    the "paste your league ID -> pick your team" flow:
+      - status: Sleeper's own "pre_draft" | "drafting" | "in_season" |
+        "complete" -- the actual source of truth for whether the league has
+        drafted yet, used to decide whether to default to the draft board
+        or the weekly lineup views.
+      - teams: one entry per roster, for a team picker.
+    """
+    try:
+        league = sleeper_api.get_league(league_id)
+    except Exception as e:
+        print(f"[services] resolve_league: lookup failed for {league_id}: {e}")
+        return {"error": "league_not_found", "league_id": league_id}
+    try:
+        teams = sleeper_api.get_league_teams(league_id)
+    except Exception as e:
+        print(f"[services] resolve_league: team list failed for {league_id}: {e}")
+        teams = []
+    return {
+        "league_id": league_id,
+        "name": league.get("name"),
+        "season": league.get("season"),
+        "status": league.get("status"),
+        "teams": teams,
+    }
+
+
 def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
     (this_start, this_end), (next_start, next_end) = compute_week_windows(now_utc)
     return (this_start, this_end) if which == "this" else (next_start, next_end)
@@ -70,12 +112,12 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, reg
     return out
 
 
-def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto", model: str = "const") -> Dict:
-    print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh}")
+def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto", model: str = "const", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
+    print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh} league_id={league_id} roster_id={roster_id}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _proj_cache = getattr(compute_projections, "_cache", {})
-    key = (username, season, week, region, model)
+    key = (username, season, week, region, model, league_id, roster_id)
     now = time.time()
     if not fresh and key in _proj_cache:
         ts, payload = _proj_cache[key]
@@ -83,7 +125,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             print(f"[services] compute_projections cache hit key={key} age={int(now-ts)}s")
             return payload
     try:
-        roster = sleeper_api.get_user_sleeper_data(username, season)
+        roster = _resolve_identity(username, season, league_id, roster_id)
     except Exception as e:
         print(f"[services] sleeper error: {e}")
         # Graceful fallback: continue with empty roster so UI can load
@@ -474,6 +516,8 @@ def compute_draft_board(
     cache_mode: str = "auto",
     model: str = "const",
     positions: List[str] | None = None,
+    league_id: Optional[str] = None,
+    roster_id: Optional[int] = None,
 ) -> Dict:
     """Floor/mid/ceiling for every active skill player on every team playing
     in the target week -- not scoped to any roster. Meant for pre-draft prep,
@@ -482,10 +526,14 @@ def compute_draft_board(
     pipeline as compute_projections(); the only real difference is where the
     player list comes from (refactored/draft_prep.py, sourced from Sleeper's
     full player DB) and that it uses a smaller, quota-conscious market set.
+
+    Only `scoring_rules` is needed here (there's no roster to scope the
+    player list to -- that's the whole point), so this works fine with just
+    a league_id and no roster_id, i.e. before a team has been picked.
     """
-    print(f"[services] compute_draft_board season={season} week={week} fresh={fresh} positions={positions}")
+    print(f"[services] compute_draft_board season={season} week={week} fresh={fresh} positions={positions} league_id={league_id}")
     try:
-        roster = sleeper_api.get_user_sleeper_data(username, season)
+        roster = _resolve_identity(username, season, league_id, roster_id)
     except Exception as e:
         print(f"[services] draft_board: sleeper scoring lookup failed: {e}")
         roster = None
@@ -565,6 +613,8 @@ def compute_book_coverage(
     fresh: bool = False,
     cache_mode: str = "auto",
     model: str = "const",
+    league_id: Optional[str] = None,
+    roster_id: Optional[int] = None,
 ) -> Dict:
     data = compute_projections(
         username=username,
@@ -574,6 +624,8 @@ def compute_book_coverage(
         fresh=fresh,
         cache_mode=cache_mode,
         model=model,
+        league_id=league_id,
+        roster_id=roster_id,
     )
     coverage = data.get("book_coverage") or {}
     markets = list(coverage.get("markets") or COVERAGE_MARKET_ORDER)
@@ -770,14 +822,31 @@ def _implied_total(game_total: float, team_spread: float) -> float:
     return game_total / 2.0 - team_spread / 2.0
 
 
-def _def_ownership_map(username: str, season: str) -> Tuple[dict, str | None]:
-    """Return (team_fullname -> {id, name}, current_user_id)."""
+def _def_ownership_map(username: str, season: str, league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Tuple[dict, str | None]:
+    """Return (team_fullname -> {id, name}, current_owner_id).
+
+    current_owner_id identifies "you" for the owned_by_current flag in
+    list_defenses -- resolved from the explicit roster_id when a league_id
+    is given (the authoritative path, since it doesn't depend on guessing
+    which of a user's leagues is the right one), or from the legacy
+    username-based Sleeper user_id lookup otherwise.
+    """
     try:
-        league_id, user_id = sleeper_api.get_league_id_for_user(username, season)
-        if not league_id:
+        user_id = None
+        if league_id:
+            lid = league_id
+        else:
+            lid, user_id = sleeper_api.get_league_id_for_user(username, season)
+        if not lid:
             return {}, None
-        rosters = sleeper_api.get_league_rosters(league_id)
-        users = sleeper_api.get_league_users(league_id)
+        rosters = sleeper_api.get_league_rosters(lid)
+        users = sleeper_api.get_league_users(lid)
+
+        current_owner_id = user_id
+        if league_id and roster_id is not None:
+            match = next((r for r in (rosters or []) if r.get('roster_id') == roster_id), None)
+            current_owner_id = match.get('owner_id') if match else None
+
         # Map owner_id -> display name (fallback to username/id)
         owner_name: dict = {}
         for u in users or []:
@@ -800,18 +869,18 @@ def _def_ownership_map(username: str, season: str) -> Tuple[dict, str | None]:
                         team_to_owner[full] = {"id": oid, "name": disp}
                 except Exception:
                     continue
-        return team_to_owner, user_id
+        return team_to_owner, current_owner_id
     except Exception as e:
         print(f"[services] def ownership mapping error: {e}")
         return {}, None
 
 
-def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us") -> Dict:
-    print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh}")
+def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
+    print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh} league_id={league_id} roster_id={roster_id}")
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _def_cache = getattr(list_defenses, "_cache", {})
-    key = (username, season, week, scope)
+    key = (username, season, week, scope, league_id, roster_id)
     now = time.time()
     if not fresh and key in _def_cache:
         ts, payload = _def_cache[key]
@@ -823,14 +892,14 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
 
     # Scoring rules for converting opponent implied totals into DEF fantasy points
     try:
-        roster_for_scoring = sleeper_api.get_user_sleeper_data(username, season)
+        roster_for_scoring = _resolve_identity(username, season, league_id, roster_id)
         scoring_rules = (roster_for_scoring or {}).get("scoring_rules", {})
     except Exception as e:
         print(f"[services] defenses: scoring rules lookup failed: {e}")
         scoring_rules = {}
 
     # Build ownership map across entire league
-    team_to_owner, current_uid = _def_ownership_map(username, season)
+    team_to_owner, current_uid = _def_ownership_map(username, season, league_id, roster_id)
     # All teams (full names)
     all_teams = list(SLEEPER_TO_ODDSAPI_TEAM.values())
     # Scope handling remains, but default 'both' -> include all
@@ -940,6 +1009,8 @@ def build_dashboard(
     def_scope: str = "owned",  # 'owned' | 'available' | 'both'
     include_players: bool = True,
     model: str = "const",
+    league_id: Optional[str] = None,
+    roster_id: Optional[int] = None,
 ) -> Dict:
     """Build a single payload for UI: lineups and defenses with optional scoping.
 
@@ -960,17 +1031,17 @@ def build_dashboard(
     proj_this = None
     proj_next = None
     if weeks in ("this", "both"):
-        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
+        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model, league_id=league_id, roster_id=roster_id)
     if weeks in ("next", "both"):
-        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model)
+        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model, league_id=league_id, roster_id=roster_id)
 
     # Defenses scoped by weeks and scope parameter
     defs_this = None
     defs_next = None
     if weeks in ("this", "both"):
-        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), league_id=league_id, roster_id=roster_id)
     if weeks in ("next", "both"):
-        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode))
+        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), league_id=league_id, roster_id=roster_id)
 
     def _owned(defs_payload: dict | None) -> List[dict]:
         rows = (defs_payload or {}).get("defenses", []) or []
@@ -1023,7 +1094,7 @@ def _norm_name(s: str) -> str:
         return s or ""
 
 
-def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "const") -> Dict:
+def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "const", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
     """Return per-book odds and market summaries used for a single player.
 
     Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).
@@ -1031,7 +1102,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     (this_start, this_end), (next_start, next_end) = compute_week_windows()
     eff_mode = cache_mode
     # Roster & planning (to get scoring rules and player mapping)
-    roster = sleeper_api.get_user_sleeper_data(username, season)
+    roster = _resolve_identity(username, season, league_id, roster_id)
     scoring_rules = roster.get("scoring_rules", {}) if roster else {}
     windows = (this_start, this_end) if week == "this" else (next_start, next_end)
     plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)

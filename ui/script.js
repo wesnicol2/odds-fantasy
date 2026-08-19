@@ -27,6 +27,145 @@ function _updateNetSpin() {
 function _incNet() { _inflight++; _updateNetSpin(); }
 function _decNet() { _inflight = Math.max(0, _inflight - 1); _updateNetSpin(); }
 
+// --- League/team identity -----------------------------------------------
+// Cookies (not localStorage) per the requested design: league_id/roster_id
+// need to survive across the league-setup modal and be readable by every
+// fetch call site without threading extra state through. `identityParams()`
+// is the single place that decides identity for a request: league_id +
+// roster_id (explicit, unambiguous) win over username/season (legacy
+// fallback -- and username-based Sleeper lookup silently picks "your first
+// league" for that username, which is wrong for anyone in more than one).
+function setCookie(name, value, days) {
+  const maxAge = days ? `; max-age=${days * 24 * 60 * 60}` : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}${maxAge}; path=/; SameSite=Lax`;
+}
+function getCookie(name) {
+  const escaped = name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1');
+  const match = document.cookie.match(new RegExp('(?:^|; )' + escaped + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+function deleteCookie(name) {
+  document.cookie = `${name}=; path=/; max-age=0`;
+}
+function identityParams() {
+  const leagueId = getCookie('league_id');
+  const rosterId = getCookie('roster_id');
+  if (leagueId && rosterId) return { league_id: leagueId, roster_id: rosterId };
+  return { username: val('username') || 'wesnicol', season: val('season') || '2025' };
+}
+
+// League setup: paste league ID (cookie'd) -> pick your team from a dropdown
+// (cookie'd) -> the league's own Sleeper `status` decides whether to default
+// to the draft board (pre_draft/drafting) or the weekly lineup view
+// (in_season/complete/anything else).
+const PRE_DRAFT_STATUSES = ['pre_draft', 'drafting'];
+
+function showLeagueSetupModal(opts) {
+  opts = opts || {};
+  $('leagueSetupOverlay').classList.remove('hidden');
+  if (opts.step === 'team' && opts._resolvedData) {
+    populateTeamPicker(opts._resolvedData);
+  } else {
+    $('leagueStepId').classList.remove('hidden');
+    $('leagueStepTeam').classList.add('hidden');
+    $('leagueIdError').textContent = '';
+    const existing = getCookie('league_id');
+    if (existing) $('leagueIdInput').value = existing;
+  }
+}
+
+function hideLeagueSetupModal() {
+  $('leagueSetupOverlay').classList.add('hidden');
+}
+
+async function submitLeagueId() {
+  const leagueId = ($('leagueIdInput').value || '').trim();
+  const errEl = $('leagueIdError');
+  errEl.textContent = '';
+  if (!leagueId) { errEl.textContent = 'Please enter a league ID.'; return; }
+  errEl.textContent = 'Looking up league...';
+  const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: leagueId }));
+  if (!ok || data.error) {
+    errEl.textContent = "Couldn't find that league -- double check the ID from your Sleeper league URL.";
+    return;
+  }
+  errEl.textContent = '';
+  setCookie('league_id', leagueId, 365);
+  populateTeamPicker(data);
+}
+
+function populateTeamPicker(leagueData) {
+  $('leagueStepId').classList.add('hidden');
+  $('leagueStepTeam').classList.remove('hidden');
+  $('leagueTeamError').textContent = '';
+  $('leagueTeamPrompt').textContent = `Which team is yours in "${leagueData.name || 'this league'}"?`;
+  const sel = $('leagueTeamSelect');
+  const teams = leagueData.teams || [];
+  sel.innerHTML = '<option value="">-- Select your team --</option>' +
+    teams.map(t => `<option value="${t.roster_id}">${(t.team_name || ('Team ' + t.roster_id))}</option>`).join('');
+  const existingRoster = getCookie('roster_id');
+  if (existingRoster && teams.some(t => String(t.roster_id) === String(existingRoster))) {
+    sel.value = existingRoster;
+  }
+}
+
+function submitTeamPick() {
+  const sel = $('leagueTeamSelect');
+  if (!sel.value) { $('leagueTeamError').textContent = 'Please pick your team.'; return; }
+  setCookie('roster_id', sel.value, 365);
+  hideLeagueSetupModal();
+  applyResolvedLeagueModeAndRefresh(getCookie('league_id'));
+}
+
+function updateLeagueIndicator(leagueData) {
+  const el = $('leagueIndicator');
+  if (!el) return;
+  const rosterId = getCookie('roster_id');
+  const team = (leagueData.teams || []).find(t => String(t.roster_id) === String(rosterId));
+  const statusLabel = PRE_DRAFT_STATUSES.includes(leagueData.status) ? 'pre-draft' : (leagueData.status || '');
+  el.textContent = `League: ${leagueData.name || leagueData.league_id} | Team: ${team ? team.team_name : '?'} | ${statusLabel}`;
+  el.classList.remove('hidden');
+}
+
+async function applyResolvedLeagueModeAndRefresh(leagueId) {
+  const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: leagueId }));
+  if (!ok || data.error) {
+    // Stale/broken cookie (e.g. league deleted) -- restart setup from scratch.
+    deleteCookie('league_id');
+    deleteCookie('roster_id');
+    showLeagueSetupModal();
+    return;
+  }
+  updateLeagueIndicator(data);
+  const preSeason = PRE_DRAFT_STATUSES.includes(data.status);
+  dbg('applyResolvedLeagueModeAndRefresh', { status: data.status, preSeason });
+  if (preSeason) {
+    const draftSection = $('draft-board');
+    if (draftSection) draftSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showDraftBoard('this');
+  } else {
+    refreshAll();
+  }
+}
+
+async function initLeagueFlow() {
+  const leagueId = getCookie('league_id');
+  if (!leagueId) {
+    showLeagueSetupModal();
+    return;
+  }
+  const rosterId = getCookie('roster_id');
+  if (!rosterId) {
+    // League already known but no team picked yet -- resume at step 2
+    // instead of asking for the league ID again.
+    const { ok, data } = await fetchJSON(apiUrl('/league/resolve', { league_id: leagueId }));
+    if (!ok || data.error) { deleteCookie('league_id'); showLeagueSetupModal(); return; }
+    showLeagueSetupModal({ step: 'team', _resolvedData: data });
+    return;
+  }
+  await applyResolvedLeagueModeAndRefresh(leagueId);
+}
+
 function setStatus(el, msg) { if (el) el.textContent = msg || ''; }
 
 function formatRateLimit(info, fallbackStr) {
@@ -154,7 +293,7 @@ async function showLineup(week) {
     const containerId = week === 'this' ? 'lineup-this' : 'lineup-next';
     showContainerLoading(containerId, 'Loading lineup...');
     const mode = getDataMode();
-  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
+  const url = apiUrl('/projections', { ...identityParams(), week, mode, model: getModel() });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { document.getElementById(containerId).innerHTML = '<div class=\"status\">Failed to load lineup.</div>'; return; }
     appCache.lineupPlayers[week] = data.players || [];
@@ -282,7 +421,7 @@ async function loadLineup(week, target) {
     dbg('loadLineup:no-cache', { week, target });
     showContainerLoading(containerId, 'Loading lineup...');
   const mode = getDataMode();
-  const url = apiUrl('/lineup', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, target, mode, model: getModel() });
+  const url = apiUrl('/lineup', { ...identityParams(), week, target, mode, model: getModel() });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load lineup.</div>'; return; }
     appCache.lineups[week] = appCache.lineups[week] || {};
@@ -364,7 +503,7 @@ async function showPlayers(week) {
     dbg('showPlayers:no-cache', { week });
     showContainerLoading(containerId, 'Loading players...');
   const mode = getDataMode();
-  const url = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
+  const url = apiUrl('/projections', { ...identityParams(), week, mode, model: getModel() });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load players.</div>'; return; }
     appCache.projections[week] = data;
@@ -409,7 +548,7 @@ async function showDraftBoard(week) {
     dbg('showDraftBoard:no-cache', { week });
     showContainerLoading(containerId, 'Loading draft board (this can take a bit -- it covers every team playing this week)...');
     const mode = getDataMode();
-    const url = apiUrl('/draft-board', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
+    const url = apiUrl('/draft-board', { ...identityParams(), week, mode, model: getModel() });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load draft board.</div>'; return; }
     appCache.draftBoard[week] = data;
@@ -428,7 +567,7 @@ async function loadDefenses(week) {
     dbg('loadDefenses:no-cache', { week });
     showContainerLoading(containerId, 'Loading defenses...');
   const mode = getDataMode();
-  const url = apiUrl('/defenses', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, scope: 'both', mode });
+  const url = apiUrl('/defenses', { ...identityParams(), week, scope: 'both', mode });
     const { ok, data } = await fetchJSON(url);
     if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load defenses.</div>'; return; }
     appCache.defenses[week] = data;
@@ -441,11 +580,9 @@ async function loadDefenses(week) {
 }
 
 async function refreshAll() {
-  const username = val('username') || 'wesnicol';
-  const season = val('season') || '2025';
   const mode = getDataMode();
-  const url = apiUrl('/dashboard', { username, season, mode, weeks: 'this', def_scope: 'owned', include_players: '1', model: getModel() });
-  dbg('refreshAll:start', { url, username, season });
+  const url = apiUrl('/dashboard', { ...identityParams(), mode, weeks: 'this', def_scope: 'owned', include_players: '1', model: getModel() });
+  dbg('refreshAll:start', { url });
   setStatus($('pingStatus'), 'Refreshing...');
   showGlobalLoading('Refreshing dashboard...');
   disableAllButtons(true);
@@ -488,8 +625,7 @@ async function refreshAll() {
 
 async function dbgProjections(week) {
   const url = apiUrl('/projections', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
+    ...identityParams(),
     week,
     mode: getDataMode(),
     model: getModel()
@@ -542,7 +678,26 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   if (btnProjThis) btnProjThis.addEventListener('click', () => dbgProjections('this'));
   if (btnProjNext) btnProjNext.addEventListener('click', () => dbgProjections('next'));
+
+  // League/team setup flow
+  const leagueIdContinue = document.getElementById('leagueIdContinue');
+  if (leagueIdContinue) leagueIdContinue.addEventListener('click', () => submitLeagueId());
+  const leagueIdInput = document.getElementById('leagueIdInput');
+  if (leagueIdInput) leagueIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLeagueId(); });
+  const leagueTeamContinue = document.getElementById('leagueTeamContinue');
+  if (leagueTeamContinue) leagueTeamContinue.addEventListener('click', () => submitTeamPick());
+  const leagueTeamBack = document.getElementById('leagueTeamBack');
+  if (leagueTeamBack) leagueTeamBack.addEventListener('click', () => {
+    document.getElementById('leagueStepTeam').classList.add('hidden');
+    document.getElementById('leagueStepId').classList.remove('hidden');
+  });
+  const leagueSetupClose = document.getElementById('leagueSetupClose');
+  if (leagueSetupClose) leagueSetupClose.addEventListener('click', () => hideLeagueSetupModal());
+  const btnChangeLeague = document.getElementById('btnChangeLeague');
+  if (btnChangeLeague) btnChangeLeague.addEventListener('click', () => showLeagueSetupModal());
+
   dbg('DOMContentLoaded');
+  initLeagueFlow();
   // Click 'Refresh' to load dashboard data when you want to fetch.
   // Global error surfacing for visibility
   window.addEventListener('error', (e) => {

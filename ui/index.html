@@ -10,11 +10,13 @@
   <header>
     <h1>Odds Fantasy Dashboard</h1>
     <div class="controls">
-      <label>
+      <span id="leagueIndicator" class="status hidden"></span>
+      <button id="btnChangeLeague" type="button">League / Team</button>
+      <label title="Only used when no league is configured -- click 'League / Team' above instead">
         Username:
         <input id="username" type="text" value="wesnicol" />
       </label>
-      <label>
+      <label title="Only used when no league is configured -- click 'League / Team' above instead">
         Season:
         <input id="season" type="text" value="2025" />
       </label>
@@ -140,6 +142,42 @@
   </div>
 
   
+  <!-- League/team setup overlay -->
+  <div id="leagueSetupOverlay" class="overlay hidden">
+    <div class="overlay-box details-box">
+      <div class="details-header">
+        <div class="details-title">Set Up Your League</div>
+        <button id="leagueSetupClose" class="close-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="details-body">
+        <div id="leagueStepId">
+          <p>Enter your Sleeper League ID. The app uses this (not your
+          username) to know which league's scoring rules to use and whether
+          it's drafted yet -- a username can belong to more than one league,
+          which a league ID never ambiguously does.</p>
+          <p class="status">Find it in your league's Sleeper URL:
+          sleeper.com/leagues/<b>&lt;league_id&gt;</b>/team</p>
+          <div class="btn-row">
+            <input id="leagueIdInput" type="text" placeholder="e.g. 1191596293294682112" style="min-width:260px;" />
+            <button id="leagueIdContinue" type="button">Continue</button>
+          </div>
+          <div id="leagueIdError" class="status" style="color:#f87171;"></div>
+        </div>
+        <div id="leagueStepTeam" class="hidden">
+          <p id="leagueTeamPrompt">Which team is yours?</p>
+          <div class="btn-row">
+            <select id="leagueTeamSelect" style="min-width:260px;"></select>
+          </div>
+          <div class="btn-row">
+            <button id="leagueTeamBack" type="button">Back</button>
+            <button id="leagueTeamContinue" type="button">Continue</button>
+          </div>
+          <div id="leagueTeamError" class="status" style="color:#f87171;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Details modal overlay -->
   <div id="detailsOverlay" class="overlay hidden">
     <div class="overlay-box details-box">

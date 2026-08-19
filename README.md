@@ -51,17 +51,32 @@ Override the command or environment variables in the compose file if you need to
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model
 (`feature/*` / `dev/*` / `main`) and repo-hygiene rules.
 
+## League / team identity
+The UI identifies "you" by Sleeper **league ID + team**, not username: on
+first load it prompts for your league ID (stored as a cookie), then a
+dropdown to pick which roster is yours (also cookie'd). This is deliberately
+more precise than username-based lookup, which just grabs "the first league
+this username is in" and silently picks the wrong league for anyone in more
+than one. The league's own Sleeper `status` (`pre_draft`/`drafting` vs.
+`in_season`/`complete`) decides whether the UI defaults to the draft board or
+the weekly lineup view. `GET /league/resolve?league_id=` (status + team list)
+is what powers this; every other endpoint accepts `league_id`+`roster_id` as
+an alternative to `username`+`season`, with `league_id` taking priority when
+both are present (see `services._resolve_identity`). The username/season
+fields still work as a fallback for anyone who hasn't set up a league.
+
 ## Project Structure
 - `refactored/`: **This is the real application.** `refactored/api.py` is the
   entrypoint (`CMD` in the `Dockerfile`) — a stdlib WSGI server exposing
-  `/health`, `/projections`, `/lineup`, `/lineup/diffs`, `/defenses`,
-  `/draft-board`, `/player/odds`, `/defense/odds`, and `/dashboard`, and
-  serving the UI under `/` and `/ui/*`. See `refactored/services.py` for the
-  orchestration layer, `refactored/range_model.py` + `refactored/prob_models.py`
-  for how betting-line probabilities become floor/mid/ceiling fantasy point
-  ranges, `refactored/aggregator.py` + `refactored/planner.py` for how odds
-  are fetched/grouped for your roster, `refactored/draft_prep.py` for the
-  same thing but for every player league-wide (pre-draft, before you have a
+  `/health`, `/league/resolve`, `/projections`, `/lineup`, `/lineup/diffs`,
+  `/defenses`, `/draft-board`, `/player/odds`, `/defense/odds`, and
+  `/dashboard`, and serving the UI under `/` and `/ui/*`. See
+  `refactored/services.py` for the orchestration layer,
+  `refactored/range_model.py` + `refactored/prob_models.py` for how
+  betting-line probabilities become floor/mid/ceiling fantasy point ranges,
+  `refactored/aggregator.py` + `refactored/planner.py` for how odds are
+  fetched/grouped for your roster, `refactored/draft_prep.py` for the same
+  thing but for every player league-wide (pre-draft, before you have a
   roster to scope to), and `refactored/odds_client.py` +
   `refactored/ratelimit.py` for caching and Odds-API rate-limit tracking.
 - `config.py`: Loads environment configuration and defines shared constants
