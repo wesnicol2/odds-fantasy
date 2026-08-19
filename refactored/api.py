@@ -19,7 +19,7 @@ from typing import Callable
 
 from . import ratelimit
 from . import services  # for detail endpoints
-from .services import compute_projections, compute_book_coverage, build_lineup, build_lineup_diffs, list_defenses, build_dashboard
+from .services import compute_projections, compute_book_coverage, build_lineup, build_lineup_diffs, list_defenses, build_dashboard, compute_draft_board
 
 # Module-level debug flag (defaults to False). Can be enabled via --debug CLI.
 _DEBUG_FLAG = False
@@ -232,6 +232,22 @@ def application(environ, start_response):
             _dprint(f"[api] defense/odds done games={len(data.get('games', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
+        if path == "/draft-board":
+            username = q("username", "wesnicol")
+            season = q("season", "2025")
+            week = q("week", "this")
+            region = q("region", "us")
+            model = q("model", "const")
+            fresh = q("fresh", "0") in ("1", "true", "True")
+            mode = q("mode", "auto")
+            positions_raw = q("positions", "")
+            positions = [p.strip().upper() for p in positions_raw.split(",") if p.strip()] or None
+            t0 = time.time()
+            _dprint(f"[api] draft-board season={season} week={week} region={region} mode={mode} model={model} fresh={fresh} positions={positions}")
+            data = compute_draft_board(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model, positions=positions)
+            _dprint(f"[api] draft-board done players={len(data.get('players', []))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, "200 OK", data)
+
         if path == "/dashboard":
             username = q("username", "wesnicol")
             season = q("season", "2025")
@@ -281,6 +297,7 @@ Endpoints:
   GET /lineup?username=&season=&week=this|next&target=mid|floor|ceiling&fresh=0|1
   GET /lineup/diffs?username=&season=&week=this|next&fresh=0|1
   GET /defenses?username=&season=&week=this|next&scope=owned|available|both&fresh=0|1
+  GET /draft-board?username=&season=&week=this|next&positions=QB,RB,WR,TE&fresh=0|1
 """)
     class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
         daemon_threads = True

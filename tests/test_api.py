@@ -139,6 +139,22 @@ class ApiTestCase(unittest.TestCase):
         self.assertTrue(status.startswith('200'))
         self.assertIsInstance(payload.get('defenses'), list)
 
+    @patch('refactored.api.compute_draft_board')
+    def test_draft_board(self, mock_board):
+        mock_board.return_value = {
+            'week': 'this',
+            'players': [
+                {'name': 'Josh Allen', 'pos': 'QB', 'team': 'Buffalo Bills', 'floor': 15.0, 'mid': 20.0, 'ceiling': 26.0},
+            ],
+            'ratelimit': 'remaining=95%',
+        }
+        status, headers, payload = wsgi_get('/draft-board?username=u&season=2025&week=this&positions=QB,RB')
+        self.assertTrue(status.startswith('200'))
+        self.assertIsInstance(payload.get('players'), list)
+        self.assertEqual(payload['players'][0]['name'], 'Josh Allen')
+        # positions query param should be parsed into a list and passed through
+        self.assertEqual(mock_board.call_args.kwargs.get('positions'), ['QB', 'RB'])
+
     def test_not_found(self):
         status, headers, payload = wsgi_get('/nope')
         self.assertTrue(status.startswith('404'))

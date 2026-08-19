@@ -10,6 +10,7 @@ const appCache = {
   lineups: { this: {}, next: {} },
   defenses: { this: null, next: null },
   projections: { this: null, next: null },
+  draftBoard: { this: null, next: null },
   lastRateLimit: null,
 };
 // Store raw players for local lineup building
@@ -375,6 +376,29 @@ async function showPlayers(week) {
   updateRateLimitDisplays(appCache.lastRateLimit || {});
 }
 
+async function showDraftBoard(week) {
+  // Intentionally not scoped to any roster -- see /draft-board in the API
+  // and CONTRIBUTING.md's "Odds API quota awareness" section. Only fetched
+  // on click, and cached per-week client-side so re-toggling doesn't
+  // re-hit the API.
+  const cached = appCache.draftBoard?.[week];
+  const containerId = 'draft-board';
+  if (!cached) {
+    dbg('showDraftBoard:no-cache', { week });
+    showContainerLoading(containerId, 'Loading draft board (this can take a bit -- it covers every team playing this week)...');
+    const mode = getDataMode();
+    const url = apiUrl('/draft-board', { username: val('username') || 'wesnicol', season: val('season') || '2025', week, mode, model: getModel() });
+    const { ok, data } = await fetchJSON(url);
+    if (!ok) { $(containerId).innerHTML = '<div class="status">Failed to load draft board.</div>'; return; }
+    appCache.draftBoard[week] = data;
+    renderPlayers(containerId, data.players || []);
+    updateRateLimitDisplays(data);
+    return;
+  }
+  renderPlayers(containerId, cached.players || []);
+  updateRateLimitDisplays(appCache.lastRateLimit || {});
+}
+
 async function loadDefenses(week) {
   const cached = appCache.defenses?.[week];
   const containerId = week === 'this' ? 'defenses-this' : 'defenses-next';
@@ -490,6 +514,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.querySelectorAll('.btn-players').forEach(btn => {
     btn.addEventListener('click', () => showPlayers(btn.dataset.week));
+  });
+  document.querySelectorAll('.btn-draft-board').forEach(btn => {
+    btn.addEventListener('click', () => showDraftBoard(btn.dataset.week));
   });
   if (btnProjThis) btnProjThis.addEventListener('click', () => dbgProjections('this'));
   if (btnProjNext) btnProjNext.addEventListener('click', () => dbgProjections('next'));
