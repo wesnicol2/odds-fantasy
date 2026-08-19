@@ -90,13 +90,15 @@ class ApiTestCase(unittest.TestCase):
         self.assertIn('coverage', payload)
         self.assertIsInstance(payload.get('coverage', {}).get('rows', []), list)
 
+    @patch('refactored.api.list_defenses')
     @patch('refactored.api.build_lineup')
     @patch('refactored.api.compute_projections')
-    def test_lineup(self, mock_proj, mock_build):
+    def test_lineup(self, mock_proj, mock_build, mock_defs):
         mock_proj.return_value = {
             'players': [{'name': 'QB A', 'pos': 'QB', 'mid': 18.0}],
             'ratelimit': 'remaining=90%'
         }
+        mock_defs.return_value = {'defenses': []}
         mock_build.return_value = {
             'target': 'mid',
             'lineup': [{'slot': 'QB', 'name': 'QB A', 'pos': 'QB', 'points': 18.0}],
@@ -106,11 +108,15 @@ class ApiTestCase(unittest.TestCase):
         self.assertTrue(status.startswith('200'))
         self.assertEqual(payload['target'], 'mid')
         self.assertGreaterEqual(len(payload['lineup']), 1)
+        # Defenses are looked up scoped to the caller's own roster only
+        self.assertEqual(mock_defs.call_args.kwargs.get('scope'), 'owned')
 
+    @patch('refactored.api.list_defenses')
     @patch('refactored.api.build_lineup_diffs')
     @patch('refactored.api.compute_projections')
-    def test_lineup_diffs(self, mock_proj, mock_diffs):
+    def test_lineup_diffs(self, mock_proj, mock_diffs, mock_defs):
         mock_proj.return_value = {'players': [], 'ratelimit': 'remaining=80%'}
+        mock_defs.return_value = {'defenses': []}
         mock_diffs.return_value = {
             'from': {'lineup': []},
             'floor_changes': [{'slot': 'FLEX', 'from': 'X', 'to': 'Y'}],

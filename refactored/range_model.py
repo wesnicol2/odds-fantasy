@@ -5,7 +5,14 @@ from dataclasses import dataclass
 from statistics import NormalDist
 
 from predicted_stats import predict_stats_for_player
-from .prob_models import get_model_registry, _inverse_cdf  # type: ignore
+from .prob_models import (  # type: ignore
+    get_model_registry,
+    _inverse_cdf,
+    _fit_lognormal_from_two_points,
+    _lognormal_quantile,
+    _poisson_fit_lambda,
+    poisson_quantile,
+)
 from config import STAT_MARKET_MAPPING_SLEEPER
 
 
@@ -42,6 +49,17 @@ def _calc_sigma(mean: float, threshold: float, p_over: float, p_under: float) ->
     return max(sigma, 1e-6)
 
 
+def _is_count_market(key: str) -> bool:
+    k = (key or "").lower()
+    if "receptions" in k:
+        return True
+    if k.endswith("_tds"):
+        return True
+    if k.endswith("_interceptions"):
+        return True
+    return False
+
+
 def _market_quantiles(
     key: str,
     mean: float,
@@ -57,6 +75,33 @@ def _market_quantiles(
         q50 = 0.0 if 0.50 <= 1 - p else 1.0
         q85 = 0.0 if 0.85 <= 1 - p else 1.0
         return q15, mean, q85  # use mean for mid to retain smoother ordering
+
+    # Single-line fallback (no alternates / not enough anchors for a full CDF fit).
+    # We only have one (threshold, p_over) market observation, so we shape the
+    # implied distribution to match how the stat actually behaves rather than
+    # always assuming Normal: yardage stats are right-skewed (lognormal),
+    # count stats (receptions, TDs, INTs) are discrete and Poisson-shaped.
+    # We fall back to Normal only if the shape-specific fit fails outright.
+    total = (p_over or 0.0) + (p_under or 0.0)
+    p = (p_over / total) if total > 0 else 0.5
+    p = min(max(p, 1e-4), 1 - 1e-4)
+    f_at_threshold = 1.0 - p  # P(X <= threshold), since p = P(X > threshold)
+
+    if _is_count_market(key):
+        lam = _poisson_fit_lambda([(max(0, round(threshold)), f_at_threshold)])
+        if lam is not None and lam > 0:
+            q15 = poisson_quantile(lam, 0.15)
+            q50 = poisson_quantile(lam, 0.50)
+            q85 = poisson_quantile(lam, 0.85)
+            return q15, q50, q85
+    elif "_yds" in key:
+        fit = _fit_lognormal_from_two_points(max(threshold, 1e-6), f_at_threshold, max(mean, 1e-6), 0.5)
+        if fit is not None:
+            mu, sigma_log = fit
+            q15 = _lognormal_quantile(mu, sigma_log, 0.15)
+            q50 = _lognormal_quantile(mu, sigma_log, 0.50)
+            q85 = _lognormal_quantile(mu, sigma_log, 0.85)
+            return q15, q50, q85
 
     sigma = _calc_sigma(mean, threshold, p_over, p_under)
     q15 = mean + NormalDist().inv_cdf(0.15) * sigma
@@ -288,4 +333,80 @@ def compute_fantasy_range_model(
     ceil_fp += _discrete_bonus(float(ceil_stats.get("player_pass_yds", 0.0) or 0.0), [(300.0, "bonus_pass_yd_300"), (400.0, "bonus_pass_yd_400")])
 
     return floor_fp, mid_fp, ceil_fp, per_market_ranges
+
+
+# --- Defense / Special Teams -------------------------------------------------
+#
+# There's no player-prop-style market for "team sacks" or "team takeaways" on
+# The Odds API, so unlike offensive skill players we can't build a de-vigged
+# quantile curve for a defense's own stat line. What the market *does* give us
+# is the opponent's implied point total (from spread+total), which is a real,
+# priced signal for defensive scoring environment: it's just also a
+# deliberately partial one. It only feeds the points-allowed scoring bracket;
+# sacks/INT/fumble-recovery/defensive-TD points are not modeled and will read
+# as 0 here. That's a known, documented gap (see README), not a bug.
+
+# Empirical standard deviation of an NFL team's final score around its
+# Vegas-implied mean. ~9-10 points is the commonly cited figure; we use 10 as
+# a slightly conservative (wider) spread.
+NFL_TEAM_SCORE_SIGMA = 10.0
+
+# (scoring_rules key, inclusive lower bound, exclusive upper bound) for
+# Sleeper's standard points-allowed brackets. Bounds use the midpoint between
+# adjacent integer scores so a Normal CDF can assign probability mass cleanly.
+DEF_PTS_ALLOWED_BRACKETS: Tuple[Tuple[str, float | None, float | None], ...] = (
+    ("pts_allow_0", None, 0.5),
+    ("pts_allow_1_6", 0.5, 6.5),
+    ("pts_allow_7_13", 6.5, 13.5),
+    ("pts_allow_14_20", 13.5, 20.5),
+    ("pts_allow_21_27", 20.5, 27.5),
+    ("pts_allow_28_34", 27.5, 34.5),
+    ("pts_allow_35p", 34.5, None),
+)
+
+
+def _pts_allowed_ev(mean_opp_pts: float, sigma: float, scoring_rules: Dict[str, float]) -> float:
+    """Expected points-allowed bonus, integrating bracket probability over a Normal(mean, sigma)."""
+    dist = NormalDist(mu=mean_opp_pts, sigma=sigma)
+    total = 0.0
+    for key, lo, hi in DEF_PTS_ALLOWED_BRACKETS:
+        p_lo = 0.0 if lo is None else dist.cdf(lo)
+        p_hi = 1.0 if hi is None else dist.cdf(hi)
+        prob = max(0.0, p_hi - p_lo)
+        val = float((scoring_rules or {}).get(key, 0.0) or 0.0)
+        total += prob * val
+    return total
+
+
+def _pts_allowed_bracket_value(opp_pts: float, scoring_rules: Dict[str, float]) -> float:
+    """Points-allowed bonus for a single realized opponent point total."""
+    for key, lo, hi in DEF_PTS_ALLOWED_BRACKETS:
+        lo_ok = (lo is None) or (opp_pts >= lo)
+        hi_ok = (hi is None) or (opp_pts < hi)
+        if lo_ok and hi_ok:
+            return float((scoring_rules or {}).get(key, 0.0) or 0.0)
+    return 0.0
+
+
+def compute_defense_fantasy_range(
+    opponent_implied_total: float,
+    scoring_rules: Dict[str, float],
+) -> Tuple[float, float, float]:
+    """Floor/mid/ceiling fantasy points for a DEF, from the opponent's implied total.
+
+    Mid uses the full expected value across points-allowed brackets. Floor and
+    ceiling evaluate the bracket at the opponent's 85th/15th-percentile score
+    respectively (opponent scoring MORE is worse for our defense -> floor;
+    opponent scoring LESS is better -> ceiling), mirroring how offensive
+    floor/ceiling is computed elsewhere in this module.
+    """
+    sigma = NFL_TEAM_SCORE_SIGMA
+    mid = _pts_allowed_ev(opponent_implied_total, sigma, scoring_rules)
+    z15 = NormalDist().inv_cdf(0.15)
+    z85 = NormalDist().inv_cdf(0.85)
+    opp_low = max(0.0, opponent_implied_total + z15 * sigma)
+    opp_high = max(0.0, opponent_implied_total + z85 * sigma)
+    ceiling = _pts_allowed_bracket_value(opp_low, scoring_rules)
+    floor = _pts_allowed_bracket_value(opp_high, scoring_rules)
+    return floor, mid, ceiling
 
