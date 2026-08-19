@@ -1693,131 +1693,17 @@ document.addEventListener('DOMContentLoaded', function(){
   };
 })();
 
-// ---- UI overrides to highlight incomplete players and avoid zero placeholders ----
-// We override rendering helpers defined in script.js to add badges and dashes for missing stats.
-(function(){
-  // Defensive checks in case functions are renamed
-  function fmtCell(v, inc) { return inc ? 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â' : Number(v||0).toFixed(2); }
-
-  // Override renderPlayers to show incomplete badge and dashes
-  if (typeof window.renderPlayers === 'function') {
-    const _orig = window.renderPlayers;
-    window.renderPlayers = function(containerId, players) {
-      try {
-        const c = document.getElementById(containerId);
-        const rows = Array.isArray(players) ? players.slice() : [];
-        if (!c) return _orig(containerId, players);
-        if (!rows.length) { c.innerHTML = '<div class="status">No players found.</div>'; return; }
-        rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
-        const body = rows.map(r => {
-          const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
-          const nameHtml = inc ? (r.name + ' <span class="pill pill"warn- title="Odds missing; stats incomplete">incomplete</span>') : r.name;
-          return '<tr>'
-            + '<td>' + (inc ? ('<span class="incomplete"name->' + nameHtml + '</span>') : nameHtml) + '</td>'
-            + '<td>' + (r.pos || '') + '</td>'
-            + '<td>' + fmtCell(r.floor, inc) + '</td>'
-            + '<td>' + fmtCell(r.mid, inc) + '</td>'
-            + '<td>' + fmtCell(r.ceiling, inc) + '</td>'
-            + '</tr>';
-        }).join('');
-        c.innerHTML = '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>' + body + '</tbody></table>';
-      } catch (e) { try { _orig(containerId, players); } catch (_) {} }
-    }
-  }
-
-  // Override computeLineupFromPlayers to propagate incomplete flags
-  if (typeof window.computeLineupFromPlayers === 'function') {
-    window.computeLineupFromPlayers = function(players, target) {
-      const buckets = { QB: [], RB: [], WR: [], TE: [] };
-      for (const p of (players || [])) {
-        if (buckets[p.pos]) buckets[p.pos].push(p);
-      }
-      const by = (t) => (a, b) => Number(b[t] || 0) - Number(a[t] || 0);
-      Object.keys(buckets).forEach(pos => buckets[pos].sort(by(target)));
-      const used = new Set();
-      const take = (pos, n) => {
-        const out = [];
-        for (const p of buckets[pos]) {
-          if (!used.has(p.name)) { out.push(p); used.add(p.name); if (out.length === n) break; }
-        }
-        return out;
-      };
-      const lineup = { QB: take('QB', 1), RB: take('RB', 2), WR: take('WR', 2), TE: take('TE', 1) };
-      const flexPool = [];
-      for (const pos of ['WR','RB','TE']) {
-        for (const p of buckets[pos]) if (!used.has(p.name)) flexPool.push(p);
-      }
-      flexPool.sort(by(target));
-      lineup.FLEX = flexPool.slice(0, 1);
-      const rows = [];
-      let total = 0;
-      const add = (slot, p, countTotal=true) => {
-        const pts = Number(p[target] || 0);
-        if (countTotal) total += pts;
-        rows.push({ slot, name: p.name, pos: p.pos, floor: (p.floor!=null?Number(p.floor):null), mid: (p.mid!=null?Number(p.mid):null), ceiling: (p.ceiling!=null?Number(p.ceiling):null), incomplete: !!p.incomplete });
-      };
-      lineup.QB.forEach(p => add('QB', p));
-      lineup.RB.forEach(p => add('RB', p));
-      lineup.WR.forEach(p => add('WR', p));
-      lineup.TE.forEach(p => add('TE', p));
-      lineup.FLEX.forEach(p => add('FLEX', p));
-      // Append bench (all remaining players by target), but do not add to total
-      const bench = [];
-      for (const pos of ['QB','RB','WR','TE']) {
-        for (const p of buckets[pos]) if (!used.has(p.name)) bench.push(p);
-      }
-      bench.sort(by(target));
-      bench.forEach(p => add('BENCH', p, false));
-      return { target, lineup: rows, total_points: Number(total.toFixed(2)) };
-      }
-  }
-
-  // Override renderLineup to show incomplete badges and dashes
-  if (typeof window.renderLineup === 'function') {
-    const _origRL = window.renderLineup;
-    window.renderLineup = function(containerId, title, payload) {
-      try {
-        const c = document.getElementById(containerId);
-        const rows = (payload && payload.lineup) || [];
-        const target = (payload && payload.target) || 'mid';
-        const total = Number((payload && payload.total_points) || 0);
-        const ratelimit = (payload && payload.ratelimit) || '';
-        const headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th>';
-        const body = rows.map(r => {
-          const inc = !!r.incomplete || (r.mid==null && r.floor==null && r.ceiling==null);
-          const nameHtml = inc ? (r.name + ' <span class="pill pill"warn- title="Odds missing; stats incomplete">incomplete</span>') : r.name;
-          const fmt = (v) => inc ? 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â' : Number(v||0).toFixed(2);
-          return '<tr>'
-            + '<td>' + (r.slot||'') + '</td>'
-            + '<td>' + (inc ? ('<span class="incomplete"name->' + nameHtml + '</span>') : nameHtml) + '</td>'
-            + '<td>' + (r.pos||'') + '</td>'
-            + '<td>' + fmt(r.floor) + '</td>'
-            + '<td>' + fmt(r.mid) + '</td>'
-            + '<td>' + fmt(r.ceiling) + '</td>'
-            + '</tr>';
-        }).join('');
-        c.innerHTML = [
-          `<h3>${title} - target: ${target} (total: ${total.toFixed(2)})</h3>`,
-          `<table><thead><tr>${headerCols}</tr></thead><tbody>`,
-          body,
-          '</tbody></table>',
-          `<div class="status">RateLimit: ${ratelimit}</div>`
-        ].join('\n');
-      } catch (e) { try { _origRL(containerId, title, payload); } catch (_) {} }
-    }
-  }
-})();
-
-// Load overrides (for clearer incomplete indicators and bench rows)
-try {
-  document.addEventListener('DOMContentLoaded', function(){
-    try {
-      var s = document.createElement('script');
-      s.src = '/ui/overrides.js';
-      document.body.appendChild(s);
-    } catch (e) { /* ignore */ }
-  });
-} catch (e) { /* ignore */ }
+// Note: "incomplete" badge rendering (players/lineup rows missing odds
+// coverage) lives directly in script.js's renderPlayers/renderLineup now --
+// see that file. It used to live here as a pair of runtime overrides (one
+// inline, one dynamically loaded from a since-deleted /ui/overrides.js,
+// found via a real headless-browser console-error check -- an earlier
+// cleanup pass that deleted overrides.js as "unreferenced by index.html"
+// missed that this file injected a <script src="/ui/overrides.js"> at
+// runtime, which a grep over index.html's static <script> tags won't catch.
+// The inline copy that lived here also had corrupted markup from some
+// earlier edit (mojibake'd em-dash, malformed class attributes like
+// `class="pill pill"warn-`), so it wasn't safe to just keep as-is either.
 
 
 

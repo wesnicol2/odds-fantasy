@@ -369,6 +369,22 @@ function getModel() {
   return (el && el.value) ? el.value : 'const';
 }
 
+// A player/lineup row is "incomplete" when the backend had no odds coverage
+// to project from -- floor/mid/ceiling are 0 (or null) because there's
+// nothing to compute from, not because the player is actually projected for
+// zero. Flag it visibly instead of rendering a plain, misleading "0.00".
+function _isIncompleteRow(r) {
+  return !!r.incomplete || (r.mid == null && r.floor == null && r.ceiling == null);
+}
+function _statCell(v, incomplete) {
+  return incomplete ? '—' : Number(v || 0).toFixed(2);
+}
+function _nameCell(r, incomplete) {
+  const nameSpan = `<span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span>`;
+  if (!incomplete) return nameSpan;
+  return `<span class="incomplete-name">${nameSpan} <span class="pill pill-warn" title="No odds coverage found -- stats unavailable">incomplete</span></span>`;
+}
+
 function renderLineup(containerId, title, payload) {
   const c = $(containerId);
   const rows = payload?.lineup || [];
@@ -377,15 +393,18 @@ function renderLineup(containerId, title, payload) {
   const ratelimit = payload?.ratelimit || '';
   dbg('renderLineup', { containerId, title, count: rows.length, target, total });
   const headerCols = '<th>Slot</th><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th>';
-  const rowHtml = rows.map(r => `
+  const rowHtml = rows.map(r => {
+    const inc = _isIncompleteRow(r);
+    return `
     <tr>
       <td>${r.slot}</td>
-      <td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td>
+      <td>${_nameCell(r, inc)}</td>
       <td>${r.pos}</td>
-      <td>${Number(r.floor).toFixed(2)}</td>
-      <td>${Number(r.mid).toFixed(2)}</td>
-      <td>${Number(r.ceiling).toFixed(2)}</td>
-    </tr>`);
+      <td>${_statCell(r.floor, inc)}</td>
+      <td>${_statCell(r.mid, inc)}</td>
+      <td>${_statCell(r.ceiling, inc)}</td>
+    </tr>`;
+  });
   const table = [
     `<h3>${title} — target: ${target} (total: ${total.toFixed(2)})</h3>`,
     `<table><thead><tr>${headerCols}</tr></thead><tbody>`,
@@ -433,7 +452,10 @@ function renderPlayers(containerId, players) {
   rows.sort((a, b) => Number(b.mid || 0) - Number(a.mid || 0));
   const table = [
     '<table><thead><tr><th>Name</th><th>Pos</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead><tbody>',
-    ...rows.map(r => `<tr><td><span class="player-name" data-player="${r.name}" title="Open details" style="cursor:pointer; text-decoration:underline;">${r.name}</span></td><td>${r.pos}</td><td>${Number(r.floor).toFixed(2)}</td><td>${Number(r.mid).toFixed(2)}</td><td>${Number(r.ceiling).toFixed(2)}</td></tr>`),
+    ...rows.map(r => {
+      const inc = _isIncompleteRow(r);
+      return `<tr><td>${_nameCell(r, inc)}</td><td>${r.pos}</td><td>${_statCell(r.floor, inc)}</td><td>${_statCell(r.mid, inc)}</td><td>${_statCell(r.ceiling, inc)}</td></tr>`;
+    }),
     '</tbody></table>'
   ].join('\n');
   c.innerHTML = table;

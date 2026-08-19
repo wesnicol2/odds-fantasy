@@ -783,6 +783,12 @@ def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] 
             "floor": round(_num(p.get("floor", 0.0)), 2),
             "mid": round(_num(p.get("mid", 0.0)), 2),
             "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
+            # so the UI can distinguish "actually projected for ~0" from
+            # "no odds coverage, this number is meaningless" -- carried
+            # through from compute_projections' players_out, not computed
+            # freshly here (DEF rows built directly in build_lineup won't
+            # have it, which is fine: they always come from real odds).
+            "incomplete": bool(p.get("incomplete")),
         })
 
     # Order: QB, WR, WR, RB, RB, TE, FLEX, DEF
