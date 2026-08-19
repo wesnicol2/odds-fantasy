@@ -47,6 +47,10 @@ Override the command or environment variables in the compose file if you need to
    - Add the `API_KEY` environment variable.
 4. Apply/Start the container, then open `http://<unraid-ip>:<mapped-port>/` for the UI.
 
+## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model
+(`feature/*` / `dev/*` / `main`) and repo-hygiene rules.
+
 ## Project Structure
 - `refactored/`: **This is the real application.** `refactored/api.py` is the
   entrypoint (`CMD` in the `Dockerfile`) — a stdlib WSGI server exposing
