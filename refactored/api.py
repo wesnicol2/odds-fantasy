@@ -19,7 +19,7 @@ from typing import Callable
 
 from . import ratelimit
 from . import services  # for detail endpoints
-from .services import compute_projections, compute_book_coverage, build_lineup, build_lineup_diffs, list_defenses, build_dashboard, compute_draft_board
+from .services import compute_projections, compute_book_coverage, build_lineup, build_lineup_diffs, list_defenses, build_dashboard, compute_draft_board, resolve_league
 
 # Module-level debug flag (defaults to False). Can be enabled via --debug CLI.
 _DEBUG_FLAG = False
@@ -111,6 +111,19 @@ def application(environ, start_response):
         v = qs.get(name)
         return v[0] if v else default
 
+    def q_identity():
+        """league_id/roster_id, when present, take priority over
+        username/season -- see services._resolve_identity."""
+        league_id = q("league_id", "") or None
+        roster_id_raw = q("roster_id", "")
+        roster_id = None
+        if roster_id_raw:
+            try:
+                roster_id = int(roster_id_raw)
+            except ValueError:
+                roster_id = None
+        return league_id, roster_id
+
     _dprint(f"[api] {method} {path} qs={qs}")
 
     try:
@@ -125,6 +138,17 @@ def application(environ, start_response):
             _dprint("[api] GET /health")
             return _json_response(start_response, "200 OK", {"status": "ok", "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()})
 
+        if path == "/league/resolve":
+            league_id = q("league_id", "")
+            t0 = time.time()
+            _dprint(f"[api] league/resolve league_id={league_id}")
+            if not league_id:
+                return _json_response(start_response, "400 Bad Request", {"error": "league_id_required"})
+            data = resolve_league(league_id)
+            status = "404 Not Found" if data.get("error") else "200 OK"
+            _dprint(f"[api] league/resolve done status={data.get('status')} teams={len(data.get('teams', []))} dt={(time.time()-t0):.2f}s")
+            return _json_response(start_response, status, data)
+
         if path == "/projections":
             username = q("username", "wesnicol")
             season = q("season", "2025")
@@ -133,9 +157,10 @@ def application(environ, start_response):
             model = q("model", "const")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] projections user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh}")
-            data = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model)
+            _dprint(f"[api] projections user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh} league_id={league_id} roster_id={roster_id}")
+            data = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model, league_id=league_id, roster_id=roster_id)
             _dprint(f"[api] projections done players={len(data.get('players', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
@@ -147,9 +172,10 @@ def application(environ, start_response):
             model = q("model", "const")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] book-coverage user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh}")
-            data = compute_book_coverage(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model)
+            _dprint(f"[api] book-coverage user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh} league_id={league_id} roster_id={roster_id}")
+            data = compute_book_coverage(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model, league_id=league_id, roster_id=roster_id)
             rows = len((data.get('coverage') or {}).get('rows', []))
             _dprint(f"[api] book-coverage done rows={rows} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
@@ -163,10 +189,11 @@ def application(environ, start_response):
             model = q("model", "const")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] lineup user={username} season={season} week={week} target={target} region={region} mode={mode} model={model} fresh={fresh}")
-            proj = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model)
-            def_data = list_defenses(username=username, season=season, week=week, scope="owned", region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode))
+            _dprint(f"[api] lineup user={username} season={season} week={week} target={target} region={region} mode={mode} model={model} fresh={fresh} league_id={league_id} roster_id={roster_id}")
+            proj = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model, league_id=league_id, roster_id=roster_id)
+            def_data = list_defenses(username=username, season=season, week=week, scope="owned", region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), league_id=league_id, roster_id=roster_id)
             lineup = build_lineup(proj.get("players", []), target=target, defenses=def_data.get("defenses", []))
             lineup["ratelimit"] = ratelimit.format_status()
             lineup["ratelimit_info"] = ratelimit.get_details()
@@ -181,10 +208,11 @@ def application(environ, start_response):
             model = q("model", "const")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] lineup/diffs user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh}")
-            proj = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model)
-            def_data = list_defenses(username=username, season=season, week=week, scope="owned", region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode))
+            _dprint(f"[api] lineup/diffs user={username} season={season} week={week} region={region} mode={mode} model={model} fresh={fresh} league_id={league_id} roster_id={roster_id}")
+            proj = compute_projections(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model, league_id=league_id, roster_id=roster_id)
+            def_data = list_defenses(username=username, season=season, week=week, scope="owned", region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), league_id=league_id, roster_id=roster_id)
             diffs = build_lineup_diffs(proj.get("players", []), defenses=def_data.get("defenses", []))
             diffs["ratelimit"] = ratelimit.format_status()
             diffs["ratelimit_info"] = ratelimit.get_details()
@@ -199,9 +227,10 @@ def application(environ, start_response):
             region = q("region", "us")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] defenses user={username} season={season} week={week} scope={scope} region={region} mode={mode} fresh={fresh}")
-            data = list_defenses(username=username, season=season, week=week, scope=scope, fresh=fresh, cache_mode=('fresh' if fresh else mode), region=region)
+            _dprint(f"[api] defenses user={username} season={season} week={week} scope={scope} region={region} mode={mode} fresh={fresh} league_id={league_id} roster_id={roster_id}")
+            data = list_defenses(username=username, season=season, week=week, scope=scope, fresh=fresh, cache_mode=('fresh' if fresh else mode), region=region, league_id=league_id, roster_id=roster_id)
             _dprint(f"[api] defenses done rows={len(data.get('defenses', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
@@ -213,9 +242,10 @@ def application(environ, start_response):
             name = q("name", "")
             model = q("model", "const")
             mode = q("mode", "auto")
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] player/odds user={username} season={season} week={week} name={name} model={model} mode={mode}")
-            data = services.get_player_odds_details(username=username, season=season, week=week, region=region, name=name, cache_mode=mode, model=model)
+            _dprint(f"[api] player/odds user={username} season={season} week={week} name={name} model={model} mode={mode} league_id={league_id} roster_id={roster_id}")
+            data = services.get_player_odds_details(username=username, season=season, week=week, region=region, name=name, cache_mode=mode, model=model, league_id=league_id, roster_id=roster_id)
             _dprint(f"[api] player/odds done markets={len(data.get('markets', {}))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
@@ -242,9 +272,10 @@ def application(environ, start_response):
             mode = q("mode", "auto")
             positions_raw = q("positions", "")
             positions = [p.strip().upper() for p in positions_raw.split(",") if p.strip()] or None
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] draft-board season={season} week={week} region={region} mode={mode} model={model} fresh={fresh} positions={positions}")
-            data = compute_draft_board(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model, positions=positions)
+            _dprint(f"[api] draft-board season={season} week={week} region={region} mode={mode} model={model} fresh={fresh} positions={positions} league_id={league_id} roster_id={roster_id}")
+            data = compute_draft_board(username=username, season=season, week=week, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), model=model, positions=positions, league_id=league_id, roster_id=roster_id)
             _dprint(f"[api] draft-board done players={len(data.get('players', []))} dt={(time.time()-t0):.2f}s")
             return _json_response(start_response, "200 OK", data)
 
@@ -258,9 +289,10 @@ def application(environ, start_response):
             weeks = q("weeks", "this")  # default lighter workload
             def_scope = q("def_scope", "owned")
             include_players = q("include_players", "1") in ("1", "true", "True")
+            league_id, roster_id = q_identity()
             t0 = time.time()
-            _dprint(f"[api] dashboard user={username} season={season} region={region} mode={mode} model={model} fresh={fresh} weeks={weeks} def_scope={def_scope} include_players={include_players}")
-            data = build_dashboard(username=username, season=season, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), weeks=weeks, def_scope=def_scope, include_players=include_players, model=model)
+            _dprint(f"[api] dashboard user={username} season={season} region={region} mode={mode} model={model} fresh={fresh} weeks={weeks} def_scope={def_scope} include_players={include_players} league_id={league_id} roster_id={roster_id}")
+            data = build_dashboard(username=username, season=season, region=region, fresh=fresh, cache_mode=('fresh' if fresh else mode), weeks=weeks, def_scope=def_scope, include_players=include_players, model=model, league_id=league_id, roster_id=roster_id)
             _dprint(f"[api] dashboard done rl={data.get('ratelimit')} dt={(time.time()-t0):.2f}s")
             return _json_response_adv(environ, start_response, data)
 
@@ -293,7 +325,8 @@ def main():
 Starting Odds Fantasy API
 Endpoints:
   GET /health
-  GET /projections?username=&season=&week=this|next&fresh=0|1
+  GET /league/resolve?league_id=  (status + team list, for the league/team picker)
+  GET /projections?username=&season=&week=this|next&fresh=0|1  (or league_id=&roster_id=)
   GET /lineup?username=&season=&week=this|next&target=mid|floor|ceiling&fresh=0|1
   GET /lineup/diffs?username=&season=&week=this|next&fresh=0|1
   GET /defenses?username=&season=&week=this|next&scope=owned|available|both&fresh=0|1

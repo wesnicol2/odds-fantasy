@@ -210,7 +210,7 @@ function _renderFpVisual(floor, mid, ceil) {
 function openCompareCurves(week) {
   try {
     showDetails('Compare Curves', '<div class="status"><span class="spinner"></span> Loading curves...</div>');
-  var projUrl = apiUrl('/projections', { username: val('username') || 'wesnicol', season: val('season') || '2025', week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const')) });
+  var projUrl = apiUrl('/projections', { ...identityParams(), week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const')) });
     fetchJSON(projUrl).then(function(res){
       if (!res.ok) { hideDetails(); alert('Failed to load projections'); return; }
       var all = (res.data && res.data.players) || [];
@@ -597,8 +597,7 @@ function openBookCoverage(initialWeek) {
       }
       wrap.innerHTML = '<div class="status"><span class="spinner"></span> Loading coverage...</div>';
       var params = {
-        username: (typeof val === 'function' ? (val('username') || 'wesnicol') : 'wesnicol'),
-        season: (typeof val === 'function' ? (val('season') || '2025') : '2025'),
+        ...identityParams(),
         week: w,
         mode: (typeof getDataMode === 'function' ? getDataMode() : 'auto'),
         model: (typeof getModel === 'function' ? getModel() : 'const')
@@ -864,8 +863,7 @@ async function openPlayerDetails(name, week, opts) {
   }
   // Fetch odds detail + projections for fantasy points trio
   var oddsUrl = apiUrl('/player/odds', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
+    ...identityParams(),
     week: week,
     name: name,
     region: 'us,us2',
@@ -873,8 +871,7 @@ async function openPlayerDetails(name, week, opts) {
     model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
   });
   var projUrl = apiUrl('/projections', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
+    ...identityParams(),
     week: week,
     mode: getDataMode(),
     model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
@@ -1177,8 +1174,7 @@ function _renderDebugStatDetail(data, mkey) {
       try {
         var st = (history && history.state) || {};
         var oddsUrlB = apiUrl('/player/odds', {
-          username: val('username') || 'wesnicol',
-          season: val('season') || '2025',
+          ...identityParams(),
           week: (st && st.week) || 'this',
           name: (data && data.player && data.player.name) || '',
           region: 'us,us2',
@@ -1218,8 +1214,7 @@ function _renderDebugStatDetail(data, mkey) {
         try {
           var st = (history && history.state) || {};
           var oddsUrl = apiUrl('/player/odds', {
-            username: val('username') || 'wesnicol',
-            season: val('season') || '2025',
+            ...identityParams(),
             week: (st && st.week) || 'this',
             name: (data && data.player && data.player.name) || '',
             region: 'us,us2',
@@ -1412,8 +1407,7 @@ function _renderStatGraph(title, baseKey, m, summaryThreshold, bookPoints) {
 async function openDefenseDetails(defense, week) {
   showDetails('Defense Details', '<div class="status"><span class="spinner"></span> Loading...</div>');
   var url = apiUrl('/defense/odds', {
-    username: val('username') || 'wesnicol',
-    season: val('season') || '2025',
+    ...identityParams(),
     week: week,
     defense: defense,
     region: 'us,us2',

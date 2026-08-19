@@ -155,6 +155,43 @@ class ApiTestCase(unittest.TestCase):
         # positions query param should be parsed into a list and passed through
         self.assertEqual(mock_board.call_args.kwargs.get('positions'), ['QB', 'RB'])
 
+    @patch('refactored.api.resolve_league')
+    def test_league_resolve(self, mock_resolve):
+        mock_resolve.return_value = {
+            'league_id': '123',
+            'name': 'My League',
+            'season': '2026',
+            'status': 'pre_draft',
+            'teams': [{'roster_id': 1, 'owner_id': 'u1', 'team_name': 'Alice', 'display_name': 'Alice'}],
+        }
+        status, headers, payload = wsgi_get('/league/resolve?league_id=123')
+        self.assertTrue(status.startswith('200'))
+        self.assertEqual(payload['status'], 'pre_draft')
+        self.assertEqual(len(payload['teams']), 1)
+
+    def test_league_resolve_requires_league_id(self):
+        status, headers, payload = wsgi_get('/league/resolve')
+        self.assertTrue(status.startswith('400'))
+
+    @patch('refactored.api.resolve_league')
+    def test_league_resolve_not_found(self, mock_resolve):
+        mock_resolve.return_value = {'error': 'league_not_found', 'league_id': 'bogus'}
+        status, headers, payload = wsgi_get('/league/resolve?league_id=bogus')
+        self.assertTrue(status.startswith('404'))
+
+    @patch('refactored.api.list_defenses')
+    @patch('refactored.api.build_lineup')
+    @patch('refactored.api.compute_projections')
+    def test_lineup_passes_league_id_and_roster_id_through(self, mock_proj, mock_build, mock_defs):
+        mock_proj.return_value = {'players': [], 'ratelimit': 'remaining=90%'}
+        mock_defs.return_value = {'defenses': []}
+        mock_build.return_value = {'target': 'mid', 'lineup': [], 'total_points': 0}
+        wsgi_get('/lineup?league_id=LEAGUE123&roster_id=5&week=this&target=mid')
+        self.assertEqual(mock_proj.call_args.kwargs.get('league_id'), 'LEAGUE123')
+        self.assertEqual(mock_proj.call_args.kwargs.get('roster_id'), 5)
+        self.assertEqual(mock_defs.call_args.kwargs.get('league_id'), 'LEAGUE123')
+        self.assertEqual(mock_defs.call_args.kwargs.get('roster_id'), 5)
+
     def test_not_found(self):
         status, headers, payload = wsgi_get('/nope')
         self.assertTrue(status.startswith('404'))

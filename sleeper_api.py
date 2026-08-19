@@ -112,6 +112,79 @@ def get_league_id_for_user(username, season):
     return leagues[0]['league_id'], user_id
 
 
+def get_league(league_id):
+    """
+    Fetch a Sleeper league's own metadata directly by ID -- no username
+    needed. Notably includes `status` ("pre_draft" | "drafting" |
+    "in_season" | "complete", per Sleeper's API), which is the actual
+    source of truth for whether a league has drafted yet, and its own
+    `scoring_settings`/`season` (a league_id is season-specific in Sleeper,
+    so there's no separate "season" input required once you have one).
+    """
+    url = f"{SLEEPER_BASE_URL}/league/{league_id}"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_league_teams(league_id):
+    """
+    Return one entry per roster in the league, for a "pick your team"
+    selector: {roster_id, owner_id, team_name, display_name}. team_name is
+    whatever the owner set for their team (falls back to their Sleeper
+    display name, then to a generic "Team N" if neither is set).
+    """
+    rosters = get_league_rosters(league_id)
+    users = get_league_users(league_id)
+    display_name_by_owner = {u.get('user_id'): (u.get('display_name') or u.get('username')) for u in (users or [])}
+
+    teams = []
+    for r in (rosters or []):
+        owner_id = r.get('owner_id')
+        display_name = display_name_by_owner.get(owner_id)
+        team_name = (r.get('metadata') or {}).get('team_name') or display_name or f"Team {r.get('roster_id')}"
+        teams.append({
+            "roster_id": r.get('roster_id'),
+            "owner_id": owner_id,
+            "team_name": team_name,
+            "display_name": display_name,
+        })
+    teams.sort(key=lambda t: (t["roster_id"] is None, t["roster_id"]))
+    return teams
+
+
+def get_league_roster_data(league_id, roster_id=None):
+    """
+    League-id-first equivalent of get_user_sleeper_data(username, season):
+    returns the same {'players': ..., 'scoring_rules': ...} shape (so
+    existing consumers don't need to change), plus league metadata that
+    only makes sense once you're not deriving everything from a username --
+    'status', 'season', 'name'.
+
+    If `roster_id` is None (no team picked yet -- e.g. still on the "pick
+    your team" step), 'players' is an empty dict; scoring_rules/status/etc.
+    are still populated, since those are useful (e.g. for the draft board)
+    even before a specific team is chosen.
+    """
+    league = get_league(league_id)
+    scoring_settings = league.get('scoring_settings', {}) or {}
+
+    enhanced_roster = {}
+    if roster_id is not None:
+        rosters = get_league_rosters(league_id)
+        roster = next((r for r in (rosters or []) if r.get('roster_id') == roster_id), None)
+        if roster:
+            enhanced_roster = get_enhanced_info_for_roster(roster)
+
+    return {
+        'players': enhanced_roster,
+        'scoring_rules': scoring_settings,
+        'status': league.get('status'),
+        'season': league.get('season'),
+        'name': league.get('name'),
+    }
+
+
 def get_players(fresh: bool = False):
     """Fetch all NFL player metadata from Sleeper with simple disk cache.
 
