@@ -173,8 +173,8 @@
     if (total < 1 && pmf.length) pmf[pmf.length-1] += (1 - total);
     return pmf;
   }
-  function tdPMF(prob){
-    var idx = Math.round(6 / POINT_STEP);
+  function tdPMF(prob, pts){
+    var idx = Math.max(1, Math.round((pts || 6) / POINT_STEP));
     var pmf = new Array(idx + 1).fill(0);
     pmf[0] = 1 - prob; pmf[idx] = prob;
     return pmf;
@@ -271,7 +271,9 @@
           if (active.length){
             tdProb = active.reduce(function(s,q){ return s+q.prob; }, 0) / active.length;
             tdBookCount = active.length;
-            pmfs.push(tdPMF(tdProb));
+            var tdRuleKey = statMarketMap[stat.key]; // 'player_anytime_td' -> 'rush_td' in config.py
+            var tdPts = tdRuleKey != null ? Number(scoringRules[tdRuleKey] || 6) : 6;
+            pmfs.push(tdPMF(tdProb, tdPts));
           }
           perCategory.push({stat: stat, activeQuotes: active, totalCount: cat.quotes.length});
           return;
