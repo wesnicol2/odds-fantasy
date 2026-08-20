@@ -311,5 +311,36 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .stat-visual .legend .dot.book { background: #94a3b8; }
 .bin-bar { background: #111827; border: 1px solid #233; height: 10px; border-radius: 4px; margin: 4px 0; overflow: hidden; }
 .bin-bar .bin { background: #f59e0b; height: 100%; }
+
+/* Fantasy-points probability curve (placeholder aggregation; see ui/prob-curve.js) */
+.pcurve .cards { margin-bottom: 6px; }
+.pcurve-chart-wrap { min-height: 40px; }
+.pcurve-sub { font-size: 12px; color: #9ca3af; margin: 2px 0 10px 0; }
+.pcurve-filters { display: flex; gap: 14px; flex-wrap: wrap; }
+.pcurve-filter-col { flex: 1 1 260px; min-width: 220px; }
+.pcurve-filter-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.pcurve-mini-actions a { color: #60a5fa; text-decoration: none; font-size: 11px; }
+.pcurve-mini-actions a:hover { text-decoration: underline; }
+.pcurve-book-list { border: 1px solid #233; border-radius: 8px; overflow: hidden; max-height: 220px; overflow-y: auto; }
+.pcurve-book-row { display: flex; align-items: center; gap: 8px; padding: 6px 9px; font-size: 12.5px; background: #111827; border-bottom: 1px solid #233; cursor: pointer; }
+.pcurve-book-row:last-child { border-bottom: none; }
+.pcurve-book-row:hover { background: #172033; }
+.pcurve-book-row input { accent-color: #60a5fa; cursor: pointer; }
+.pcurve-book-row .pcurve-book-title { flex: 1 1 auto; color: #e5e7eb; }
+.pcurve-book-row .pcurve-book-count { font-size: 11px; color: #9ca3af; }
+.pcurve-book-row.pcurve-off { opacity: 0.5; }
+.pcurve-line-stack { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.pcurve-drilldown { border: 1px solid #233; border-radius: 8px; background: #111827; }
+.pcurve-drilldown summary { cursor: pointer; padding: 7px 9px; font-size: 12.5px; color: #cbd5e1; list-style: none; }
+.pcurve-drilldown summary::-webkit-details-marker { display: none; }
+.pcurve-line-table-wrap { max-height: 200px; overflow-y: auto; border-top: 1px solid #233; }
+.pcurve-line-table-wrap table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.pcurve-line-table-wrap th { position: sticky; top: 0; background: #0e162a; text-align: left; color: #9ca3af; font-weight: 600; padding: 4px 7px; border-bottom: 1px solid #233; }
+.pcurve-line-table-wrap td { padding: 4px 7px; border-bottom: 1px solid #1f2937; color: #cbd5e1; }
+.pcurve-line-table-wrap td.num, .pcurve-line-table-wrap th.num { text-align: right; }
+.pcurve-line-table-wrap tr.pcurve-book-header td { background: #0e162a; font-weight: 600; color: #e5e7eb; }
+.pcurve-line-table-wrap input[type=checkbox] { accent-color: #60a5fa; cursor: pointer; }
+.pcurve-line-table-wrap tr.pcurve-line-off td { opacity: 0.4; }
+
 /* Toggle row for stat graph */
  

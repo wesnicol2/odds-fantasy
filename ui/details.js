@@ -982,12 +982,16 @@ async function openPlayerDetails(name, week, opts) {
   var otherHtml = others.map(function(k){ return renderMarketBlock2(k, markets[k]); }).join('');
   if (!otherHtml) otherHtml = '<div class="muted">No other markets.</div>';
   // Build a single-column layout: remove markets panel to maximize graph space
+  var pcurveHtml = (typeof window.renderProbCurveSection === 'function') ? window.renderProbCurveSection(p.name || name, data) : '';
   var html = [
     '<div class="details-content" style="grid-template-columns: 1fr;">',
-      '<div style="grid-column: 1 / -1;">', head, predicted, covHtml, '</div>',
+      '<div style="grid-column: 1 / -1;">', head, predicted, pcurveHtml, covHtml, '</div>',
     '</div>'
   ].join('');
   showDetails('Player Details', html);
+  try {
+    if (typeof window.attachProbCurveHandlers === 'function') window.attachProbCurveHandlers(data);
+  } catch (e) { /* ignore -- prob-curve.js is an optional add-on */ }
   try {
     var btn = document.getElementById('showDebugMathBtn');
     if (btn) {
