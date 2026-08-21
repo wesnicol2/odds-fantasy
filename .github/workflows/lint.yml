@@ -1,0 +1,31 @@
+name: Lint
+
+on:
+  workflow_call:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Reads the rule set and line length from pyproject.toml.
+      - name: Ruff check
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: check
+
+      - name: Ruff format check
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: format --check
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Catches syntax errors in anything ruff happened to skip.
+      - name: Compile check
+        run: python -m compileall -q refactored tests
