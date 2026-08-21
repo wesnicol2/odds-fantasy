@@ -94,8 +94,6 @@ work as a fallback for anyone who hasn't set up a league.
   directory across runs). Odds cache entries auto-expire after `ODDS_TTL`
   seconds (default 12h); pass `fresh=1` to any endpoint to bypass the cache.
 - `tests/`: Unit tests (`python -m pytest tests/`).
-- `test.py`: A small manual/ad-hoc script for poking at your Sleeper roster
-  from the command line — not part of the app, not covered by tests.
 
 ## Known limitations
 - Kickers are fetched (see `POSITION_STAT_CONFIG["K"]`) but not yet converted
