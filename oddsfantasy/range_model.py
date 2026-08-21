@@ -1,20 +1,16 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from typing import Dict, Tuple
-from dataclasses import dataclass
 from statistics import NormalDist
 
-from predicted_stats import predict_stats_for_player
+from .config import STAT_MARKET_MAPPING_SLEEPER
+from .predicted_stats import predict_stats_for_player
 from .prob_models import (  # type: ignore
-    get_model_registry,
-    _inverse_cdf,
     _fit_lognormal_from_two_points,
     _lognormal_quantile,
     _poisson_fit_lambda,
+    get_model_registry,
     poisson_quantile,
 )
-from config import STAT_MARKET_MAPPING_SLEEPER
-
 
 PRIMARY_MARKET_WHITELIST = {
     # Passing
@@ -36,10 +32,7 @@ PRIMARY_MARKET_WHITELIST = {
 def _calc_sigma(mean: float, threshold: float, p_over: float, p_under: float) -> float:
     # Normalize for vig
     total = (p_over or 0.0) + (p_under or 0.0)
-    if total > 0:
-        p = p_over / total
-    else:
-        p = 0.5
+    p = p_over / total if total > 0 else 0.5
     # Convert to z; clamp to avoid infinities at 0/1
     p = min(max(p, 1e-4), 1 - 1e-4)
     z = NormalDist().inv_cdf(p)
@@ -55,9 +48,7 @@ def _is_count_market(key: str) -> bool:
         return True
     if k.endswith("_tds"):
         return True
-    if k.endswith("_interceptions"):
-        return True
-    return False
+    return bool(k.endswith("_interceptions"))
 
 
 def _market_quantiles(
@@ -66,14 +57,14 @@ def _market_quantiles(
     threshold: float,
     p_over: float,
     p_under: float,
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     # Special-case binary markets (anytime TD modeled as 0/1)
     if key == "player_anytime_td" or threshold == 0:
         p = p_over if (p_over or 0) > 0 else 0.5
         # Bernoulli quantiles for X in {0,1} at 15/50/85 percentiles
-        q15 = 0.0 if 0.15 <= 1 - p else 1.0
-        q50 = 0.0 if 0.50 <= 1 - p else 1.0
-        q85 = 0.0 if 0.85 <= 1 - p else 1.0
+        q15 = 0.0 if 1 - p >= 0.15 else 1.0
+        q50 = 0.0 if 1 - p >= 0.50 else 1.0
+        q85 = 0.0 if 1 - p >= 0.85 else 1.0
         return q15, mean, q85  # use mean for mid to retain smoother ordering
 
     # Single-line fallback (no alternates / not enough anchors for a full CDF fit).
@@ -95,7 +86,9 @@ def _market_quantiles(
             q85 = poisson_quantile(lam, 0.85)
             return q15, q50, q85
     elif "_yds" in key:
-        fit = _fit_lognormal_from_two_points(max(threshold, 1e-6), f_at_threshold, max(mean, 1e-6), 0.5)
+        fit = _fit_lognormal_from_two_points(
+            max(threshold, 1e-6), f_at_threshold, max(mean, 1e-6), 0.5
+        )
         if fit is not None:
             mu, sigma_log = fit
             q15 = _lognormal_quantile(mu, sigma_log, 0.15)
@@ -115,7 +108,7 @@ def _market_quantiles(
     return q15, q50, q85
 
 
-def _fantasy_points(stats: Dict[str, float], scoring_rules: Dict[str, float]) -> float:
+def _fantasy_points(stats: dict[str, float], scoring_rules: dict[str, float]) -> float:
     total = 0.0
     for market_key, value in stats.items():
         if market_key not in STAT_MARKET_MAPPING_SLEEPER:
@@ -159,10 +152,10 @@ def _fantasy_points(stats: Dict[str, float], scoring_rules: Dict[str, float]) ->
 
 
 def compute_fantasy_range(
-    per_bookmaker_odds: Dict,
-    market_summaries: Dict[str, object],  # MarketSummary-like with fields
-    scoring_rules: Dict[str, float],
-) -> Tuple[float, float, float, Dict[str, Tuple[float, float, float]]]:
+    per_bookmaker_odds: dict,
+    market_summaries: dict[str, object],  # MarketSummary-like with fields
+    scoring_rules: dict[str, float],
+) -> tuple[float, float, float, dict[str, tuple[float, float, float]]]:
     """Compute floor, mid, ceiling fantasy points using odds-derived stats.
 
     Returns (floor, mid, ceiling, per_market_ranges).
@@ -172,7 +165,7 @@ def compute_fantasy_range(
     mean_stats_all = predict_stats_for_player(per_bookmaker_odds)
 
     # 2) Build per-market ranges, focusing on primary markets only
-    per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
+    per_market_ranges: dict[str, tuple[float, float, float]] = {}
     for key, mean_val in mean_stats_all.items():
         use_key = key
         if key not in PRIMARY_MARKET_WHITELIST:
@@ -213,11 +206,11 @@ def compute_fantasy_range(
 
 
 def compute_fantasy_range_model(
-    per_bookmaker_odds: Dict,
-    market_summaries: Dict[str, object],
-    scoring_rules: Dict[str, float],
+    per_bookmaker_odds: dict,
+    market_summaries: dict[str, object],
+    scoring_rules: dict[str, float],
     model: str = "baseline",
-) -> Tuple[float, float, float, Dict[str, Tuple[float, float, float]]]:
+) -> tuple[float, float, float, dict[str, tuple[float, float, float]]]:
     model = (model or "baseline").lower()
     if model == "baseline":
         return compute_fantasy_range(per_bookmaker_odds, market_summaries, scoring_rules)
@@ -228,7 +221,7 @@ def compute_fantasy_range_model(
     # 2) Build per-market ranges via model quantiles where possible
     reg = get_model_registry()
     model_func = reg.get(model)
-    per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
+    per_market_ranges: dict[str, tuple[float, float, float]] = {}
     for key, mean_val in mean_stats_all.items():
         use_key = key
         if key not in PRIMARY_MARKET_WHITELIST:
@@ -271,7 +264,14 @@ def compute_fantasy_range_model(
 
     # Remove yardage step bonuses from base scoring
     base_scoring = dict(scoring_rules or {})
-    for bk in ("bonus_rush_yd_100", "bonus_rush_yd_200", "bonus_rec_yd_100", "bonus_rec_yd_200", "bonus_pass_yd_300", "bonus_pass_yd_400"):
+    for bk in (
+        "bonus_rush_yd_100",
+        "bonus_rush_yd_200",
+        "bonus_rec_yd_100",
+        "bonus_rec_yd_200",
+        "bonus_pass_yd_300",
+        "bonus_pass_yd_400",
+    ):
         if bk in base_scoring:
             base_scoring.pop(bk, None)
 
@@ -286,9 +286,12 @@ def compute_fantasy_range_model(
             if not summ:
                 return 0.0
             mean = float(mid_stats.get(key, 0.0) or 0.0)
-            sigma = _calc_sigma(mean, getattr(summ, "avg_threshold", 0.0) or 0.0,
-                                getattr(summ, "avg_over_prob", 0.0) or 0.0,
-                                getattr(summ, "avg_under_prob", 0.0) or 0.0)
+            sigma = _calc_sigma(
+                mean,
+                getattr(summ, "avg_threshold", 0.0) or 0.0,
+                getattr(summ, "avg_over_prob", 0.0) or 0.0,
+                getattr(summ, "avg_under_prob", 0.0) or 0.0,
+            )
             if sigma <= 0:
                 return 0.0
             dist = NormalDist(mu=mean, sigma=sigma)
@@ -323,14 +326,29 @@ def compute_fantasy_range_model(
             return 0.0
 
     # Yardage bonuses
-    rush_ev = _expected_bonus_for("player_rush_yds", [(100.0, "bonus_rush_yd_100"), (200.0, "bonus_rush_yd_200")])
-    rec_ev = _expected_bonus_for("player_reception_yds", [(100.0, "bonus_rec_yd_100"), (200.0, "bonus_rec_yd_200")])
-    pass_ev = _expected_bonus_for("player_pass_yds", [(300.0, "bonus_pass_yd_300"), (400.0, "bonus_pass_yd_400")])
+    rush_ev = _expected_bonus_for(
+        "player_rush_yds", [(100.0, "bonus_rush_yd_100"), (200.0, "bonus_rush_yd_200")]
+    )
+    rec_ev = _expected_bonus_for(
+        "player_reception_yds", [(100.0, "bonus_rec_yd_100"), (200.0, "bonus_rec_yd_200")]
+    )
+    pass_ev = _expected_bonus_for(
+        "player_pass_yds", [(300.0, "bonus_pass_yd_300"), (400.0, "bonus_pass_yd_400")]
+    )
     floor_fp += rush_ev + rec_ev + pass_ev
     mid_fp += rush_ev + rec_ev + pass_ev
-    ceil_fp += _discrete_bonus(float(ceil_stats.get("player_rush_yds", 0.0) or 0.0), [(100.0, "bonus_rush_yd_100"), (200.0, "bonus_rush_yd_200")])
-    ceil_fp += _discrete_bonus(float(ceil_stats.get("player_reception_yds", 0.0) or 0.0), [(100.0, "bonus_rec_yd_100"), (200.0, "bonus_rec_yd_200")])
-    ceil_fp += _discrete_bonus(float(ceil_stats.get("player_pass_yds", 0.0) or 0.0), [(300.0, "bonus_pass_yd_300"), (400.0, "bonus_pass_yd_400")])
+    ceil_fp += _discrete_bonus(
+        float(ceil_stats.get("player_rush_yds", 0.0) or 0.0),
+        [(100.0, "bonus_rush_yd_100"), (200.0, "bonus_rush_yd_200")],
+    )
+    ceil_fp += _discrete_bonus(
+        float(ceil_stats.get("player_reception_yds", 0.0) or 0.0),
+        [(100.0, "bonus_rec_yd_100"), (200.0, "bonus_rec_yd_200")],
+    )
+    ceil_fp += _discrete_bonus(
+        float(ceil_stats.get("player_pass_yds", 0.0) or 0.0),
+        [(300.0, "bonus_pass_yd_300"), (400.0, "bonus_pass_yd_400")],
+    )
 
     return floor_fp, mid_fp, ceil_fp, per_market_ranges
 
@@ -354,7 +372,7 @@ NFL_TEAM_SCORE_SIGMA = 10.0
 # (scoring_rules key, inclusive lower bound, exclusive upper bound) for
 # Sleeper's standard points-allowed brackets. Bounds use the midpoint between
 # adjacent integer scores so a Normal CDF can assign probability mass cleanly.
-DEF_PTS_ALLOWED_BRACKETS: Tuple[Tuple[str, float | None, float | None], ...] = (
+DEF_PTS_ALLOWED_BRACKETS: tuple[tuple[str, float | None, float | None], ...] = (
     ("pts_allow_0", None, 0.5),
     ("pts_allow_1_6", 0.5, 6.5),
     ("pts_allow_7_13", 6.5, 13.5),
@@ -365,7 +383,7 @@ DEF_PTS_ALLOWED_BRACKETS: Tuple[Tuple[str, float | None, float | None], ...] = (
 )
 
 
-def _pts_allowed_ev(mean_opp_pts: float, sigma: float, scoring_rules: Dict[str, float]) -> float:
+def _pts_allowed_ev(mean_opp_pts: float, sigma: float, scoring_rules: dict[str, float]) -> float:
     """Expected points-allowed bonus, integrating bracket probability over a Normal(mean, sigma)."""
     dist = NormalDist(mu=mean_opp_pts, sigma=sigma)
     total = 0.0
@@ -378,7 +396,7 @@ def _pts_allowed_ev(mean_opp_pts: float, sigma: float, scoring_rules: Dict[str, 
     return total
 
 
-def _pts_allowed_bracket_value(opp_pts: float, scoring_rules: Dict[str, float]) -> float:
+def _pts_allowed_bracket_value(opp_pts: float, scoring_rules: dict[str, float]) -> float:
     """Points-allowed bonus for a single realized opponent point total."""
     for key, lo, hi in DEF_PTS_ALLOWED_BRACKETS:
         lo_ok = (lo is None) or (opp_pts >= lo)
@@ -390,8 +408,8 @@ def _pts_allowed_bracket_value(opp_pts: float, scoring_rules: Dict[str, float]) 
 
 def compute_defense_fantasy_range(
     opponent_implied_total: float,
-    scoring_rules: Dict[str, float],
-) -> Tuple[float, float, float]:
+    scoring_rules: dict[str, float],
+) -> tuple[float, float, float]:
     """Floor/mid/ceiling fantasy points for a DEF, from the opponent's implied total.
 
     Mid uses the full expected value across points-allowed brackets. Floor and
@@ -409,4 +427,3 @@ def compute_defense_fantasy_range(
     ceiling = _pts_allowed_bracket_value(opp_low, scoring_rules)
     floor = _pts_allowed_bracket_value(opp_high, scoring_rules)
     return floor, mid, ceiling
-

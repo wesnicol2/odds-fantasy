@@ -318,21 +318,6 @@ function computeLineupFromPlayers(players, target) {
 }
 
 // UI loading helpers
-function disableAllButtons(disabled) {
-  document.querySelectorAll('button').forEach(btn => { btn.disabled = !!disabled; });
-}
-function showGlobalLoading(msg) {
-  const overlay = $('globalLoading');
-  if (!overlay) return;
-  const txt = $('globalLoadingText');
-  if (txt) txt.textContent = msg || 'Loading...';
-  overlay.classList.remove('hidden');
-}
-function hideGlobalLoading() {
-  const overlay = $('globalLoading');
-  if (!overlay) return;
-  overlay.classList.add('hidden');
-}
 function showContainerLoading(containerId, msg) {
   const c = $(containerId);
   if (!c) return;

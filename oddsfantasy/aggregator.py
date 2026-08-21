@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+import contextlib
 import os
-from dataclasses import dataclass
 import statistics
+from dataclasses import dataclass
 
-from predicted_stats import implied_probability
+from .predicted_stats import implied_probability
 
 
 @dataclass
@@ -51,6 +51,7 @@ def aggregate_players_from_event(
         s = s.lower()
         # strip punctuation and dots/apostrophes
         import re
+
         s = re.sub(r"[\.'`-]", " ", s)
         s = re.sub(r"[^a-z0-9 ]", "", s)
         s = re.sub(r"\s+", " ", s).strip()
@@ -59,7 +60,7 @@ def aggregate_players_from_event(
         return " ".join(toks)
 
     # Build normalized alias map for fuzzy matching
-    norm_alias_map: Dict[str, str] = { _norm_name(a): a for a in (target_player_aliases or set()) }
+    norm_alias_map: dict[str, str] = {_norm_name(a): a for a in (target_player_aliases or set())}
 
     # Normalize event structure: can be a list with one event, or a dict
     if isinstance(event_odds, dict):
@@ -70,13 +71,13 @@ def aggregate_players_from_event(
         events_list = []
 
     for ev in events_list:
-        for book in (ev.get("bookmakers", []) if isinstance(ev, dict) else []):
+        for book in ev.get("bookmakers", []) if isinstance(ev, dict) else []:
             bookmaker_key = book.get("key")
             if not bookmaker_key:
                 continue
             for market in book.get("markets", []):
                 market_key = market.get("key")
-                # First gather outcomes by alias for this market so we can de‑vig per book
+                # First gather outcomes by alias for this market so we can de-vig per book
                 alias_outcomes = {}
                 for outcome in market.get("outcomes", []):
                     raw_desc = outcome.get("description")
@@ -125,13 +126,15 @@ def aggregate_players_from_event(
                     # Persist raw per-book sides for downstream prediction
                     out_per_player.setdefault(alias, {})
                     out_per_player[alias].setdefault(bookmaker_key, {})
-                    out_per_player[alias][bookmaker_key].setdefault(market_key, {"over": None, "under": None})
+                    out_per_player[alias][bookmaker_key].setdefault(
+                        market_key, {"over": None, "under": None}
+                    )
                     if over:
                         out_per_player[alias][bookmaker_key][market_key]["over"] = over
                     if under:
                         out_per_player[alias][bookmaker_key][market_key]["under"] = under
 
-                    # Compute per-book de‑vig probabilities if we have both sides; otherwise use raw implied
+                    # Compute per-book de-vig probabilities if we have both sides; otherwise use raw implied
                     p_over = 0.0
                     p_under = 0.0
                     if over and under and over.get("odds") and under.get("odds"):
@@ -143,8 +146,16 @@ def aggregate_players_from_event(
                                 p_over = o_raw / total
                                 p_under = u_raw / total
                         except Exception:
-                            p_over = implied_probability(over["odds"]) if over and over.get("odds") else 0.0
-                            p_under = implied_probability(under["odds"]) if under and under.get("odds") else 0.0
+                            p_over = (
+                                implied_probability(over["odds"])
+                                if over and over.get("odds")
+                                else 0.0
+                            )
+                            p_under = (
+                                implied_probability(under["odds"])
+                                if under and under.get("odds")
+                                else 0.0
+                            )
                     else:
                         # one-sided: keep raw implied where present
                         if over and over.get("odds"):
@@ -152,7 +163,7 @@ def aggregate_players_from_event(
                         if under and under.get("odds"):
                             p_under = implied_probability(under["odds"]) or 0.0
 
-                    # Summary accumulators (averaging already de‑vigged per-book p’s when available)
+                    # Summary accumulators (averaging already de-vigged per-book p's when available)
                     out_summaries.setdefault(alias, {})
                     acc = out_summaries[alias].setdefault(
                         market_key,
@@ -167,10 +178,8 @@ def aggregate_players_from_event(
                     elif under and ("point" in under):
                         pt = under.get("point")
                     if pt is not None:
-                        try:
+                        with contextlib.suppress(Exception):
                             acc["point_vals"].append(float(pt))
-                        except Exception:
-                            pass
 
     # Finalize summaries
     finalized: dict = {}
@@ -224,7 +233,7 @@ def aggregate_by_week(
                         if payload:
                             per_player_odds[alias][book_key][mkey][side] = payload
 
-        # Merge summaries (average of averages isn’t ideal, but fine for a first pass)
+        # Merge summaries (average of averages isn't ideal, but fine for a first pass)
         for alias, mkts in p_summ.items():
             per_player_summaries.setdefault(alias, {})
             for mkey, summ in mkts.items():
