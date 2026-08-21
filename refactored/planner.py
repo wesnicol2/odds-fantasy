@@ -4,9 +4,8 @@ import datetime as _dt
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from config import POSITION_STAT_CONFIG, SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, STAT_MARKET_MAPPING
-
 from . import odds_client
+from .config import POSITION_STAT_CONFIG, SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, STAT_MARKET_MAPPING
 from .weekly_windows import in_window
 
 

@@ -6,13 +6,11 @@ import os
 import time
 from statistics import NormalDist
 
-import sleeper_api
-from config import POSITION_STAT_CONFIG, SLEEPER_TO_ODDSAPI_TEAM, STAT_MARKET_MAPPING_SLEEPER
-from predicted_stats import predict_stats_for_player
-
-from . import draft_prep, odds_client, ratelimit
+from . import draft_prep, odds_client, ratelimit, sleeper_api
 from .aggregator import aggregate_by_week
+from .config import POSITION_STAT_CONFIG, SLEEPER_TO_ODDSAPI_TEAM, STAT_MARKET_MAPPING_SLEEPER
 from .planner import plan_relevant_games_and_markets
+from .predicted_stats import predict_stats_for_player
 from .range_model import (
     PRIMARY_MARKET_WHITELIST,
     compute_defense_fantasy_range,

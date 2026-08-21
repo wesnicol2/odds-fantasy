@@ -17,12 +17,11 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
-from config import DEFAULT_SEASON
-
 from . import (
     ratelimit,
     services,  # for detail endpoints
 )
+from .config import DEFAULT_SEASON
 from .services import (
     build_dashboard,
     build_lineup,

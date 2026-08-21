@@ -8,14 +8,8 @@ These tests check that every services.py call site actually uses the fix
 and surfaces a clear message instead of a bare empty list.
 """
 
-import os
-import sys
 import unittest
 from unittest.mock import patch
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 from refactored import services
 
