@@ -2,7 +2,7 @@ import datetime as dt
 import unittest
 from unittest.mock import patch
 
-from refactored import draft_prep
+from oddsfantasy import draft_prep
 
 FAKE_SLEEPER_PLAYERS = {
     "1": {"full_name": "Josh Allen", "position": "QB", "team": "BUF"},
@@ -23,7 +23,7 @@ FAKE_SLEEPER_PLAYERS = {
 
 
 class ActivePlayersByTeamTest(unittest.TestCase):
-    @patch("refactored.draft_prep.sleeper_api.get_players")
+    @patch("oddsfantasy.draft_prep.sleeper_api.get_players")
     def test_filters_to_skill_positions_with_a_mapped_team(self, mock_get_players):
         mock_get_players.return_value = FAKE_SLEEPER_PLAYERS
         by_team = draft_prep._all_active_players_by_team()
@@ -79,8 +79,8 @@ class ResolveDraftWeekWindowTest(unittest.TestCase):
 
 
 class PlanWeekForDraftTest(unittest.TestCase):
-    @patch("refactored.draft_prep.odds_client.get_nfl_events")
-    @patch("refactored.draft_prep.sleeper_api.get_players")
+    @patch("oddsfantasy.draft_prep.odds_client.get_nfl_events")
+    @patch("oddsfantasy.draft_prep.sleeper_api.get_players")
     def test_builds_plan_for_week1_and_week2_separately(self, mock_get_players, mock_get_events):
         mock_get_players.return_value = FAKE_SLEEPER_PLAYERS
         now = dt.datetime.utcnow()
@@ -122,7 +122,7 @@ class PlanWeekForDraftTest(unittest.TestCase):
         player_names = {p["full_name"] for p in game.players}
         self.assertEqual(player_names, {"Josh Allen", "James Cook", "Patrick Mahomes"})
 
-    @patch("refactored.draft_prep.odds_client.get_nfl_events")
+    @patch("oddsfantasy.draft_prep.odds_client.get_nfl_events")
     def test_empty_plan_when_no_games_scheduled_yet(self, mock_get_events):
         mock_get_events.return_value = []
         self.assertEqual(draft_prep.plan_week_for_draft(week="this"), {})

@@ -1,7 +1,7 @@
 import datetime as dt
 import unittest
 
-from refactored import weekly_windows as ww
+from oddsfantasy import weekly_windows as ww
 
 
 def _ts(d: dt.datetime) -> str:
@@ -107,7 +107,7 @@ class ResolveWeekWindowsTest(unittest.TestCase):
     def test_agrees_with_draft_prep_week1_anchor_during_the_pre_season_gap(self):
         # Both features are solving "what's the week of the soonest real
         # game" in this situation -- they should agree.
-        from refactored import draft_prep
+        from oddsfantasy import draft_prep
 
         now = dt.datetime(2026, 8, 19)
         season_opener = dt.datetime(2026, 9, 10, 20, 0, 0)

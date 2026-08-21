@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from refactored.api import application
+from oddsfantasy.api import application
 
 
 def wsgi_get(path: str):
@@ -38,7 +38,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertIn("application/json", headers.get("Content-Type", ""))
         self.assertEqual(payload.get("status"), "ok")
 
-    @patch("refactored.api.compute_projections")
+    @patch("oddsfantasy.api.compute_projections")
     def test_projections(self, mock_proj):
         mock_proj.return_value = {
             "week": "this",
@@ -62,7 +62,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(payload["players"][0]["name"], "Test Player")
         self.assertIn("ratelimit", payload)
 
-    @patch("refactored.api.compute_book_coverage")
+    @patch("oddsfantasy.api.compute_book_coverage")
     def test_book_coverage(self, mock_cov):
         mock_cov.return_value = {
             "week": "this",
@@ -87,9 +87,9 @@ class ApiTestCase(unittest.TestCase):
         self.assertIn("coverage", payload)
         self.assertIsInstance(payload.get("coverage", {}).get("rows", []), list)
 
-    @patch("refactored.api.list_defenses")
-    @patch("refactored.api.build_lineup")
-    @patch("refactored.api.compute_projections")
+    @patch("oddsfantasy.api.list_defenses")
+    @patch("oddsfantasy.api.build_lineup")
+    @patch("oddsfantasy.api.compute_projections")
     def test_lineup(self, mock_proj, mock_build, mock_defs):
         mock_proj.return_value = {
             "players": [{"name": "QB A", "pos": "QB", "mid": 18.0}],
@@ -108,9 +108,9 @@ class ApiTestCase(unittest.TestCase):
         # Defenses are looked up scoped to the caller's own roster only
         self.assertEqual(mock_defs.call_args.kwargs.get("scope"), "owned")
 
-    @patch("refactored.api.list_defenses")
-    @patch("refactored.api.build_lineup_diffs")
-    @patch("refactored.api.compute_projections")
+    @patch("oddsfantasy.api.list_defenses")
+    @patch("oddsfantasy.api.build_lineup_diffs")
+    @patch("oddsfantasy.api.compute_projections")
     def test_lineup_diffs(self, mock_proj, mock_diffs, mock_defs):
         mock_proj.return_value = {"players": [], "ratelimit": "remaining=80%"}
         mock_defs.return_value = {"defenses": []}
@@ -123,7 +123,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertTrue(status.startswith("200"))
         self.assertIn("floor_changes", payload)
 
-    @patch("refactored.api.list_defenses")
+    @patch("oddsfantasy.api.list_defenses")
     def test_defenses(self, mock_defs):
         mock_defs.return_value = {
             "week": "this",
@@ -142,7 +142,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertTrue(status.startswith("200"))
         self.assertIsInstance(payload.get("defenses"), list)
 
-    @patch("refactored.api.compute_draft_board")
+    @patch("oddsfantasy.api.compute_draft_board")
     def test_draft_board(self, mock_board):
         mock_board.return_value = {
             "week": "this",
@@ -167,7 +167,7 @@ class ApiTestCase(unittest.TestCase):
         # positions query param should be parsed into a list and passed through
         self.assertEqual(mock_board.call_args.kwargs.get("positions"), ["QB", "RB"])
 
-    @patch("refactored.api.resolve_user_leagues")
+    @patch("oddsfantasy.api.resolve_user_leagues")
     def test_user_leagues(self, mock_resolve):
         mock_resolve.return_value = {
             "username": "wesnicol",
@@ -185,13 +185,13 @@ class ApiTestCase(unittest.TestCase):
         status, headers, payload = wsgi_get("/user/leagues")
         self.assertTrue(status.startswith("400"))
 
-    @patch("refactored.api.resolve_user_leagues")
+    @patch("oddsfantasy.api.resolve_user_leagues")
     def test_user_leagues_not_found(self, mock_resolve):
         mock_resolve.return_value = {"error": "user_not_found", "username": "nobody"}
         status, headers, payload = wsgi_get("/user/leagues?username=nobody")
         self.assertTrue(status.startswith("404"))
 
-    @patch("refactored.api.resolve_league")
+    @patch("oddsfantasy.api.resolve_league")
     def test_league_resolve(self, mock_resolve):
         mock_resolve.return_value = {
             "league_id": "123",
@@ -211,15 +211,15 @@ class ApiTestCase(unittest.TestCase):
         status, headers, payload = wsgi_get("/league/resolve")
         self.assertTrue(status.startswith("400"))
 
-    @patch("refactored.api.resolve_league")
+    @patch("oddsfantasy.api.resolve_league")
     def test_league_resolve_not_found(self, mock_resolve):
         mock_resolve.return_value = {"error": "league_not_found", "league_id": "bogus"}
         status, headers, payload = wsgi_get("/league/resolve?league_id=bogus")
         self.assertTrue(status.startswith("404"))
 
-    @patch("refactored.api.list_defenses")
-    @patch("refactored.api.build_lineup")
-    @patch("refactored.api.compute_projections")
+    @patch("oddsfantasy.api.list_defenses")
+    @patch("oddsfantasy.api.build_lineup")
+    @patch("oddsfantasy.api.compute_projections")
     def test_lineup_passes_league_id_and_roster_id_through(self, mock_proj, mock_build, mock_defs):
         mock_proj.return_value = {"players": [], "ratelimit": "remaining=90%"}
         mock_defs.return_value = {"defenses": []}
@@ -234,7 +234,7 @@ class ApiTestCase(unittest.TestCase):
         status, headers, payload = wsgi_get("/nope")
         self.assertTrue(status.startswith("404"))
 
-    @patch("refactored.api.build_dashboard")
+    @patch("oddsfantasy.api.build_dashboard")
     def test_dashboard(self, mock_dash):
         mock_dash.return_value = {
             "lineups": {

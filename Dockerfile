@@ -13,4 +13,4 @@ RUN mkdir -p data
 
 EXPOSE 8000
 
-CMD ["python", "-m", "refactored.api", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "oddsfantasy.api", "--host", "0.0.0.0", "--port", "8000"]
