@@ -1,8 +1,8 @@
 import unittest
 
 from refactored import range_model
+from refactored.lineup import build_lineup
 from refactored.prob_models import poisson_quantile
-from refactored.services import build_lineup
 
 # A fairly standard Sleeper-style scoring dict, points-allowed portion only.
 DEF_SCORING = {

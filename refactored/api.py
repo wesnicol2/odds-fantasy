@@ -18,14 +18,13 @@ from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 from . import (
+    odds_details,  # for the /player/odds and /defense/odds endpoints
     ratelimit,
-    services,  # for detail endpoints
 )
 from .config import DEFAULT_SEASON
+from .lineup import build_lineup, build_lineup_diffs
 from .services import (
     build_dashboard,
-    build_lineup,
-    build_lineup_diffs,
     compute_book_coverage,
     compute_draft_board,
     compute_projections,
@@ -400,7 +399,7 @@ def application(environ, start_response):
             _dprint(
                 f"[api] player/odds user={username} season={season} week={week} name={name} model={model} mode={mode} league_id={league_id} roster_id={roster_id}"
             )
-            data = services.get_player_odds_details(
+            data = odds_details.get_player_odds_details(
                 username=username,
                 season=season,
                 week=week,
@@ -427,7 +426,7 @@ def application(environ, start_response):
             _dprint(
                 f"[api] defense/odds user={username} season={season} week={week} defense={defense} region={region} mode={mode}"
             )
-            data = services.get_defense_odds_details(
+            data = odds_details.get_defense_odds_details(
                 username=username,
                 season=season,
                 week=week,
