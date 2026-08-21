@@ -1,122 +1,156 @@
 # Contributing / working agreement
 
-This is a single-maintainer hobby project, not a public OSS project soliciting
-outside contributions — this doc exists so future-you (or an AI assistant
-picking the repo back up next season) doesn't have to re-derive "how do we do
-things here" from scratch, and so the repo doesn't quietly rot into two
-divergent implementations again (see: `main.py` vs `oddsfantasy/`, discovered
-and removed August 2026).
+Single-maintainer hobby project. This file is the process contract — environments,
+branching, CI/CD, hygiene — so future-you (or an AI assistant picking the repo up
+next season) doesn't re-derive it, and the repo doesn't quietly rot again.
+
+## Environments
+
+Three environments, each pinned to its own GHCR tag:
+
+| Env | Purpose     | Branch      | GHCR tag  | Container on home server |
+| --- | ----------- | ----------- | --------- | ------------------------ |
+| E1  | Development | `dev/*`     | `:e1`     | `odds-fantasy-e1`        |
+| E2  | Test        | `feature/*` | `:e2`     | `odds-fantasy-e2`        |
+| E3  | Production  | `main`      | `:latest` | `odds-fantasy`           |
+
+Delivery is **pull-based**: CI never reaches into the home server. It pushes the
+branch-appropriate tag to GHCR; Watchtower on the server polls each container's
+tag and recreates it on a new digest. Promotion is a merge, never a manual image
+copy.
+
+> **E1 is last-push-wins.** There is one `:e1` tag, shared by every `dev/*`
+> branch, so two active dev branches will overwrite each other's E1 deploy and
+> the container ends up running whichever pushed last. Only one dev branch
+> should expect to own E1 at a time.
 
 ## Branching model
 
-Three kinds of branches, three purposes:
+Strict promotion, always: `dev/*` → `feature/*` → `main`. There is no shortcut
+for small changes — a one-line fix takes the same path as a season rewrite.
 
-- **`main`** — always deployable. Every push to `main` triggers
-  `.github/workflows/build.yml`, which builds and pushes the `:latest` image
-  to GHCR — that image is what the Unraid container actually runs. Treat a
-  push to `main` as a real deploy, not a checkpoint.
-- **`feature/<name>`** — a body of related work with a season/initiative-sized
-  scope (e.g. `feature/season-2026-readiness`). Branched from the current tip
-  of `main` (so its diff against `main` is exactly "what this initiative
-  changed," reviewable as a whole). Nothing is committed to a feature branch
-  directly — it only ever receives merges from `dev/` branches. Once a
-  feature branch has been tested (see below), it gets merged into `main` via
-  PR.
-- **`dev/<name>`** — one logical change, scoped to a single PR
-  (e.g. `dev/draft-prep`, `dev/contributing-guidelines`). Branched from the
-  feature branch it belongs to. **Dev branches never merge to `main`
-  directly** — they always target the feature branch they were cut from.
+- **`dev/<kebab-case>`** — one logical change, cut from the `feature/` branch it
+  belongs to. All code enters the repo here. Every commit publishes `:e1` → E1.
+- **`feature/<kebab-case>`** — an initiative-sized body of work (e.g.
+  `feature/season-2026-readiness`), cut from the tip of `main` so its diff
+  against `main` is exactly "what this initiative changed." Never committed to
+  directly; it only receives merges from `dev/*` branches already validated on
+  E1. Any merge publishes `:e2` → E2.
+- **`main`** — the default branch, always deployable. Merges require a review
+  from the repo owner. A merge publishes `:latest` → E3, so treat it as a
+  production deploy, not a checkpoint.
 
 ```
-main ──● feature/season-2026-readiness ──● ──● ──●  (tested here, then → main)
-                       ▲          ▲       ▲
-                dev/cleanup   dev/ci   dev/draft-prep
+  dev/cleanup ──┐
+  dev/ci ───────┼──► feature/season-2026-readiness ──► main
+  dev/draft ────┘
+      :e1                      :e2                     :latest
+      E1 (dev)                 E2 (test)               E3 (prod)
 ```
 
 Naming: `feature/kebab-case-name`, `dev/kebab-case-name`. No other prefixes.
 
 ## Workflow
 
-1. Cut a `dev/` branch from the relevant `feature/` branch (or from `main` if
-   there's no active feature branch — small standalone fixes don't need a
-   feature branch wrapper).
-2. Make the change. Run `python -m pytest tests/` locally before opening a PR.
-3. Open a PR: `dev/*` → the feature branch (or → `main` for standalone
-   fixes). Even solo, use a PR rather than pushing directly — it keeps the
-   diff reviewable and matches the rest of this repo's history.
-4. Once a feature branch has everything it needs, actually run it
-   (`python -m oddsfantasy.api`, or the Docker image) against live data for at
-   least one real session before opening the `feature/*` → `main` PR. Unit
-   tests catch regressions in the math; they don't catch "the lineup looks
-   wrong" or "this endpoint times out against real odds data."
-5. Merge `feature/*` → `main` via PR once it's been exercised for real.
-   Deleting the feature/dev branches afterward is fine — the merge commits
-   keep the history.
+1. Cut a `dev/` branch from the relevant `feature/` branch. If there isn't one
+   for this work yet, cut the `feature/` branch from `main` first.
+2. Make the change. Run `ruff check`, `ruff format --check`, and
+   `python -m pytest tests/` locally before pushing.
+3. Push. Every commit auto-deploys to **E1** — verify the change there.
+4. Open a PR `dev/*` → its feature branch. Merging auto-deploys to **E2**.
+5. Exercise E2 against live data for at least one real session. Unit tests catch
+   regressions in the math; they don't catch "the lineup looks wrong" or "this
+   endpoint times out against real odds data."
+6. Open a PR `feature/*` → `main` and get a review from the repo owner. Merging
+   auto-deploys to **E3**. Deleting the feature/dev branches afterward is fine —
+   the merge commits keep the history.
 
-## Testing gate
+## CI/CD pipeline
 
-`python -m pytest tests/` must pass before any merge. A `.github/workflows/test.yml`
-CI check (added by hand — GitHub blocks API/automation tokens without an
-explicit `workflow` scope from touching files under `.github/workflows/`,
-so this one has to be added/edited by a human) runs this on every PR once in
-place — treat a red check as a hard stop, not a "merge anyway and fix later."
+Modular, built from widely-used marketplace actions and composed with
+`workflow_call` reusable workflows. `ci.yml` is the only entrypoint — `on: push`
+for `dev/**`, `feature/**`, `main`, plus `on: pull_request` — and it derives the
+image tag from `github.ref`, then calls three stages in sequence:
+
+1. **`lint.yml`** — `actions/checkout@v4`, `astral-sh/ruff-action@v3`:
+   `ruff check` and `ruff format --check`, plus a `python -m compileall` syntax
+   check. Ruff is the whole linting story: no ESLint, no mypy.
+2. **`test.yml`** — `actions/checkout@v4`, `actions/setup-python@v5` (with pip
+   cache), then `python -m pytest tests/`.
+3. **`publish.yml`** — `docker/setup-buildx-action@v3`, `docker/login-action@v3`,
+   `docker/metadata-action@v5`, `docker/build-push-action@v6`. Pushes to GHCR
+   under the derived tag (`dev/**` → `:e1`, `feature/**` → `:e2`, `main` →
+   `:latest`). Gated on lint and test passing, and skipped for pull requests —
+   the merge is what deploys, not the PR.
+
+**A red check is a hard stop**, not a "merge anyway and fix later."
+
+> **Planned, not built.** Today the repo has `test.yml` (pytest on PRs and pushes
+> to `main`) and `build.yml` (pushes `:latest` on `main`). The pipeline above is
+> the target and lands as a separate change, because **files under
+> `.github/workflows/` must be added and edited by a human** — GitHub rejects
+> automation tokens without an explicit `workflow` scope.
+
+## Documentation
+
+Three files, three jobs — keeping them separate is what stops the README from
+drifting into describing an app that stopped being the real entrypoint.
+
+- **`README.md`** — concise, external perspective: how to use it, how to test it.
+  Not inner workings. Updated in the same commit as any change that alters how
+  someone uses or runs the app.
+- **`AGENTS.md`** — the deep document: all reasoning and logic behind the repo's
+  details. Why the model is shaped this way, why the quota rules exist, what was
+  tried and rejected. No length limit. *(Written during the cleanup pass.)*
+- **`CONTRIBUTING.md`** — this file. Process only. Rationale goes in `AGENTS.md`.
 
 ## Keeping the repo from rotting again
 
-The August 2026 cleanup found two full parallel implementations
-(`main.py`+`predicted_stats.py`+`odds_api.py` vs. `oddsfantasy/`), a dead
-Yahoo integration nobody removed after switching to Sleeper, a UI file
-(`overrides.js`) not even linked from `index.html`, and a README describing
-an app that hadn't been the real entrypoint in months. None of that was
-malicious or even sloppy in the moment — it's just what happens by default
-when a solo project doesn't have a rule against it. So:
+The August 2026 cleanup found two full parallel implementations (`main.py` +
+`predicted_stats.py` + `odds_api.py` vs. `refactored/`), a dead Yahoo
+integration, a UI file not linked from `index.html`, and a README describing an
+app that hadn't been the real entrypoint in months — not sloppiness, just the
+default outcome when a solo project has no rule against it. So:
 
-- **If you replace an implementation, delete the old one in the same PR.**
-  Don't leave it "just in case" — git history is the "just in case." A stale
-  copy that still runs (or half-runs) is worse than no copy, because it looks
-  current to the next person reading the repo.
-- **The README's "Project Structure" section must name the real entrypoint.**
-  If you change what the `Dockerfile` `CMD` points at, update the README in
-  the same PR.
+- **If you replace an implementation, delete the old one in the same PR.** Git
+  history is the "just in case." A stale copy that still half-runs looks current
+  to the next reader, which is worse than no copy.
+- **The README's "Project Structure" section must name the real entrypoint.** If
+  you change what the `Dockerfile` `CMD` points at, update the README in the same
+  PR.
 - **No scratch/debug files at the repo root.** `tmp_*`, one-off patch files,
-  ad-hoc debug scripts — put them in a git-ignored `scratch/` directory
-  (add it to `.gitignore` if it doesn't exist yet) or just don't commit them.
+  ad-hoc debug scripts — use a git-ignored `scratch/` or don't commit them.
 - **Don't commit `data/` or `.env`.** `.gitignore` already excludes `data/`;
   double check before `git add -A` on anything touching config or caching.
-- **If a file isn't imported/linked from anywhere, it's dead — delete it,
-  don't comment it out.** Verify with `grep` before deleting (that's how
-  `overrides.js` and the legacy pipeline were confirmed safe to remove), then
-  delete completely rather than leaving a `# removed` marker.
+- **If a file isn't imported/linked from anywhere, it's dead — delete it, don't
+  comment it out.** Verify with `grep` first, then delete completely.
 
 ## Odds API quota awareness
 
-The Odds API quota is a real, shared, metered resource — not just a rate
-limit to retry past. `oddsfantasy/ratelimit.py` tracks remaining quota from
-response headers; `oddsfantasy/odds_client.py` TTL-caches responses
-(`ODDS_TTL`, default 12h) so routine use doesn't re-fetch every request.
+The quota is a metered, shared resource, not a rate limit to retry past.
+`refactored/ratelimit.py` tracks it from response headers; `refactored/odds_client.py`
+TTL-caches responses (`ODDS_TTL`, default 12h). Any feature fetching odds for
+**more than the caller's own roster** (the way `refactored/draft_prep.py`'s draft
+board does) costs meaningfully more than the weekly lineup flow, so:
 
-Any new feature that fetches odds for **more than the caller's own roster**
-(the way `oddsfantasy/draft_prep.py`'s draft board does — it has to look at
-every relevant player on every team playing that week, not just yours) is a
-meaningfully bigger quota cost than the weekly lineup flow. When adding
-something like that:
-- Default to a conservative market set (skip `_alternate` markets unless you
-  have a specific reason — they multiply request size for a refinement the
-  lognormal/Poisson fallback already covers reasonably well with a single
-  line).
-- Make it opt-in (a button/endpoint the user explicitly hits), not something
-  that fires automatically on every page load or dashboard refresh.
-- Respect `cache_mode`/`fresh` the same way every other endpoint does — don't
-  bypass the TTL cache by default.
+- Default to a conservative market set; skip `_alternate` markets without a
+  specific reason.
+- Make it opt-in — a button or endpoint the user hits, not something firing on
+  every page load or dashboard refresh.
+- Respect `cache_mode`/`fresh` like every other endpoint.
+
+*(Why these rules exist moves to `AGENTS.md` once it exists; keep the actionable
+rules here.)*
 
 ## Season-to-season maintenance
 
-This app goes dormant for ~8 months a year (see the `odds-fantasy` container
-sitting `Exited` in the Unraid Docker tab most of the year — that's expected,
-not broken). At the start of each season, before trusting any projection:
-- Confirm `data/sleeper_players.json` and the odds cache aren't stale from
-  last season (`ODDS_TTL` should auto-expire odds; the Sleeper players cache
-  has its own `SLEEPER_PLAYERS_TTL`, default 24h — force-refresh with
-  `fresh=1` on first use of the season regardless).
-- Re-read this file and the README's "Known limitations" section — they're
-  meant to be updated in place as gaps get closed, not left stale.
+This app goes dormant ~8 months a year — the `odds-fantasy` container sitting
+`Exited` in the Unraid Docker tab most of the year is expected, not broken. At
+the start of each season, before trusting any projection:
+
+- Confirm `data/sleeper_players.json` and the odds cache aren't stale from last
+  season. `ODDS_TTL` auto-expires odds; the Sleeper players cache has its own
+  `SLEEPER_PLAYERS_TTL` (default 24h) — force-refresh with `fresh=1` on first use
+  of the season regardless.
+- Re-read this file and the README's "Known limitations" section — they're meant
+  to be updated in place as gaps get closed, not left stale.
