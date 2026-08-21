@@ -1,105 +1,98 @@
 # Fantasy Odds App
 
-## Overview
-This project pulls NFL betting lines (player props + team spreads/totals) from
-The Odds API, converts them into de-vigged floor/mid/ceiling fantasy point
-projections for your Sleeper roster, and serves them through a small JSON API
-and web UI.
+Pulls NFL betting lines (player props + team spreads/totals) from The Odds API,
+converts them into de-vigged floor/mid/ceiling fantasy point projections for
+your Sleeper roster, and serves them through a small JSON API and web UI.
 
-## Configuration
-The application relies on the following environment variables (populate them
-in your `.env` file or configure them directly in Docker/Unraid):
-- `API_KEY` — The Odds API key
+## Run it
 
-Sleeper's API requires no auth (only a username). Only supply values you are
-comfortable sharing with the container. When running under Docker, pass them
-as environment variables or mount a file via `env_file`.
+CI publishes the image to GHCR, so there's nothing to build:
 
-## Docker Workflow
-1. Copy your `.env` file into the project root (or ensure the required variables are defined elsewhere).
-2. Build the container image:
-   ```bash
-   docker build -t odds-fantasy .
-   ```
-3. Run the container, mounting the `data` folder so cached responses survive restarts:
-   ```bash
-   docker run --rm \
-     --name odds-fantasy \
-     --env-file .env \
-     -p 8000:8000 \
-     -v $(pwd)/data:/app/data \
-     odds-fantasy
-   ```
-
-### Docker Compose
-You can use the provided `docker-compose.yml` to simplify local and Unraid deployments:
 ```bash
-docker compose up --build
+docker run -d \
+  --name odds-fantasy \
+  -e API_KEY=<your-odds-api-key> \
+  -p 8001:8000 \
+  -v /mnt/user/appdata/odds-fantasy/data:/app/data \
+  ghcr.io/wesnicol2/odds-fantasy:latest
 ```
-Override the command or environment variables in the compose file if you need to call different entry points.
 
-### Deploying on Unraid
-1. Copy the repo (or your packaged image) onto the server.
-2. From the Unraid Docker tab, add a new container and point it at the built image (`odds-fantasy:latest`) or the repository if you publish it elsewhere.
-3. Under the container configuration:
-   - Map `/app/data` to a persistent host path (for example `/mnt/user/appdata/odds-fantasy/data`).
-   - Map container port `8000` to a host port (e.g. `8001`).
-   - Add the `API_KEY` environment variable.
-4. Apply/Start the container, then open `http://<unraid-ip>:<mapped-port>/` for the UI.
+Then open `http://<host>:8001/`. Or use the compose file, which mounts `./data`
+and reads `.env`:
 
-## Contributing
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model
-(`feature/*` / `dev/*` / `main`) and repo-hygiene rules.
+```bash
+docker compose up -d
+```
 
-## League / team identity
-The UI identifies "you" by Sleeper **league + team**, resolved by league ID
-under the hood (not username) once picked -- but the picking itself starts
-from your Sleeper username, since nobody has their league ID memorized. On
-first load: enter your username (`GET /user/leagues?username=&season=` lists
-every league it finds) -> pick which league (its league_id gets cookie'd) ->
-pick which roster is yours in it (roster_id also cookie'd). This is more
-precise than resolving everything from username alone, which just grabs "the
-first league this username is in" and silently picks the wrong league for
-anyone in more than one -- the username step here is purely a lookup
-convenience, not the identity itself. The chosen league's own Sleeper
-`status` (`pre_draft`/`drafting` vs. `in_season`/`complete`) decides whether
-the UI defaults to the draft board or the weekly lineup view. Every endpoint
-accepts `league_id`+`roster_id` as an alternative to `username`+`season`,
-with `league_id` taking priority when both are present (see
-`services._resolve_identity`). The header's username/season fields still
-work as a fallback for anyone who hasn't set up a league.
+Mount `/app/data` somewhere persistent — the odds cache and Sleeper player
+metadata live there, and losing it means re-spending API quota.
 
-## Project Structure
-- `oddsfantasy/`: **This is the real application.** `oddsfantasy/api.py` is the
-  entrypoint (`CMD` in the `Dockerfile`) — a stdlib WSGI server exposing
-  `/health`, `/user/leagues`, `/league/resolve`, `/projections`, `/lineup`, `/lineup/diffs`,
-  `/defenses`, `/draft-board`, `/player/odds`, `/defense/odds`, and
-  `/dashboard`, and serving the UI under `/` and `/ui/*`. See
-  `oddsfantasy/services.py` for the orchestration layer,
-  `oddsfantasy/range_model.py` + `oddsfantasy/prob_models.py` for how
-  betting-line probabilities become floor/mid/ceiling fantasy point ranges,
-  `oddsfantasy/aggregator.py` + `oddsfantasy/planner.py` for how odds are
-  fetched/grouped for your roster, `oddsfantasy/draft_prep.py` for the same
-  thing but for every player league-wide (pre-draft, before you have a
-  roster to scope to), and `oddsfantasy/odds_client.py` +
-  `oddsfantasy/ratelimit.py` for caching and Odds-API rate-limit tracking.
-- `oddsfantasy/config.py`: Loads environment configuration and defines shared
-  constants (position→market mappings, Sleeper↔Odds-API name/team mappings,
-  scoring key mappings).
-- `oddsfantasy/predicted_stats.py`: Shared de-vig + mean-stat-estimate helpers.
-- `oddsfantasy/sleeper_api.py`: Sleeper API client (roster, scoring rules,
-  league/owner data).
-- `ui/`: Static frontend served by `oddsfantasy/api.py`.
-- `data/`: Cached API responses and Sleeper player metadata (persist this
-  directory across runs). Odds cache entries auto-expire after `ODDS_TTL`
-  seconds (default 12h); pass `fresh=1` to any endpoint to bypass the cache.
-- `tests/`: Unit tests (`python -m pytest tests/`).
+### Configuration
+
+| Variable              | Required | Default | Purpose                                             |
+| --------------------- | -------- | ------- | --------------------------------------------------- |
+| `API_KEY`             | yes      | —       | The Odds API key                                    |
+| `ODDS_TTL`            | no       | `43200` | Seconds before a cached odds response expires (12h) |
+| `SLEEPER_PLAYERS_TTL` | no       | `86400` | Seconds before the Sleeper player cache expires     |
+| `TZ`                  | no       | UTC     | Container timezone                                  |
+
+Sleeper's API needs no auth — just a username. Pass `fresh=1` to any endpoint
+to bypass the cache for a single request.
+
+### First run
+
+The UI asks for your Sleeper username, then has you pick a league and a team;
+both are cookied. Every endpoint also accepts `league_id`+`roster_id` directly
+as an alternative to `username`+`season`. If the league hasn't drafted yet, the
+UI opens on the draft board rather than the weekly lineup.
+
+## Run from source
+
+```bash
+pip install -r requirements.txt
+python -m oddsfantasy.api --host 0.0.0.0 --port 8000
+```
+
+## Test it
+
+```bash
+pip install -e ".[dev]"
+ruff check && ruff format --check
+python -m pytest tests/
+```
+
+CI runs exactly these on every push, and a red check blocks the merge.
+
+## Endpoints
+
+`/health`, `/user/leagues`, `/league/resolve`, `/projections`, `/lineup`,
+`/lineup/diffs`, `/defenses`, `/draft-board`, `/player/odds`, `/defense/odds`,
+`/dashboard`. The UI is served from `/` and `/ui/*`.
+
+## Project structure
+
+- `oddsfantasy/` — the application. `api.py` is the entrypoint (the
+  `Dockerfile`'s `CMD`); `services.py` orchestrates; `range_model.py` +
+  `prob_models.py` turn betting-line probabilities into floor/mid/ceiling
+  ranges; `lineup.py` builds the optimal lineup; `odds_details.py` backs the
+  per-player drill-down; `draft_prep.py` does the same league-wide for the
+  draft board; `odds_client.py` + `ratelimit.py` handle caching and quota.
+- `ui/` — static frontend, served by `api.py`.
+- `tests/` — unit tests.
+- `data/` — cached API responses (git-ignored; mount this).
 
 ## Known limitations
-- Kickers are fetched (see `POSITION_STAT_CONFIG["K"]`) but not yet converted
-  into fantasy point projections or included in the lineup builder.
-- Defense/Special-Teams floor/mid/ceiling only models the points-allowed
-  scoring bracket (derived from the opponent's spread/total-implied score).
-  Sacks, interceptions, fumble recoveries, and defensive/return TDs aren't
-  modeled — The Odds API doesn't offer team-level defensive props to price
-  them off of, so they're a known gap rather than an oversight.
+
+- Kickers are fetched (see `POSITION_STAT_CONFIG["K"]`) but not converted into
+  fantasy point projections or included in the lineup builder.
+- Defense/Special-Teams floor/mid/ceiling models only the points-allowed
+  scoring bracket, derived from the opponent's spread/total-implied score.
+  Sacks, interceptions, fumble recoveries and defensive/return TDs aren't
+  modeled — The Odds API doesn't sell team-level defensive props to price them
+  off, so this is a known gap rather than an oversight.
+
+## Docs
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — environments, branching, CI/CD, hygiene.
+- [AGENTS.md](AGENTS.md) — why the code is shaped this way: the modelling
+  decisions, the quota rules, and what was tried and rejected.
