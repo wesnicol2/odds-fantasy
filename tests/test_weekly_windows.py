@@ -120,7 +120,9 @@ class ResolveWeekWindowsTest(unittest.TestCase):
         events = [{"commence_time": _ts(season_opener)}]
 
         (lineup_this_start, _), _ = ww.resolve_week_windows(events, now_utc=now)
-        draft_week1_start, _ = draft_prep._resolve_draft_week_window(events, which="this", now_utc=now)
+        draft_week1_start, _ = draft_prep._resolve_draft_week_window(
+            events, which="this", now_utc=now
+        )
         self.assertEqual(lineup_this_start, draft_week1_start)
 
 

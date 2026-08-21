@@ -1,38 +1,39 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from typing import Dict, List, Tuple, Optional
-from statistics import NormalDist
+import contextlib
 import datetime as dt
-import time
 import os
+import time
+from statistics import NormalDist
 
 import sleeper_api
-
-from .weekly_windows import compute_week_windows, resolve_week_windows
-from .planner import plan_relevant_games_and_markets
-from .aggregator import aggregate_by_week
-from .range_model import compute_fantasy_range, compute_defense_fantasy_range
-from . import odds_client
-from . import ratelimit
-from . import draft_prep
-from config import SLEEPER_TO_ODDSAPI_TEAM
+from config import POSITION_STAT_CONFIG, SLEEPER_TO_ODDSAPI_TEAM, STAT_MARKET_MAPPING_SLEEPER
 from predicted_stats import predict_stats_for_player
-from config import STAT_MARKET_MAPPING_SLEEPER, POSITION_STAT_CONFIG
-from .range_model import PRIMARY_MARKET_WHITELIST
 
+from . import draft_prep, odds_client, ratelimit
+from .aggregator import aggregate_by_week
+from .planner import plan_relevant_games_and_markets
+from .range_model import (
+    PRIMARY_MARKET_WHITELIST,
+    compute_defense_fantasy_range,
+    compute_fantasy_range,
+)
+from .weekly_windows import compute_week_windows, resolve_week_windows
 
 COVERAGE_MARKET_ORDER = [
-    'player_anytime_td',
-    'player_reception_yds',
-    'player_rush_yds',
-    'player_pass_yds',
-    'player_pass_tds',
-    'player_pass_interceptions',
-    'player_receptions',
+    "player_anytime_td",
+    "player_reception_yds",
+    "player_rush_yds",
+    "player_pass_yds",
+    "player_pass_tds",
+    "player_pass_interceptions",
+    "player_receptions",
 ]
 
 
-def _resolve_identity(username: str, season: str, league_id: Optional[str] = None, roster_id: Optional[int] = None) -> dict:
+def _resolve_identity(
+    username: str, season: str, league_id: str | None = None, roster_id: int | None = None
+) -> dict:
     """Resolve {'players', 'scoring_rules', ...} for the caller's team.
 
     `league_id` (when given) is authoritative: an explicit league+team
@@ -46,7 +47,7 @@ def _resolve_identity(username: str, season: str, league_id: Optional[str] = Non
     return sleeper_api.get_user_sleeper_data(username, season) or {}
 
 
-def resolve_user_leagues(username: str, season: str) -> Dict:
+def resolve_user_leagues(username: str, season: str) -> dict:
     """List a Sleeper user's leagues for a season, for the "pick your
     league" step of the identity flow. Powered by username (which everyone
     already knows) rather than requiring you to dig a league ID out of a
@@ -69,17 +70,17 @@ def resolve_user_leagues(username: str, season: str) -> Dict:
         "season": season,
         "leagues": [
             {
-                "league_id": l.get("league_id"),
-                "name": l.get("name"),
-                "status": l.get("status"),
-                "season": l.get("season"),
+                "league_id": lg.get("league_id"),
+                "name": lg.get("name"),
+                "status": lg.get("status"),
+                "season": lg.get("season"),
             }
-            for l in (leagues or [])
+            for lg in (leagues or [])
         ],
     }
 
 
-def resolve_league(league_id: str) -> Dict:
+def resolve_league(league_id: str) -> dict:
     """Given a Sleeper league ID, return everything the UI needs to drive
     the "paste your league ID -> pick your team" flow:
       - status: Sleeper's own "pre_draft" | "drafting" | "in_season" |
@@ -107,7 +108,7 @@ def resolve_league(league_id: str) -> Dict:
     }
 
 
-def _pick_week_window(which: str, now_utc: Optional[dt.datetime] = None):
+def _pick_week_window(which: str, now_utc: dt.datetime | None = None):
     (this_start, this_end), (next_start, next_end) = compute_week_windows(now_utc)
     return (this_start, this_end) if which == "this" else (next_start, next_end)
 
@@ -121,25 +122,31 @@ NO_GAMES_SCHEDULED_MESSAGE = (
 )
 
 
-def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, regions: str = "us") -> Dict[str, Dict[str, list]]:
+def _fetch_odds(
+    plan_by_week: dict[str, dict[str, object]], cache_mode: str, regions: str = "us"
+) -> dict[str, dict[str, list]]:
     """Fetch event odds concurrently per week for planned games.
 
     Uses a small thread pool to parallelize network calls when cache misses occur.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    out: Dict[str, Dict[str, list]] = {"this": {}, "next": {}}
+    out: dict[str, dict[str, list]] = {"this": {}, "next": {}}
     for w in ("this", "next"):
         items = list(plan_by_week.get(w, {}).items())
         if not items:
             continue
         max_workers = min(8, max(1, len(items)))
 
-        def task(pair):
+        def task(pair, w=w):
             gid, g = pair
             markets_str = ",".join(sorted(set(g.markets)))
-            print(f"[services] fetch odds week={w} game={gid} markets={len(g.markets)} regions={regions} mode={cache_mode}")
-            data = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, regions=regions, mode=cache_mode)
+            print(
+                f"[services] fetch odds week={w} game={gid} markets={len(g.markets)} regions={regions} mode={cache_mode}"
+            )
+            data = odds_client.get_event_player_odds(
+                event_id=gid, markets=markets_str, regions=regions, mode=cache_mode
+            )
             return gid, data
 
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -150,12 +157,26 @@ def _fetch_odds(plan_by_week: Dict[str, Dict[str, object]], cache_mode: str, reg
                     out[w][gid] = data
                 except Exception as e:
                     print(f"[services] fetch odds error: {e}")
-        print(f"[services] fetch odds week={w} complete; games={len(out[w])} rl={ratelimit.format_status()}")
+        print(
+            f"[services] fetch odds week={w} complete; games={len(out[w])} rl={ratelimit.format_status()}"
+        )
     return out
 
 
-def compute_projections(username: str, season: str, week: str = "this", region: str = "us", fresh: bool = False, cache_mode: str = "auto", model: str = "const", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
-    print(f"[services] compute_projections user={username} season={season} week={week} fresh={fresh} league_id={league_id} roster_id={roster_id}")
+def compute_projections(
+    username: str,
+    season: str,
+    week: str = "this",
+    region: str = "us",
+    fresh: bool = False,
+    cache_mode: str = "auto",
+    model: str = "const",
+    league_id: str | None = None,
+    roster_id: int | None = None,
+) -> dict:
+    print(
+        f"[services] compute_projections user={username} season={season} week={week} fresh={fresh} league_id={league_id} roster_id={roster_id}"
+    )
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _proj_cache = getattr(compute_projections, "_cache", {})
@@ -164,19 +185,28 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     if not fresh and key in _proj_cache:
         ts, payload = _proj_cache[key]
         if now - ts < ttl:
-            print(f"[services] compute_projections cache hit key={key} age={int(now-ts)}s")
+            print(f"[services] compute_projections cache hit key={key} age={int(now - ts)}s")
             return payload
     try:
         roster = _resolve_identity(username, season, league_id, roster_id)
     except Exception as e:
         print(f"[services] sleeper error: {e}")
         # Graceful fallback: continue with empty roster so UI can load
-        return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "error": "sleeper_timeout"}
+        return {
+            "players": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+            "error": "sleeper_timeout",
+        }
     if not roster:
-        return {"players": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+        return {
+            "players": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+        }
 
     # Plan games only for requested week
-    eff_mode = 'fresh' if fresh else cache_mode
+    eff_mode = "fresh" if fresh else cache_mode
     events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     windows = resolve_week_windows(events)
     if windows is None:
@@ -187,7 +217,12 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             "message": NO_GAMES_SCHEDULED_MESSAGE,
         }
     (this_start, this_end), (next_start, next_end) = windows
-    plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
+    plan_all = plan_relevant_games_and_markets(
+        roster,
+        ((this_start, this_end), (next_start, next_end)),
+        regions=region,
+        cache_mode=eff_mode,
+    )
     plan = {week: plan_all.get(week, {})}
 
     odds_by_week = _fetch_odds(plan, cache_mode=eff_mode, regions=region)
@@ -202,18 +237,20 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
     per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, planned)
     try:
         matched_players = len(per_player_odds)
-        print(f"[services] aggregate matched_players={matched_players} planned_players={planned_players} games={len(planned)}")
+        print(
+            f"[services] aggregate matched_players={matched_players} planned_players={planned_players} games={len(planned)}"
+        )
     except Exception:
         pass
 
     # Build info index
-    info_by_alias: Dict[str, dict] = {}
+    info_by_alias: dict[str, dict] = {}
     for g in planned.values():
         for p in g.players:
             info_by_alias[p["alias"]] = p
 
     scoring_rules = roster.get("scoring_rules", {})
-    players_out: List[dict] = []
+    players_out: list[dict] = []
 
     # Helpers to diagnose missing coverage and normalize market keys
     def _norm_market_key(k: str) -> str:
@@ -237,7 +274,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         except Exception:
             return False
 
-    def _importance_for_pos(pos: Optional[str], scoring: dict) -> tuple[set[str], set[str]]:
+    def _importance_for_pos(pos: str | None, scoring: dict) -> tuple[set[str], set[str]]:
         """Return (vital_markets, minor_markets) for a given position.
 
         Applies PPR gating for receptions where requested.
@@ -256,14 +293,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             else:
                 minor.add("player_receptions")
             minor.add("player_reception_yds")
-        elif p == "WR":
-            vital = {"player_reception_yds", "player_anytime_td"}
-            if ppr:
-                vital.add("player_receptions")
-            else:
-                minor.add("player_receptions")
-            minor.add("player_rush_yds")
-        elif p == "TE":
+        elif p == "WR" or p == "TE":
             vital = {"player_reception_yds", "player_anytime_td"}
             if ppr:
                 vital.add("player_receptions")
@@ -283,53 +313,60 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         pinfo = info_by_alias.get(alias, {})
         vital_exp, minor_exp = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
         vital_exp, minor_exp = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
-        from .range_model import compute_fantasy_range_model, compute_fantasy_range
+        from .range_model import compute_fantasy_range, compute_fantasy_range_model
+
         if (model or "baseline").lower() == "baseline":
-            floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+            floor, mid, ceil, _ = compute_fantasy_range(
+                by_book, per_player_summaries.get(alias, {}), scoring_rules
+            )
         else:
-            floor, mid, ceil, _ = compute_fantasy_range_model(by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model)
+            floor, mid, ceil, _ = compute_fantasy_range_model(
+                by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model
+            )
 
         # Coverage diagnostics
         available: set[str] = set()
-        for _bk, mkts in (by_book or {}).items():
-            for mkey in (mkts or {}).keys():
+        for mkts in (by_book or {}).values():
+            for mkey in mkts or {}:
                 available.add(_norm_market_key(mkey))
         pos = pinfo.get("primary_position")
         vital_exp, minor_exp = _importance_for_pos(pos, scoring_rules)
         expected = vital_exp | minor_exp
-        missing_set = (expected - available)
-        missing = sorted(list(missing_set))
-        missing_vital = sorted(list(missing_set & vital_exp))
-        missing_minor = sorted(list(missing_set & minor_exp))
+        missing_set = expected - available
+        missing = sorted(missing_set)
+        missing_vital = sorted(missing_set & vital_exp)
+        missing_minor = sorted(missing_set & minor_exp)
         # Summary keys; if absent, we used fallback band
-        summ_keys = {_norm_market_key(k) for k in (per_player_summaries.get(alias, {}) or {}).keys()}
+        summ_keys = {_norm_market_key(k) for k in (per_player_summaries.get(alias, {}) or {})}
         fallback_set = {k for k in available if k not in summ_keys}
-        fallback = sorted(list(fallback_set))
-        fallback_vital = sorted(list(fallback_set & vital_exp))
-        fallback_minor = sorted(list(fallback_set & minor_exp))
+        fallback = sorted(fallback_set)
+        fallback_vital = sorted(fallback_set & vital_exp)
+        fallback_minor = sorted(fallback_set & minor_exp)
 
-        players_out.append({
-            "name": pinfo.get("full_name", alias),
-            "pos": pos,
-            "team": pinfo.get("editorial_team_full_name"),
-            "alias": alias,
-            "floor": round(floor, 2),
-            "mid": round(mid, 2),
-            "ceiling": round(ceil, 2),
-            "books_used": len(by_book.keys()),
-            "markets_used": len(per_player_summaries.get(alias, {})),
-            "incomplete": bool(missing),
-            "missing_markets": missing,
-            "fallback_markets": fallback,
-            # Importance-aware diagnostics
-            "missing_vital": missing_vital,
-            "missing_minor": missing_minor,
-            "fallback_vital": fallback_vital,
-            "fallback_minor": fallback_minor,
-            "is_critical": (len(missing_vital) > 0 or len(fallback_vital) > 0),
-            "vital_markets": sorted(list(vital_exp)),
-            "minor_markets": sorted(list(minor_exp)),
-        })
+        players_out.append(
+            {
+                "name": pinfo.get("full_name", alias),
+                "pos": pos,
+                "team": pinfo.get("editorial_team_full_name"),
+                "alias": alias,
+                "floor": round(floor, 2),
+                "mid": round(mid, 2),
+                "ceiling": round(ceil, 2),
+                "books_used": len(by_book.keys()),
+                "markets_used": len(per_player_summaries.get(alias, {})),
+                "incomplete": bool(missing),
+                "missing_markets": missing,
+                "fallback_markets": fallback,
+                # Importance-aware diagnostics
+                "missing_vital": missing_vital,
+                "missing_minor": missing_minor,
+                "fallback_vital": fallback_vital,
+                "fallback_minor": fallback_minor,
+                "is_critical": (len(missing_vital) > 0 or len(fallback_vital) > 0),
+                "vital_markets": sorted(vital_exp),
+                "minor_markets": sorted(minor_exp),
+            }
+        )
 
     # Add planned roster players with no odds as incomplete entries
     for alias, pinfo in info_by_alias.items():
@@ -338,28 +375,30 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         # For players with no odds, mark expected markets as missing with importance split
         pos = pinfo.get("primary_position")
         vital_exp, minor_exp = _importance_for_pos(pos, scoring_rules)
-        exp_all = sorted(list(vital_exp | minor_exp))
-        players_out.append({
-            "name": pinfo.get("full_name", alias),
-            "pos": pos,
-            "team": pinfo.get("editorial_team_full_name"),
-            "alias": alias,
-            "floor": None,
-            "mid": None,
-            "ceiling": None,
-            "books_used": 0,
-            "markets_used": 0,
-            "incomplete": True,
-            "missing_markets": exp_all,
-            "fallback_markets": [],
-            "missing_vital": sorted(list(vital_exp)),
-            "missing_minor": sorted(list(minor_exp)),
-            "fallback_vital": [],
-            "fallback_minor": [],
-            "is_critical": bool(vital_exp),
-            "vital_markets": sorted(list(vital_exp)),
-            "minor_markets": sorted(list(minor_exp)),
-        })
+        exp_all = sorted(vital_exp | minor_exp)
+        players_out.append(
+            {
+                "name": pinfo.get("full_name", alias),
+                "pos": pos,
+                "team": pinfo.get("editorial_team_full_name"),
+                "alias": alias,
+                "floor": None,
+                "mid": None,
+                "ceiling": None,
+                "books_used": 0,
+                "markets_used": 0,
+                "incomplete": True,
+                "missing_markets": exp_all,
+                "fallback_markets": [],
+                "missing_vital": sorted(vital_exp),
+                "missing_minor": sorted(minor_exp),
+                "fallback_vital": [],
+                "fallback_minor": [],
+                "is_critical": bool(vital_exp),
+                "vital_markets": sorted(vital_exp),
+                "minor_markets": sorted(minor_exp),
+            }
+        )
 
         # Include roster players without scheduled events as incomplete
     try:
@@ -372,27 +411,29 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
                 pos = p.get("primary_position")
                 team = p.get("editorial_team_full_name")
                 alias = p.get("alias") or p.get("player_id") or full_name
-                players_out.append({
-                    "name": full_name,
-                    "pos": pos,
-                    "team": team,
-                    "alias": alias,
-                    "floor": None,
-                    "mid": None,
-                    "ceiling": None,
-                    "books_used": 0,
-                    "markets_used": 0,
-                    "incomplete": True,
-                    "missing_markets": exp_all,
-                    "fallback_markets": [],
-                    "missing_vital": sorted(list(vital_exp)),
-                    "missing_minor": sorted(list(minor_exp)),
-                    "fallback_vital": [],
-                    "fallback_minor": [],
-                    "is_critical": bool(vital_exp),
-                    "vital_markets": sorted(list(vital_exp)),
-                    "minor_markets": sorted(list(minor_exp)),
-                })
+                players_out.append(
+                    {
+                        "name": full_name,
+                        "pos": pos,
+                        "team": team,
+                        "alias": alias,
+                        "floor": None,
+                        "mid": None,
+                        "ceiling": None,
+                        "books_used": 0,
+                        "markets_used": 0,
+                        "incomplete": True,
+                        "missing_markets": exp_all,
+                        "fallback_markets": [],
+                        "missing_vital": sorted(vital_exp),
+                        "missing_minor": sorted(minor_exp),
+                        "fallback_vital": [],
+                        "fallback_minor": [],
+                        "is_critical": bool(vital_exp),
+                        "vital_markets": sorted(vital_exp),
+                        "minor_markets": sorted(minor_exp),
+                    }
+                )
             except Exception:
                 continue
     except Exception:
@@ -403,35 +444,42 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
         if os.getenv("API_DEBUG") in ("1", "true", "True"):
             # Collect raw and normalized market keys across players
             all_raw: set[str] = set()
-            for _alias, by_book in per_player_odds.items():
-                for _bk, mkts in (by_book or {}).items():
-                    for mkey in (mkts or {}).keys():
+            for by_book in per_player_odds.values():
+                for mkts in (by_book or {}).values():
+                    for mkey in mkts or {}:
                         all_raw.add(mkey)
             all_norm = {_norm_market_key(k) for k in all_raw}
             used_norm = {k for k in all_norm if k in PRIMARY_MARKET_WHITELIST}
-            ignored_norm = sorted(list(all_norm - used_norm))
-            print(f"[services][debug] markets: raw={len(all_raw)} norm={len(all_norm)} used={len(used_norm)} ignored={len(ignored_norm)}")
+            ignored_norm = sorted(all_norm - used_norm)
+            print(
+                f"[services][debug] markets: raw={len(all_raw)} norm={len(all_norm)} used={len(used_norm)} ignored={len(ignored_norm)}"
+            )
             if ignored_norm:
-                print(f"[services][debug] markets_ignored_norm: {', '.join(sorted(list(ignored_norm)))}")
+                print(f"[services][debug] markets_ignored_norm: {', '.join(sorted(ignored_norm))}")
 
             # Per-player gaps (limit output size)
             missing_players = [p for p in players_out if p.get("incomplete")]
-            print(f"[services][debug] players_with_missing={len(missing_players)} / total={len(players_out)}")
+            print(
+                f"[services][debug] players_with_missing={len(missing_players)} / total={len(players_out)}"
+            )
             for p in missing_players[:12]:
                 miss = ", ".join(p.get("missing_markets") or [])
                 fb = ", ".join(p.get("fallback_markets") or [])
-                print(f"[services][debug] missing: {p.get('name')} ({p.get('pos')}) -> missing=[{miss}] fallback=[{fb}]")
+                print(
+                    f"[services][debug] missing: {p.get('name')} ({p.get('pos')}) -> missing=[{miss}] fallback=[{fb}]"
+                )
     except Exception as _dbg_e:
-        try:
-            print(f"[services][debug] error: {str(_dbg_e)}")
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            print(f"[services][debug] error: {_dbg_e!s}")
 
     # Sort by mid desc, placing missing mids (None) at the end
-    players_out.sort(key=lambda x: (x.get("mid") if isinstance(x.get("mid"), (int, float)) else float("-inf")), reverse=True)
+    players_out.sort(
+        key=lambda x: x.get("mid") if isinstance(x.get("mid"), (int, float)) else float("-inf"),
+        reverse=True,
+    )
 
-    def _blank_coverage_counts() -> Dict[str, int]:
-        return {market: 0 for market in COVERAGE_MARKET_ORDER}
+    def _blank_coverage_counts() -> dict[str, int]:
+        return dict.fromkeys(COVERAGE_MARKET_ORDER, 0)
 
     def _market_has_line(entry: object) -> bool:
         if not isinstance(entry, dict):
@@ -450,7 +498,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
                 return True
         return False
 
-    coverage_counts: Dict[str, Dict[str, int]] = {}
+    coverage_counts: dict[str, dict[str, int]] = {}
     for alias, books in per_player_odds.items():
         tracker = {market: set() for market in COVERAGE_MARKET_ORDER}
         for book_key, mkts in (books or {}).items():
@@ -473,7 +521,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             if samples > current[norm_key]:
                 current[norm_key] = samples
 
-    coverage_rows: List[dict] = []
+    coverage_rows: list[dict] = []
     seen_aliases: set[str] = set()
     for pdata in players_out:
         alias = pdata.get("alias")
@@ -487,7 +535,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
                     counts[market] = 0
             seen_aliases.add(alias)
         pdata_vital: set[str] = set()
-        for _item in (pdata.get("vital_markets") or []):
+        for _item in pdata.get("vital_markets") or []:
             try:
                 _mk = _norm_market_key(_item)
             except Exception:
@@ -495,7 +543,7 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             if _mk:
                 pdata_vital.add(_mk)
         pdata_minor: set[str] = set()
-        for _item in (pdata.get("minor_markets") or []):
+        for _item in pdata.get("minor_markets") or []:
             try:
                 _mk2 = _norm_market_key(_item)
             except Exception:
@@ -507,17 +555,19 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
             alt_vital, alt_minor = _importance_for_pos(alt_pos, scoring_rules)
             pdata_vital = set(alt_vital)
             pdata_minor = set(alt_minor)
-        coverage_rows.append({
-            "alias": alias,
-            "name": pdata.get("name"),
-            "pos": pdata.get("pos"),
-            "team": pdata.get("team"),
-            "markets": counts,
-            "total_books": int(sum(counts.values())),
-            "incomplete": bool(pdata.get("incomplete")),
-            "vital_markets": sorted(list(pdata_vital)),
-            "minor_markets": sorted(list(pdata_minor)),
-        })
+        coverage_rows.append(
+            {
+                "alias": alias,
+                "name": pdata.get("name"),
+                "pos": pdata.get("pos"),
+                "team": pdata.get("team"),
+                "markets": counts,
+                "total_books": int(sum(counts.values())),
+                "incomplete": bool(pdata.get("incomplete")),
+                "vital_markets": sorted(pdata_vital),
+                "minor_markets": sorted(pdata_minor),
+            }
+        )
 
     for alias, counts_dict in coverage_counts.items():
         if not alias or alias in seen_aliases:
@@ -530,17 +580,19 @@ def compute_projections(username: str, season: str, week: str = "this", region: 
                 fallback_counts[market] = 0
         pinfo = info_by_alias.get(alias, {})
         vital_exp, minor_exp = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
-        coverage_rows.append({
-            "alias": alias,
-            "name": pinfo.get("full_name", alias),
-            "pos": pinfo.get("primary_position"),
-            "team": pinfo.get("editorial_team_full_name"),
-            "markets": fallback_counts,
-            "total_books": int(sum(fallback_counts.values())),
-            "incomplete": True,
-            "vital_markets": sorted(list(vital_exp)),
-            "minor_markets": sorted(list(minor_exp)),
-        })
+        coverage_rows.append(
+            {
+                "alias": alias,
+                "name": pinfo.get("full_name", alias),
+                "pos": pinfo.get("primary_position"),
+                "team": pinfo.get("editorial_team_full_name"),
+                "markets": fallback_counts,
+                "total_books": int(sum(fallback_counts.values())),
+                "incomplete": True,
+                "vital_markets": sorted(vital_exp),
+                "minor_markets": sorted(minor_exp),
+            }
+        )
 
     payload = {
         "week": week,
@@ -566,10 +618,10 @@ def compute_draft_board(
     fresh: bool = False,
     cache_mode: str = "auto",
     model: str = "const",
-    positions: List[str] | None = None,
-    league_id: Optional[str] = None,
-    roster_id: Optional[int] = None,
-) -> Dict:
+    positions: list[str] | None = None,
+    league_id: str | None = None,
+    roster_id: int | None = None,
+) -> dict:
     """Floor/mid/ceiling for every active skill player on every team playing
     in the target week -- not scoped to any roster. Meant for pre-draft prep,
     when there's no roster to scope to yet (or the league's roster is still
@@ -582,7 +634,9 @@ def compute_draft_board(
     player list to -- that's the whole point), so this works fine with just
     a league_id and no roster_id, i.e. before a team has been picked.
     """
-    print(f"[services] compute_draft_board season={season} week={week} fresh={fresh} positions={positions} league_id={league_id}")
+    print(
+        f"[services] compute_draft_board season={season} week={week} fresh={fresh} positions={positions} league_id={league_id}"
+    )
     try:
         roster = _resolve_identity(username, season, league_id, roster_id)
     except Exception as e:
@@ -590,14 +644,14 @@ def compute_draft_board(
         roster = None
     scoring_rules = (roster or {}).get("scoring_rules", {}) if roster else {}
 
-    eff_mode = 'fresh' if fresh else cache_mode
+    eff_mode = "fresh" if fresh else cache_mode
     plan = draft_prep.plan_week_for_draft(week=week, regions=region, cache_mode=eff_mode)
     odds_by_week = _fetch_odds({week: plan}, cache_mode=eff_mode, regions=region)
     ev_odds = odds_by_week.get(week, {})
 
     per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, plan)
 
-    info_by_alias: Dict[str, dict] = {}
+    info_by_alias: dict[str, dict] = {}
     for g in plan.values():
         for p in g.players:
             info_by_alias[p["alias"]] = p
@@ -605,26 +659,32 @@ def compute_draft_board(
     from .range_model import compute_fantasy_range_model
 
     pos_filter = {p.upper() for p in positions} if positions else None
-    board: List[dict] = []
+    board: list[dict] = []
     for alias, by_book in per_player_odds.items():
         pinfo = info_by_alias.get(alias, {})
         pos = pinfo.get("primary_position")
         if pos_filter and pos not in pos_filter:
             continue
         if (model or "baseline").lower() == "baseline":
-            floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
+            floor, mid, ceil, _ = compute_fantasy_range(
+                by_book, per_player_summaries.get(alias, {}), scoring_rules
+            )
         else:
-            floor, mid, ceil, _ = compute_fantasy_range_model(by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model)
-        board.append({
-            "name": pinfo.get("full_name", alias),
-            "pos": pos,
-            "team": pinfo.get("editorial_team_full_name"),
-            "floor": round(floor, 2),
-            "mid": round(mid, 2),
-            "ceiling": round(ceil, 2),
-            "books_used": len(by_book.keys()),
-            "markets_used": len(per_player_summaries.get(alias, {})),
-        })
+            floor, mid, ceil, _ = compute_fantasy_range_model(
+                by_book, per_player_summaries.get(alias, {}), scoring_rules, model=model
+            )
+        board.append(
+            {
+                "name": pinfo.get("full_name", alias),
+                "pos": pos,
+                "team": pinfo.get("editorial_team_full_name"),
+                "floor": round(floor, 2),
+                "mid": round(mid, 2),
+                "ceiling": round(ceil, 2),
+                "books_used": len(by_book.keys()),
+                "markets_used": len(per_player_summaries.get(alias, {})),
+            }
+        )
 
     board.sort(key=lambda r: r["mid"], reverse=True)
 
@@ -652,7 +712,9 @@ def compute_draft_board(
             "today's date -- check back once the season's schedule/odds are "
             "posted (usually a couple weeks before Week 1)."
         )
-    print(f"[services] compute_draft_board done players={len(board)} window=({window_start}..{window_end})")
+    print(
+        f"[services] compute_draft_board done players={len(board)} window=({window_start}..{window_end})"
+    )
     return payload
 
 
@@ -664,9 +726,9 @@ def compute_book_coverage(
     fresh: bool = False,
     cache_mode: str = "auto",
     model: str = "const",
-    league_id: Optional[str] = None,
-    roster_id: Optional[int] = None,
-) -> Dict:
+    league_id: str | None = None,
+    roster_id: int | None = None,
+) -> dict:
     data = compute_projections(
         username=username,
         season=season,
@@ -680,16 +742,16 @@ def compute_book_coverage(
     )
     coverage = data.get("book_coverage") or {}
     markets = list(coverage.get("markets") or COVERAGE_MARKET_ORDER)
-    rows_out: List[dict] = []
+    rows_out: list[dict] = []
     for row in coverage.get("rows") or []:
         raw_markets = row.get("markets") or {}
-        markets_map = {market: 0 for market in COVERAGE_MARKET_ORDER}
+        markets_map = dict.fromkeys(COVERAGE_MARKET_ORDER, 0)
         for market in COVERAGE_MARKET_ORDER:
             try:
                 markets_map[market] = int(raw_markets.get(market, 0) or 0)
             except Exception:
                 markets_map[market] = 0
-        for extra_key, extra_val in (raw_markets.items() if hasattr(raw_markets, 'items') else []):
+        for extra_key, extra_val in raw_markets.items() if hasattr(raw_markets, "items") else []:
             if extra_key not in markets_map:
                 try:
                     markets_map[extra_key] = int(extra_val or 0)
@@ -698,17 +760,19 @@ def compute_book_coverage(
         total = int(sum(markets_map.values()))
         vital_list = [str(v) for v in (row.get("vital_markets") or [])]
         minor_list = [str(v) for v in (row.get("minor_markets") or [])]
-        rows_out.append({
-            "alias": row.get("alias"),
-            "name": row.get("name"),
-            "pos": row.get("pos"),
-            "team": row.get("team"),
-            "markets": markets_map,
-            "total_books": total,
-            "incomplete": bool(row.get("incomplete")),
-            "vital_markets": vital_list,
-            "minor_markets": minor_list,
-        })
+        rows_out.append(
+            {
+                "alias": row.get("alias"),
+                "name": row.get("name"),
+                "pos": row.get("pos"),
+                "team": row.get("team"),
+                "markets": markets_map,
+                "total_books": total,
+                "incomplete": bool(row.get("incomplete")),
+                "vital_markets": vital_list,
+                "minor_markets": minor_list,
+            }
+        )
     return {
         "week": data.get("week", week),
         "coverage": {
@@ -720,7 +784,9 @@ def compute_book_coverage(
     }
 
 
-def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] | None = None) -> Dict:
+def build_lineup(
+    players: list[dict], target: str = "mid", defenses: list[dict] | None = None
+) -> dict:
     """Build lineup: QB1, WR2, RB2, FLEX1 (from WR/RB/TE), DEF1, then BENCH.
 
     Always include players with zero projection in BENCH.
@@ -731,25 +797,31 @@ def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] 
     would let the lineup builder "start" a team you don't roster.
     """
     print(f"[services] build_lineup target={target} defenses={len(defenses or [])}")
-    buckets: Dict[str, List[dict]] = {"QB": [], "RB": [], "WR": [], "TE": [], "DEF": []}
+    buckets: dict[str, list[dict]] = {"QB": [], "RB": [], "WR": [], "TE": [], "DEF": []}
     for p in players:
         if p.get("pos") in buckets:
             buckets[p["pos"]].append(p)
-    for d in (defenses or []):
-        buckets["DEF"].append({
-            "name": d.get("defense"),
-            "pos": "DEF",
-            "team": d.get("defense"),
-            "floor": d.get("floor"),
-            "mid": d.get("mid"),
-            "ceiling": d.get("ceiling"),
-        })
+    for d in defenses or []:
+        buckets["DEF"].append(
+            {
+                "name": d.get("defense"),
+                "pos": "DEF",
+                "team": d.get("defense"),
+                "floor": d.get("floor"),
+                "mid": d.get("mid"),
+                "ceiling": d.get("ceiling"),
+            }
+        )
     for pos in buckets:
         # Ensure None values do not break sort comparisons
-        buckets[pos].sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
+        buckets[pos].sort(
+            key=lambda x: float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0,
+            reverse=True,
+        )
 
     used = set()
-    def take(pos: str, n: int) -> List[dict]:
+
+    def take(pos: str, n: int) -> list[dict]:
         out = []
         for item in buckets.get(pos, []):
             if item["name"] not in used:
@@ -767,20 +839,26 @@ def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] 
         "DEF": take("DEF", 1),
     }
     # FLEX best remaining WR/RB/TE
-    flex_pool = []
-    for pos in ("WR", "RB", "TE"):
-        for item in buckets.get(pos, []):
-            if item["name"] not in used:
-                flex_pool.append(item)
-    flex_pool.sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
+    flex_pool = [
+        item
+        for pos in ("WR", "RB", "TE")
+        for item in buckets.get(pos, [])
+        if item["name"] not in used
+    ]
+    flex_pool.sort(
+        key=lambda x: float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0,
+        reverse=True,
+    )
     flex = flex_pool[:1]
     for f in flex:
         used.add(f["name"])  # mark used for bench
 
     rows = []
     total = 0.0
+
     def add_slot(slot: str, p: dict):
         nonlocal total
+
         def _num(v):
             try:
                 if v is None:
@@ -788,44 +866,59 @@ def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] 
                 return float(v)
             except Exception:
                 return 0.0
+
         pts = _num(p.get(target, 0.0))
         total += pts
-        rows.append({
-            "slot": slot,
-            "name": p["name"],
-            "pos": p["pos"],
-            # keep team in payload for future, UI may ignore it
-            "team": p.get("team"),
-            "points": round(pts, 2),
-            # include full trio for UI rendering
-            "floor": round(_num(p.get("floor", 0.0)), 2),
-            "mid": round(_num(p.get("mid", 0.0)), 2),
-            "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
-            # so the UI can distinguish "actually projected for ~0" from
-            # "no odds coverage, this number is meaningless" -- carried
-            # through from compute_projections' players_out, not computed
-            # freshly here (DEF rows built directly in build_lineup won't
-            # have it, which is fine: they always come from real odds).
-            "incomplete": bool(p.get("incomplete")),
-        })
+        rows.append(
+            {
+                "slot": slot,
+                "name": p["name"],
+                "pos": p["pos"],
+                # keep team in payload for future, UI may ignore it
+                "team": p.get("team"),
+                "points": round(pts, 2),
+                # include full trio for UI rendering
+                "floor": round(_num(p.get("floor", 0.0)), 2),
+                "mid": round(_num(p.get("mid", 0.0)), 2),
+                "ceiling": round(_num(p.get("ceiling", 0.0)), 2),
+                # so the UI can distinguish "actually projected for ~0" from
+                # "no odds coverage, this number is meaningless" -- carried
+                # through from compute_projections' players_out, not computed
+                # freshly here (DEF rows built directly in build_lineup won't
+                # have it, which is fine: they always come from real odds).
+                "incomplete": bool(p.get("incomplete")),
+            }
+        )
 
     # Order: QB, WR, WR, RB, RB, TE, FLEX, DEF
-    for p in starters["QB"]: add_slot("QB", p)
-    if len(starters["WR"]) > 0: add_slot("WR", starters["WR"][0])
-    if len(starters["WR"]) > 1: add_slot("WR", starters["WR"][1])
-    if len(starters["RB"]) > 0: add_slot("RB", starters["RB"][0])
-    if len(starters["RB"]) > 1: add_slot("RB", starters["RB"][1])
-    for p in starters["TE"]: add_slot("TE", p)
-    for p in flex: add_slot("FLEX", p)
-    for p in starters["DEF"]: add_slot("DEF", p)
+    for p in starters["QB"]:
+        add_slot("QB", p)
+    if len(starters["WR"]) > 0:
+        add_slot("WR", starters["WR"][0])
+    if len(starters["WR"]) > 1:
+        add_slot("WR", starters["WR"][1])
+    if len(starters["RB"]) > 0:
+        add_slot("RB", starters["RB"][0])
+    if len(starters["RB"]) > 1:
+        add_slot("RB", starters["RB"][1])
+    for p in starters["TE"]:
+        add_slot("TE", p)
+    for p in flex:
+        add_slot("FLEX", p)
+    for p in starters["DEF"]:
+        add_slot("DEF", p)
 
     # Bench: remaining players by target (include zeros)
-    bench: List[dict] = []
-    for pos in ("QB", "WR", "RB", "TE", "DEF"):
-        for item in buckets.get(pos, []):
-            if item["name"] not in used:
-                bench.append(item)
-    bench.sort(key=lambda x: (float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0), reverse=True)
+    bench: list[dict] = [
+        item
+        for pos in ("QB", "WR", "RB", "TE", "DEF")
+        for item in buckets.get(pos, [])
+        if item["name"] not in used
+    ]
+    bench.sort(
+        key=lambda x: float(x.get(target)) if isinstance(x.get(target), (int, float)) else 0.0,
+        reverse=True,
+    )
 
     def _num(v):
         try:
@@ -835,8 +928,8 @@ def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] 
         except Exception:
             return 0.0
 
-    for b in bench:
-        rows.append({
+    rows.extend(
+        {
             "slot": "BENCH",
             "name": b["name"],
             "pos": b["pos"],
@@ -845,28 +938,30 @@ def build_lineup(players: List[dict], target: str = "mid", defenses: List[dict] 
             "floor": round(_num(b.get("floor", 0.0)), 2),
             "mid": round(_num(b.get("mid", 0.0)), 2),
             "ceiling": round(_num(b.get("ceiling", 0.0)), 2),
-        })
+        }
+        for b in bench
+    )
 
     return {"target": target, "lineup": rows, "total_points": round(total, 2)}
 
 
-def build_lineup_diffs(players: List[dict], defenses: List[dict] | None = None) -> Dict:
+def build_lineup_diffs(players: list[dict], defenses: list[dict] | None = None) -> dict:
     base = build_lineup(players, target="mid", defenses=defenses)
     floor = build_lineup(players, target="floor", defenses=defenses)
     ceil = build_lineup(players, target="ceiling", defenses=defenses)
 
-    def diff(from_rows: List[dict], to_rows: List[dict]) -> List[dict]:
-        out = []
+    def diff(from_rows: list[dict], to_rows: list[dict]) -> list[dict]:
         by_slot_from = {r["slot"]: r for r in from_rows}
         by_slot_to = {r["slot"]: r for r in to_rows}
-        for slot in by_slot_from.keys():
-            if by_slot_from[slot]["name"] != by_slot_to[slot]["name"]:
-                out.append({
-                    "slot": slot,
-                    "from": by_slot_from[slot]["name"],
-                    "to": by_slot_to[slot]["name"],
-                })
-        return out
+        return [
+            {
+                "slot": slot,
+                "from": by_slot_from[slot]["name"],
+                "to": by_slot_to[slot]["name"],
+            }
+            for slot in by_slot_from
+            if by_slot_from[slot]["name"] != by_slot_to[slot]["name"]
+        ]
 
     return {
         "from": base,
@@ -879,7 +974,9 @@ def _implied_total(game_total: float, team_spread: float) -> float:
     return game_total / 2.0 - team_spread / 2.0
 
 
-def _def_ownership_map(username: str, season: str, league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Tuple[dict, str | None]:
+def _def_ownership_map(
+    username: str, season: str, league_id: str | None = None, roster_id: int | None = None
+) -> tuple[dict, str | None]:
     """Return (team_fullname -> {id, name}, current_owner_id).
 
     current_owner_id identifies "you" for the owned_by_current flag in
@@ -901,26 +998,26 @@ def _def_ownership_map(username: str, season: str, league_id: Optional[str] = No
 
         current_owner_id = user_id
         if league_id and roster_id is not None:
-            match = next((r for r in (rosters or []) if r.get('roster_id') == roster_id), None)
-            current_owner_id = match.get('owner_id') if match else None
+            match = next((r for r in (rosters or []) if r.get("roster_id") == roster_id), None)
+            current_owner_id = match.get("owner_id") if match else None
 
         # Map owner_id -> display name (fallback to username/id)
         owner_name: dict = {}
         for u in users or []:
-            name = u.get('display_name') or u.get('username') or u.get('user_id')
-            owner_name[u.get('user_id')] = name
+            name = u.get("display_name") or u.get("username") or u.get("user_id")
+            owner_name[u.get("user_id")] = name
         # All players metadata to identify DEF and team abbr
         all_players = sleeper_api.get_players()
         team_to_owner: dict = {}
         for r in rosters or []:
-            oid = r.get('owner_id')
-            disp = owner_name.get(oid) or (oid or 'unknown')
-            for pid in r.get('players', []) or []:
+            oid = r.get("owner_id")
+            disp = owner_name.get(oid) or (oid or "unknown")
+            for pid in r.get("players", []) or []:
                 try:
                     pdata = all_players.get(pid) or {}
-                    if pdata.get('position') != 'DEF':
+                    if pdata.get("position") != "DEF":
                         continue
-                    abbr = pdata.get('team')
+                    abbr = pdata.get("team")
                     full = SLEEPER_TO_ODDSAPI_TEAM.get(abbr)
                     if full:
                         team_to_owner[full] = {"id": oid, "name": disp}
@@ -932,8 +1029,20 @@ def _def_ownership_map(username: str, season: str, league_id: Optional[str] = No
         return {}, None
 
 
-def list_defenses(username: str, season: str, week: str = "this", scope: str = "both", fresh: bool = False, cache_mode: str = "auto", region: str = "us", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
-    print(f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh} league_id={league_id} roster_id={roster_id}")
+def list_defenses(
+    username: str,
+    season: str,
+    week: str = "this",
+    scope: str = "both",
+    fresh: bool = False,
+    cache_mode: str = "auto",
+    region: str = "us",
+    league_id: str | None = None,
+    roster_id: int | None = None,
+) -> dict:
+    print(
+        f"[services] list_defenses user={username} season={season} week={week} scope={scope} fresh={fresh} league_id={league_id} roster_id={roster_id}"
+    )
     # In-process TTL cache
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     _def_cache = getattr(list_defenses, "_cache", {})
@@ -942,9 +1051,9 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     if not fresh and key in _def_cache:
         ts, payload = _def_cache[key]
         if now - ts < ttl:
-            print(f"[services] list_defenses cache hit key={key} age={int(now-ts)}s")
+            print(f"[services] list_defenses cache hit key={key} age={int(now - ts)}s")
             return payload
-    eff_mode = 'fresh' if fresh else cache_mode
+    eff_mode = "fresh" if fresh else cache_mode
     events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     windows = resolve_week_windows(events)
     if windows is None:
@@ -955,7 +1064,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             "message": NO_GAMES_SCHEDULED_MESSAGE,
         }
     (this_start, this_end), (next_start, next_end) = windows
-    start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
+    start, end = (this_start, this_end) if week == "this" else (next_start, next_end)
 
     # Scoring rules for converting opponent implied totals into DEF fantasy points
     try:
@@ -972,7 +1081,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
     # Scope handling remains, but default 'both' -> include all
     include_owned = scope in ("owned", "both")
     include_avail = scope in ("available", "both")
-    team_list: List[Tuple[str, str]] = []
+    team_list: list[tuple[str, str]] = []
     for t in all_teams:
         has_owner = t in team_to_owner
         if has_owner and include_owned:
@@ -981,19 +1090,25 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             team_list.append((t, "available"))
 
     # Filter events in window
-    window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
+    window_events = [
+        e
+        for e in events
+        if start <= dt.datetime.strptime(e["commence_time"], "%Y-%m-%dT%H:%M:%SZ") <= end
+    ]
 
     # Prefetch odds per event once to avoid duplicate calls per team
     ev_odds_map = {}
     for e in window_events:
         gid = e["id"]
         try:
-            ev_odds_map[gid] = odds_client.get_event_player_odds(gid, markets="spreads,totals", regions=region, mode=eff_mode)
+            ev_odds_map[gid] = odds_client.get_event_player_odds(
+                gid, markets="spreads,totals", regions=region, mode=eff_mode
+            )
         except Exception as exc:
             print(f"[services] defenses: fetch odds failed game={gid} err={exc}")
             ev_odds_map[gid] = None
 
-    out_rows: List[dict] = []
+    out_rows: list[dict] = []
     for team, source in team_list:
         # Find events where this team plays
         for e in window_events:
@@ -1003,7 +1118,7 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             opp = e["away_team"] if e["home_team"] == team else e["home_team"]
             odds = ev_odds_map.get(gid)
             # Collect per-book implied totals for opponent
-            implieds: List[float] = []
+            implieds: list[float] = []
             # Normalize event structure: list or dict
             ev_obj = None
             if isinstance(odds, list) and odds:
@@ -1039,26 +1154,38 @@ def list_defenses(username: str, season: str, week: str = "this", scope: str = "
             if implieds:
                 implieds.sort()
                 n = len(implieds)
-                med = implieds[n // 2] if n % 2 == 1 else (implieds[n // 2 - 1] + implieds[n // 2]) / 2
+                med = (
+                    implieds[n // 2]
+                    if n % 2 == 1
+                    else (implieds[n // 2 - 1] + implieds[n // 2]) / 2
+                )
                 def_floor, def_mid, def_ceiling = compute_defense_fantasy_range(med, scoring_rules)
                 owner_info = team_to_owner.get(team) or {}
-                out_rows.append({
-                    "defense": team,
-                    "opponent": opp,
-                    "game_date": e["commence_time"],
-                    "implied_total_median": round(med, 2),
-                    "book_count": len(implieds),
-                    "source": source,
-                    "owner": owner_info.get("name"),
-                    "owned_by_current": bool(owner_info) and (owner_info.get("id") == current_uid),
-                    "floor": round(def_floor, 2),
-                    "mid": round(def_mid, 2),
-                    "ceiling": round(def_ceiling, 2),
-                })
+                out_rows.append(
+                    {
+                        "defense": team,
+                        "opponent": opp,
+                        "game_date": e["commence_time"],
+                        "implied_total_median": round(med, 2),
+                        "book_count": len(implieds),
+                        "source": source,
+                        "owner": owner_info.get("name"),
+                        "owned_by_current": bool(owner_info)
+                        and (owner_info.get("id") == current_uid),
+                        "floor": round(def_floor, 2),
+                        "mid": round(def_mid, 2),
+                        "ceiling": round(def_ceiling, 2),
+                    }
+                )
 
     # Sort ascending by implied total (lower is better for defense)
     out_rows.sort(key=lambda r: (r["implied_total_median"], -r["book_count"]))
-    payload = {"week": week, "defenses": out_rows, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+    payload = {
+        "week": week,
+        "defenses": out_rows,
+        "ratelimit": ratelimit.format_status(),
+        "ratelimit_info": ratelimit.get_details(),
+    }
     _def_cache[key] = (now, payload)
     list_defenses._cache = _def_cache
     return payload
@@ -1074,9 +1201,9 @@ def build_dashboard(
     def_scope: str = "owned",  # 'owned' | 'available' | 'both'
     include_players: bool = True,
     model: str = "const",
-    league_id: Optional[str] = None,
-    roster_id: Optional[int] = None,
-) -> Dict:
+    league_id: str | None = None,
+    roster_id: int | None = None,
+) -> dict:
     """Build a single payload for UI: lineups and defenses with optional scoping.
 
     Structure:
@@ -1090,25 +1217,65 @@ def build_dashboard(
       "ratelimit_info": {...}
     }
     """
-    print(f"[services] build_dashboard user={username} season={season} fresh={fresh} weeks={weeks} def_scope={def_scope} inc_players={include_players}")
+    print(
+        f"[services] build_dashboard user={username} season={season} fresh={fresh} weeks={weeks} def_scope={def_scope} inc_players={include_players}"
+    )
 
     # Projections scoped by weeks
     proj_this = None
     proj_next = None
     if weeks in ("this", "both"):
-        proj_this = compute_projections(username=username, season=season, week="this", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model, league_id=league_id, roster_id=roster_id)
+        proj_this = compute_projections(
+            username=username,
+            season=season,
+            week="this",
+            region=region,
+            fresh=fresh,
+            cache_mode=("fresh" if fresh else cache_mode),
+            model=model,
+            league_id=league_id,
+            roster_id=roster_id,
+        )
     if weeks in ("next", "both"):
-        proj_next = compute_projections(username=username, season=season, week="next", region=region, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), model=model, league_id=league_id, roster_id=roster_id)
+        proj_next = compute_projections(
+            username=username,
+            season=season,
+            week="next",
+            region=region,
+            fresh=fresh,
+            cache_mode=("fresh" if fresh else cache_mode),
+            model=model,
+            league_id=league_id,
+            roster_id=roster_id,
+        )
 
     # Defenses scoped by weeks and scope parameter
     defs_this = None
     defs_next = None
     if weeks in ("this", "both"):
-        defs_this = list_defenses(username=username, season=season, week="this", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), league_id=league_id, roster_id=roster_id)
+        defs_this = list_defenses(
+            username=username,
+            season=season,
+            week="this",
+            scope=def_scope,
+            fresh=fresh,
+            cache_mode=("fresh" if fresh else cache_mode),
+            league_id=league_id,
+            roster_id=roster_id,
+        )
     if weeks in ("next", "both"):
-        defs_next = list_defenses(username=username, season=season, week="next", scope=def_scope, fresh=fresh, cache_mode=('fresh' if fresh else cache_mode), league_id=league_id, roster_id=roster_id)
+        defs_next = list_defenses(
+            username=username,
+            season=season,
+            week="next",
+            scope=def_scope,
+            fresh=fresh,
+            cache_mode=("fresh" if fresh else cache_mode),
+            league_id=league_id,
+            roster_id=roster_id,
+        )
 
-    def _owned(defs_payload: dict | None) -> List[dict]:
+    def _owned(defs_payload: dict | None) -> list[dict]:
         rows = (defs_payload or {}).get("defenses", []) or []
         return [d for d in rows if d.get("source") == "owned" or d.get("owned_by_current")]
 
@@ -1118,15 +1285,23 @@ def build_dashboard(
         owned_this = _owned(defs_this)
         lineups["this"] = {
             "mid": build_lineup(proj_this.get("players", []), target="mid", defenses=owned_this),
-            "floor": build_lineup(proj_this.get("players", []), target="floor", defenses=owned_this),
-            "ceiling": build_lineup(proj_this.get("players", []), target="ceiling", defenses=owned_this),
+            "floor": build_lineup(
+                proj_this.get("players", []), target="floor", defenses=owned_this
+            ),
+            "ceiling": build_lineup(
+                proj_this.get("players", []), target="ceiling", defenses=owned_this
+            ),
         }
     if proj_next is not None:
         owned_next = _owned(defs_next)
         lineups["next"] = {
             "mid": build_lineup(proj_next.get("players", []), target="mid", defenses=owned_next),
-            "floor": build_lineup(proj_next.get("players", []), target="floor", defenses=owned_next),
-            "ceiling": build_lineup(proj_next.get("players", []), target="ceiling", defenses=owned_next),
+            "floor": build_lineup(
+                proj_next.get("players", []), target="floor", defenses=owned_next
+            ),
+            "ceiling": build_lineup(
+                proj_next.get("players", []), target="ceiling", defenses=owned_next
+            ),
         }
 
     # Choose latest ratelimit info
@@ -1136,8 +1311,20 @@ def build_dashboard(
         "lineups": lineups,
         "defenses": {"this": defs_this, "next": defs_next},
         "projections": {
-            "this": {"players": (proj_this.get("players", []) if (include_players and proj_this is not None) else [])},
-            "next": {"players": (proj_next.get("players", []) if (include_players and proj_next is not None) else [])},
+            "this": {
+                "players": (
+                    proj_this.get("players", [])
+                    if (include_players and proj_this is not None)
+                    else []
+                )
+            },
+            "next": {
+                "players": (
+                    proj_next.get("players", [])
+                    if (include_players and proj_next is not None)
+                    else []
+                )
+            },
         },
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": rl_info,
@@ -1150,6 +1337,7 @@ def _norm_name(s: str) -> str:
     try:
         s = (s or "").lower()
         import re
+
         s = re.sub(r"[\.'`-]", " ", s)
         s = re.sub(r"[^a-z0-9 ]", "", s)
         s = re.sub(r"\s+", " ", s).strip()
@@ -1159,7 +1347,17 @@ def _norm_name(s: str) -> str:
         return s or ""
 
 
-def get_player_odds_details(username: str, season: str, week: str = "this", region: str = "us", name: str = "", cache_mode: str = "auto", model: str = "const", league_id: Optional[str] = None, roster_id: Optional[int] = None) -> Dict:
+def get_player_odds_details(
+    username: str,
+    season: str,
+    week: str = "this",
+    region: str = "us",
+    name: str = "",
+    cache_mode: str = "auto",
+    model: str = "const",
+    league_id: str | None = None,
+    roster_id: int | None = None,
+) -> dict:
     """Return per-book odds and market summaries used for a single player.
 
     Emphasizes markets by estimated impact on fantasy points (mean stat * scoring multiplier).
@@ -1168,12 +1366,24 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     windows = resolve_week_windows(events)
     if windows is None:
-        return {"player": {"name": name}, "markets": {}, "primary_order": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "message": NO_GAMES_SCHEDULED_MESSAGE}
+        return {
+            "player": {"name": name},
+            "markets": {},
+            "primary_order": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+            "message": NO_GAMES_SCHEDULED_MESSAGE,
+        }
     (this_start, this_end), (next_start, next_end) = windows
     # Roster & planning (to get scoring rules and player mapping)
     roster = _resolve_identity(username, season, league_id, roster_id)
     scoring_rules = roster.get("scoring_rules", {}) if roster else {}
-    plan_all = plan_relevant_games_and_markets(roster, ((this_start, this_end), (next_start, next_end)), regions=region, cache_mode=eff_mode)
+    plan_all = plan_relevant_games_and_markets(
+        roster,
+        ((this_start, this_end), (next_start, next_end)),
+        regions=region,
+        cache_mode=eff_mode,
+    )
     planned = plan_all.get(week, {})
     # Fetch odds for planned games
     odds_by_week = _fetch_odds({week: planned}, cache_mode=eff_mode, regions=region)
@@ -1181,7 +1391,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     # Aggregate
     per_player_odds, per_player_summaries = aggregate_by_week(ev_odds, planned)
     # Build alias->info map
-    info_by_alias: Dict[str, dict] = {}
+    info_by_alias: dict[str, dict] = {}
     for g in planned.values():
         for p in g.players:
             info_by_alias[p["alias"]] = p
@@ -1200,7 +1410,13 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
                 target_alias = alias
                 break
     if target_alias is None:
-        return {"player": {"name": name}, "markets": {}, "primary_order": [], "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details()}
+        return {
+            "player": {"name": name},
+            "markets": {},
+            "primary_order": [],
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+        }
 
     by_book = per_player_odds.get(target_alias, {})
     market_summaries = per_player_summaries.get(target_alias, {})
@@ -1208,7 +1424,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     # Predicted mean stats per market (averaged over books)
     mean_stats = predict_stats_for_player(by_book)
     # Compute rough impact score = abs(mean * multiplier)
-    impacts: Dict[str, float] = {}
+    impacts: dict[str, float] = {}
     for mkey, mean_val in mean_stats.items():
         rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
         mult = 0.0
@@ -1224,11 +1440,16 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     # Build per-market details
     # Also compute per-market stat quantiles and fantasy point contributions
     try:
-        from .range_model import compute_fantasy_range_model, compute_fantasy_range
+        from .range_model import compute_fantasy_range, compute_fantasy_range_model
+
         if (model or "baseline").lower() == "baseline":
-            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range(by_book, market_summaries, scoring_rules)
+            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range(
+                by_book, market_summaries, scoring_rules
+            )
         else:
-            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range_model(by_book, market_summaries, scoring_rules, model=model)
+            _floor, _mid, _ceil, per_market_ranges = compute_fantasy_range_model(
+                by_book, market_summaries, scoring_rules, model=model
+            )
     except Exception:
         per_market_ranges = {}
 
@@ -1247,8 +1468,14 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             return round(q10 * mult, 2), round(q50 * mult, 2), round(q90 * mult, 2)
         except Exception:
             return 0.0, 0.0, 0.0
-    markets_out: Dict[str, dict] = {}
-    for mkey in set(list(by_book.keys()) + list(market_summaries.keys()) + list(mean_stats.keys()) + list(per_market_ranges.keys())):
+
+    markets_out: dict[str, dict] = {}
+    for mkey in set(
+        list(by_book.keys())
+        + list(market_summaries.keys())
+        + list(mean_stats.keys())
+        + list(per_market_ranges.keys())
+    ):
         # Per-book rows
         books = []
         alts_out = {"over": [], "under": []}
@@ -1258,17 +1485,23 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             alts = (sides or {}).get("alts")
             if alts and (isinstance(alts, dict)):
                 try:
-                    for it in (alts.get("over") or []):
-                        alts_out["over"].append({"book": book_key, "point": it.get("point"), "odds": it.get("odds")})
-                    for it in (alts.get("under") or []):
-                        alts_out["under"].append({"book": book_key, "point": it.get("point"), "odds": it.get("odds")})
+                    for it in alts.get("over") or []:
+                        alts_out["over"].append(
+                            {"book": book_key, "point": it.get("point"), "odds": it.get("odds")}
+                        )
+                    for it in alts.get("under") or []:
+                        alts_out["under"].append(
+                            {"book": book_key, "point": it.get("point"), "odds": it.get("odds")}
+                        )
                 except Exception:
                     pass
-            books.append({
-                "book": book_key,
-                "over": sides.get("over"),
-                "under": sides.get("under"),
-            })
+            books.append(
+                {
+                    "book": book_key,
+                    "over": sides.get("over"),
+                    "under": sides.get("under"),
+                }
+            )
         summ = market_summaries.get(mkey)
         m_summ = None
         if summ is not None:
@@ -1283,7 +1516,11 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             "summary": m_summ,
             "mean_stat": mean_stats.get(mkey),
             "impact_score": impacts.get(mkey, 0.0),
-            "range": (per_market_ranges.get(mkey) if m_summ is not None or mkey in per_market_ranges else None),
+            "range": (
+                per_market_ranges.get(mkey)
+                if m_summ is not None or mkey in per_market_ranges
+                else None
+            ),
             "fp_floor": f_floor,
             "fp_mid": f_mid,
             "fp_ceiling": f_ceil,
@@ -1291,17 +1528,19 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         }
         # Attach alternates if present (combined across books)
         try:
-            if (alts_out["over"] or alts_out["under"]):
+            if alts_out["over"] or alts_out["under"]:
                 entry["alts"] = alts_out
         except Exception:
             pass
         markets_out[mkey] = entry
 
     # Build debug math payload mirroring range model logic
-    debug_math: Dict[str, object] = {}
+    debug_math: dict[str, object] = {}
     try:
         # Helper: normalized p_over and sigma based on summary
-        def _calc_sigma(mean: float, threshold: float, p_over: float, p_under: float) -> tuple[float, float, float, bool]:
+        def _calc_sigma(
+            mean: float, threshold: float, p_over: float, p_under: float
+        ) -> tuple[float, float, float, bool]:
             total = (p_over or 0.0) + (p_under or 0.0)
             p = (p_over / total) if total > 0 else 0.5
             # Clamp away from 0/1 to avoid inf
@@ -1315,7 +1554,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             return p, z, sigma, False
 
         # Per-market details
-        pm_debug: Dict[str, object] = {}
+        pm_debug: dict[str, object] = {}
         for mkey, mdata in markets_out.items():
             summ = mdata.get("summary") or {}
             thr = float(summ.get("avg_threshold") or 0.0)
@@ -1326,7 +1565,11 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             q15, q50, q85 = (None, None, None)
             if rng and isinstance(rng, (list, tuple)) and len(rng) == 3:
                 q15, q50, q85 = rng
-            pnorm, z, sigma, used_fallback = _calc_sigma(mean, thr, pov, pun) if (mkey != "player_anytime_td" and thr != 0) else (None, None, None, False)
+            pnorm, z, sigma, used_fallback = (
+                _calc_sigma(mean, thr, pov, pun)
+                if (mkey != "player_anytime_td" and thr != 0)
+                else (None, None, None, False)
+            )
             # FP contributions for this market
             rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
             mult = float(scoring_rules.get(rule, 0.0) or 0.0) if rule else 0.0
@@ -1366,6 +1609,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             except Exception:
                 return 0.0
             return 0.0
+
         def _bonus_rush(y: float) -> float:
             try:
                 if y is None:
@@ -1377,6 +1621,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             except Exception:
                 return 0.0
             return 0.0
+
         def _bonus_rec(y: float) -> float:
             try:
                 if y is None:
@@ -1389,7 +1634,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
                 return 0.0
             return 0.0
 
-        def _get_stat(qidx: int, key: str) -> Optional[float]:
+        def _get_stat(qidx: int, key: str) -> float | None:
             rng = per_market_ranges.get(key)
             if not rng:
                 return None
@@ -1426,13 +1671,15 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         debug_math = {}
 
     pinfo = info_by_alias.get(target_alias, {})
+
     # Importance classification (vital vs minor) with PPR gating
     def _is_ppr(sc: dict) -> bool:
         try:
             return float(sc.get("rec", 0) or 0) > 0
         except Exception:
             return False
-    def _importance_for_pos(pos: Optional[str], scoring: dict) -> tuple[set[str], set[str]]:
+
+    def _importance_for_pos(pos: str | None, scoring: dict) -> tuple[set[str], set[str]]:
         p = (pos or "").upper()
         ppr = _is_ppr(scoring)
         vital: set[str] = set()
@@ -1444,11 +1691,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
             vital = {"player_rush_yds", "player_anytime_td"}
             (vital.add("player_receptions") if ppr else minor.add("player_receptions"))
             minor.add("player_reception_yds")
-        elif p == "WR":
-            vital = {"player_reception_yds", "player_anytime_td"}
-            (vital.add("player_receptions") if ppr else minor.add("player_receptions"))
-            minor.add("player_rush_yds")
-        elif p == "TE":
+        elif p == "WR" or p == "TE":
             vital = {"player_reception_yds", "player_anytime_td"}
             (vital.add("player_receptions") if ppr else minor.add("player_receptions"))
             minor.add("player_rush_yds")
@@ -1458,6 +1701,7 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         vital &= PRIMARY_MARKET_WHITELIST
         minor &= PRIMARY_MARKET_WHITELIST
         return vital, minor
+
     vital_keys, minor_keys = _importance_for_pos(pinfo.get("primary_position"), scoring_rules)
     payload = {
         "player": {
@@ -1468,8 +1712,8 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
         "markets": markets_out,
         "primary_order": primary,
         "all_order": order,
-        "vital_keys": sorted(list(vital_keys)),
-        "minor_keys": sorted(list(minor_keys)),
+        "vital_keys": sorted(vital_keys),
+        "minor_keys": sorted(minor_keys),
         # Attach raw event odds for debugging/verification
         "raw_odds": ev_odds,
         "ratelimit": ratelimit.format_status(),
@@ -1479,7 +1723,14 @@ def get_player_odds_details(username: str, season: str, week: str = "this", regi
     return payload
 
 
-def get_defense_odds_details(username: str, season: str, week: str = "this", defense: str = "", cache_mode: str = "auto", region: str = "us") -> Dict:
+def get_defense_odds_details(
+    username: str,
+    season: str,
+    week: str = "this",
+    defense: str = "",
+    cache_mode: str = "auto",
+    region: str = "us",
+) -> dict:
     """Return per-book totals/spreads and implied totals for opponent against this defense.
 
     Sorted by implied total ascending per game, includes medians.
@@ -1488,21 +1739,39 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
     events = odds_client.get_nfl_events(regions=region, mode=eff_mode)
     windows = resolve_week_windows(events)
     if windows is None:
-        return {"defense": defense, "week": week, "games": [], "raw_odds": {}, "ratelimit": ratelimit.format_status(), "ratelimit_info": ratelimit.get_details(), "message": NO_GAMES_SCHEDULED_MESSAGE}
+        return {
+            "defense": defense,
+            "week": week,
+            "games": [],
+            "raw_odds": {},
+            "ratelimit": ratelimit.format_status(),
+            "ratelimit_info": ratelimit.get_details(),
+            "message": NO_GAMES_SCHEDULED_MESSAGE,
+        }
     (this_start, this_end), (next_start, next_end) = windows
     # Window and events
-    start, end = ((this_start, this_end) if week == "this" else (next_start, next_end))
-    window_events = [e for e in events if start <= dt.datetime.strptime(e['commence_time'], "%Y-%m-%dT%H:%M:%SZ") <= end]
+    start, end = (this_start, this_end) if week == "this" else (next_start, next_end)
+    window_events = [
+        e
+        for e in events
+        if start <= dt.datetime.strptime(e["commence_time"], "%Y-%m-%dT%H:%M:%SZ") <= end
+    ]
     # Find games with this defense
     games = [e for e in window_events if defense in (e.get("home_team"), e.get("away_team"))]
     details = []
-    raw_map: Dict[str, object] = {}
+    raw_map: dict[str, object] = {}
     for e in games:
         gid = e["id"]
         opp = e["away_team"] if e["home_team"] == defense else e["home_team"]
-        ev_odds = odds_client.get_event_player_odds(gid, markets="spreads,totals", regions=region, mode=eff_mode)
+        ev_odds = odds_client.get_event_player_odds(
+            gid, markets="spreads,totals", regions=region, mode=eff_mode
+        )
         # Normalize
-        ev_obj = ev_odds[0] if isinstance(ev_odds, list) and ev_odds else (ev_odds if isinstance(ev_odds, dict) else None)
+        ev_obj = (
+            ev_odds[0]
+            if isinstance(ev_odds, list) and ev_odds
+            else (ev_odds if isinstance(ev_odds, dict) else None)
+        )
         if not ev_obj:
             continue
         raw_map[gid] = ev_obj
@@ -1527,25 +1796,37 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
                     implieds.append(impl)
             except Exception:
                 impl = None
-            books_rows.append({
-                "book": book.get("key"),
-                "total_point": total_pt,
-                "opponent_spread": opp_spread,
-                "opponent_implied": impl,
-            })
+            books_rows.append(
+                {
+                    "book": book.get("key"),
+                    "total_point": total_pt,
+                    "opponent_spread": opp_spread,
+                    "opponent_implied": impl,
+                }
+            )
         median = None
         if implieds:
             implieds.sort()
-            median = implieds[len(implieds)//2] if len(implieds) % 2 == 1 else (implieds[len(implieds)//2 -1] + implieds[len(implieds)//2])/2
-        details.append({
-            "game_id": gid,
-            "opponent": opp,
-            "commence_time": e.get("commence_time"),
-            "books": books_rows,
-            "implied_total_median": median,
-        })
+            median = (
+                implieds[len(implieds) // 2]
+                if len(implieds) % 2 == 1
+                else (implieds[len(implieds) // 2 - 1] + implieds[len(implieds) // 2]) / 2
+            )
+        details.append(
+            {
+                "game_id": gid,
+                "opponent": opp,
+                "commence_time": e.get("commence_time"),
+                "books": books_rows,
+                "implied_total_median": median,
+            }
+        )
     # Sort games by implied total ascending
-    details.sort(key=lambda g: (g.get("implied_total_median") if g.get("implied_total_median") is not None else 9999))
+    details.sort(
+        key=lambda g: (
+            g.get("implied_total_median") if g.get("implied_total_median") is not None else 9999
+        )
+    )
     return {
         "defense": defense,
         "week": week,
@@ -1555,9 +1836,3 @@ def get_defense_odds_details(username: str, season: str, week: str = "this", def
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }
-
-
-
-
-
-

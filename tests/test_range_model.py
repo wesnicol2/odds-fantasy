@@ -10,7 +10,6 @@ from refactored import range_model
 from refactored.prob_models import poisson_quantile
 from refactored.services import build_lineup
 
-
 # A fairly standard Sleeper-style scoring dict, points-allowed portion only.
 DEF_SCORING = {
     "pts_allow_0": 10,
@@ -51,7 +50,9 @@ class DefenseFantasyRangeTest(unittest.TestCase):
 
     def test_ceiling_never_below_floor(self):
         for implied_total in (3.0, 17.5, 24.0, 31.0, 45.0):
-            floor, mid, ceiling = range_model.compute_defense_fantasy_range(implied_total, DEF_SCORING)
+            floor, mid, ceiling = range_model.compute_defense_fantasy_range(
+                implied_total, DEF_SCORING
+            )
             self.assertGreaterEqual(ceiling, floor)
 
     def test_empty_scoring_rules_is_zero_not_error(self):
@@ -66,7 +67,11 @@ class MarketQuantilesFallbackShapeTest(unittest.TestCase):
         # should exceed the gap from floor->mid (lognormal), rather than the
         # symmetric spread a bare Normal fallback would produce.
         q15, q50, q85 = range_model._market_quantiles(
-            "player_rush_yds", mean=60.0, threshold=49.5, p_over=0.62, p_under=0.42,
+            "player_rush_yds",
+            mean=60.0,
+            threshold=49.5,
+            p_over=0.62,
+            p_under=0.42,
         )
         self.assertGreater(q15, 0.0)
         self.assertLess(q15, q50)
@@ -77,7 +82,11 @@ class MarketQuantilesFallbackShapeTest(unittest.TestCase):
 
     def test_count_market_uses_poisson_shape(self):
         q15, q50, q85 = range_model._market_quantiles(
-            "player_receptions", mean=4.0, threshold=3.5, p_over=0.55, p_under=0.5,
+            "player_receptions",
+            mean=4.0,
+            threshold=3.5,
+            p_over=0.55,
+            p_under=0.5,
         )
         self.assertLessEqual(q15, q50)
         self.assertLessEqual(q50, q85)
@@ -85,7 +94,11 @@ class MarketQuantilesFallbackShapeTest(unittest.TestCase):
 
     def test_anytime_td_is_bernoulli(self):
         q15, q50, q85 = range_model._market_quantiles(
-            "player_anytime_td", mean=0.4, threshold=0, p_over=0.4, p_under=0.6,
+            "player_anytime_td",
+            mean=0.4,
+            threshold=0,
+            p_over=0.4,
+            p_under=0.6,
         )
         self.assertIn(q15, (0.0, 1.0))
         self.assertIn(q85, (0.0, 1.0))

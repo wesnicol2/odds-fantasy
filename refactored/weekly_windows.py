@@ -1,5 +1,4 @@
 import datetime as _dt
-from typing import List, Optional, Tuple
 
 
 def _next_weekday(base: _dt.datetime, weekday: int) -> _dt.datetime:
@@ -18,7 +17,9 @@ def _prev_weekday(base: _dt.datetime, weekday: int) -> _dt.datetime:
     return base - _dt.timedelta(days=delta)
 
 
-def compute_week_windows(now_utc: _dt.datetime | None = None) -> Tuple[Tuple[_dt.datetime, _dt.datetime], Tuple[_dt.datetime, _dt.datetime]]:
+def compute_week_windows(
+    now_utc: _dt.datetime | None = None,
+) -> tuple[tuple[_dt.datetime, _dt.datetime], tuple[_dt.datetime, _dt.datetime]]:
     """Compute [Thu 00:00 -> Mon 23:59:59] windows.
 
     Rule: "This weekend" covers the current Thu->Mon cycle until Tuesday; on Tuesday it flips to the
@@ -34,10 +35,7 @@ def compute_week_windows(now_utc: _dt.datetime | None = None) -> Tuple[Tuple[_dt
 
     # If we are still within (or before end of) the current Thu->Mon window, use that as "this"
     # Otherwise (Tue and onward past Monday end), advance to the next Thu->Mon
-    if now_utc <= prev_mon_end:
-        this_thu = prev_thu
-    else:
-        this_thu = next_thu
+    this_thu = prev_thu if now_utc <= prev_mon_end else next_thu
 
     this_mon_end = this_thu + _dt.timedelta(days=4, hours=23, minutes=59, seconds=59)
     next_thu2 = this_thu + _dt.timedelta(days=7)
@@ -46,7 +44,7 @@ def compute_week_windows(now_utc: _dt.datetime | None = None) -> Tuple[Tuple[_dt
     return (this_thu, this_mon_end), (next_thu2, next_mon_end)
 
 
-def in_window(ts_iso_utc: str, window: Tuple[_dt.datetime, _dt.datetime]) -> bool:
+def in_window(ts_iso_utc: str, window: tuple[_dt.datetime, _dt.datetime]) -> bool:
     """Check if an ISO timestamp (with trailing Z) falls inside [start,end] inclusive.
 
     TheOddsAPI returns e.g. '2025-09-07T17:00:00Z'.
@@ -61,7 +59,9 @@ def in_window(ts_iso_utc: str, window: Tuple[_dt.datetime, _dt.datetime]) -> boo
     return start <= dt <= end
 
 
-def earliest_future_week_start(events: List[dict], now_utc: Optional[_dt.datetime] = None) -> Optional[_dt.datetime]:
+def earliest_future_week_start(
+    events: list[dict], now_utc: _dt.datetime | None = None
+) -> _dt.datetime | None:
     """Thursday anchoring the earliest not-yet-started game in `events`, or
     None if there are no games left to play (e.g. schedule/odds not posted
     yet). Shared by draft_prep's "Week 1" anchoring and
@@ -69,7 +69,7 @@ def earliest_future_week_start(events: List[dict], now_utc: Optional[_dt.datetim
     of the soonest real game," just for different reasons.
     """
     now_utc = now_utc or _dt.datetime.utcnow()
-    future_starts: List[_dt.datetime] = []
+    future_starts: list[_dt.datetime] = []
     for e in events:
         ts = e.get("commence_time")
         if not ts:
@@ -86,8 +86,8 @@ def earliest_future_week_start(events: List[dict], now_utc: Optional[_dt.datetim
 
 
 def resolve_week_windows(
-    events: List[dict], now_utc: Optional[_dt.datetime] = None
-) -> Optional[Tuple[Tuple[_dt.datetime, _dt.datetime], Tuple[_dt.datetime, _dt.datetime]]]:
+    events: list[dict], now_utc: _dt.datetime | None = None
+) -> tuple[tuple[_dt.datetime, _dt.datetime], tuple[_dt.datetime, _dt.datetime]] | None:
     """Like compute_week_windows, but falls forward to the schedule when
     today's calendar-anchored "this" window has no real games in it.
 

@@ -13,9 +13,17 @@ from refactored import draft_prep
 FAKE_SLEEPER_PLAYERS = {
     "1": {"full_name": "Josh Allen", "position": "QB", "team": "BUF"},
     "2": {"full_name": "James Cook", "position": "RB", "team": "BUF"},
-    "3": {"full_name": "Some Kicker", "position": "K", "team": "BUF"},  # excluded: not a draft position
+    "3": {
+        "full_name": "Some Kicker",
+        "position": "K",
+        "team": "BUF",
+    },  # excluded: not a draft position
     "4": {"full_name": "Free Agent Guy", "position": "WR", "team": None},  # excluded: no team
-    "5": {"full_name": "Retired Guy", "position": "RB", "team": "ZZZ"},  # excluded: unmapped team abbr
+    "5": {
+        "full_name": "Retired Guy",
+        "position": "RB",
+        "team": "ZZZ",
+    },  # excluded: unmapped team abbr
     "6": {"full_name": "Patrick Mahomes", "position": "QB", "team": "KC"},
 }
 
@@ -47,7 +55,9 @@ class ResolveDraftWeekWindowTest(unittest.TestCase):
     def test_none_when_no_upcoming_games(self):
         now = dt.datetime(2026, 8, 19)
         past_game = {"commence_time": _ts(now - dt.timedelta(days=5))}
-        self.assertIsNone(draft_prep._resolve_draft_week_window([past_game], which="this", now_utc=now))
+        self.assertIsNone(
+            draft_prep._resolve_draft_week_window([past_game], which="this", now_utc=now)
+        )
 
     def test_week1_anchors_to_earliest_future_game_not_today(self):
         # "Today" is deep in the off-season; the earliest real game is over

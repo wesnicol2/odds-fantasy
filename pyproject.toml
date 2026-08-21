@@ -1,0 +1,47 @@
+[project]
+name = "odds-fantasy"
+version = "0.1.0"
+description = "Betting-line-derived fantasy football projections for Sleeper rosters"
+requires-python = ">=3.11"
+# Runtime dependencies live in requirements.txt -- that is what the Dockerfile
+# installs. Listing them here too would just give them somewhere to drift apart.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.16",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import sorting
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "PERF", # performance
+    "RUF",  # ruff-specific
+]
+ignore = [
+    # The formatter owns line length; flagging it again just adds noise.
+    "E501",
+    # This codebase deliberately swallows errors at API/network boundaries so a
+    # single bad bookmaker payload can't take down a whole projection run.
+    "S110",
+    "BLE001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests bind fixtures and intermediate values that exist for readability, and
+# they bootstrap sys.path before importing the package under test.
+"tests/*" = ["RUF059", "E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,35 +1,40 @@
-import os
 import json
+import os
 import time
+
 import requests
-from config import SLEEPER_TO_ODDSAPI_TEAM, DATA_DIR
+
+from config import DATA_DIR, SLEEPER_TO_ODDSAPI_TEAM
 
 SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
 # Allow overriding request timeouts via env; default (connect=5s, read=20s)
-_conn_to = float(os.getenv('SLEEPER_CONNECT_TIMEOUT', '5') or 5)
-_read_to = float(os.getenv('SLEEPER_READ_TIMEOUT', '20') or 20)
+_conn_to = float(os.getenv("SLEEPER_CONNECT_TIMEOUT", "5") or 5)
+_read_to = float(os.getenv("SLEEPER_READ_TIMEOUT", "20") or 20)
 REQ_TIMEOUT = (_conn_to, _read_to)  # (connect, read) seconds
 _PLAYERS_CACHE = None
-_PLAYERS_CACHE_FILE = os.path.join(DATA_DIR, 'sleeper_players.json')
-_PLAYERS_TTL = int(os.getenv('SLEEPER_PLAYERS_TTL', '86400'))  # 24h
+_PLAYERS_CACHE_FILE = os.path.join(DATA_DIR, "sleeper_players.json")
+_PLAYERS_TTL = int(os.getenv("SLEEPER_PLAYERS_TTL", "86400"))  # 24h
 
 
 def get_player_enhanced_info(player_id):
-        """
-        Given a Sleeper player ID and the players metadata dict, return a dict with:
-            - full_name: Player's full name (for Odds API matching)
-            - team: NFL team (abbreviation or full name as available)
-            - position: Player's position
-        """
-        players_metadata = get_players()
-        pdata = players_metadata.get(player_id, {})
-        # TODO: Convert sleeper format to format which fits odds api here
-        return {
-            "editorial_team_full_name": SLEEPER_TO_ODDSAPI_TEAM.get(pdata.get("team")),  # or map to full team name if needed
-            "primary_position": pdata.get("position"),
-            "name": {"full": pdata.get("full_name", player_id)},
-            # add more fields if needed
+    """
+    Given a Sleeper player ID and the players metadata dict, return a dict with:
+        - full_name: Player's full name (for Odds API matching)
+        - team: NFL team (abbreviation or full name as available)
+        - position: Player's position
+    """
+    players_metadata = get_players()
+    pdata = players_metadata.get(player_id, {})
+    # TODO: Convert sleeper format to format which fits odds api here
+    return {
+        "editorial_team_full_name": SLEEPER_TO_ODDSAPI_TEAM.get(
+            pdata.get("team")
+        ),  # or map to full team name if needed
+        "primary_position": pdata.get("position"),
+        "name": {"full": pdata.get("full_name", player_id)},
+        # add more fields if needed
     }
+
 
 def get_enhanced_info_for_roster(roster):
     """
@@ -37,10 +42,10 @@ def get_enhanced_info_for_roster(roster):
     as much info as needed (name, team, position, etc...)
     """
     enhanced_roster = {}
-    for pid in roster.get('players', []):
+    for pid in roster.get("players", []):
         enhanced_roster[pid] = get_player_enhanced_info(pid)
     return enhanced_roster
-        
+
 
 def get_user_sleeper_data(username, season):
     """
@@ -51,16 +56,13 @@ def get_user_sleeper_data(username, season):
     leagues = get_user_leagues(user_id, season)
     if not leagues:
         return None
-    league_id = leagues[0]['league_id'] # TODO: Enhance to handle multiple leagues
+    league_id = leagues[0]["league_id"]  # TODO: Enhance to handle multiple leagues
     rosters = get_league_rosters(league_id)
-    scoring_settings = leagues[0].get('scoring_settings', {})
+    scoring_settings = leagues[0].get("scoring_settings", {})
     for roster in rosters:
-        if roster.get('owner_id') == user_id:
+        if roster.get("owner_id") == user_id:
             enhanced_roster = get_enhanced_info_for_roster(roster)
-            return {
-                'players': enhanced_roster,
-                'scoring_rules': scoring_settings
-            }
+            return {"players": enhanced_roster, "scoring_rules": scoring_settings}
     return None
 
 
@@ -103,13 +105,14 @@ def get_league_users(league_id):
     response.raise_for_status()
     return response.json()
 
+
 def get_league_id_for_user(username, season):
     """Return the first league_id for a user in a season (simple default)."""
     user_id = get_user_id(username)
     leagues = get_user_leagues(user_id, season)
     if not leagues:
         return None, user_id
-    return leagues[0]['league_id'], user_id
+    return leagues[0]["league_id"], user_id
 
 
 def get_league(league_id):
@@ -136,19 +139,27 @@ def get_league_teams(league_id):
     """
     rosters = get_league_rosters(league_id)
     users = get_league_users(league_id)
-    display_name_by_owner = {u.get('user_id'): (u.get('display_name') or u.get('username')) for u in (users or [])}
+    display_name_by_owner = {
+        u.get("user_id"): (u.get("display_name") or u.get("username")) for u in (users or [])
+    }
 
     teams = []
-    for r in (rosters or []):
-        owner_id = r.get('owner_id')
+    for r in rosters or []:
+        owner_id = r.get("owner_id")
         display_name = display_name_by_owner.get(owner_id)
-        team_name = (r.get('metadata') or {}).get('team_name') or display_name or f"Team {r.get('roster_id')}"
-        teams.append({
-            "roster_id": r.get('roster_id'),
-            "owner_id": owner_id,
-            "team_name": team_name,
-            "display_name": display_name,
-        })
+        team_name = (
+            (r.get("metadata") or {}).get("team_name")
+            or display_name
+            or f"Team {r.get('roster_id')}"
+        )
+        teams.append(
+            {
+                "roster_id": r.get("roster_id"),
+                "owner_id": owner_id,
+                "team_name": team_name,
+                "display_name": display_name,
+            }
+        )
     teams.sort(key=lambda t: (t["roster_id"] is None, t["roster_id"]))
     return teams
 
@@ -167,21 +178,21 @@ def get_league_roster_data(league_id, roster_id=None):
     even before a specific team is chosen.
     """
     league = get_league(league_id)
-    scoring_settings = league.get('scoring_settings', {}) or {}
+    scoring_settings = league.get("scoring_settings", {}) or {}
 
     enhanced_roster = {}
     if roster_id is not None:
         rosters = get_league_rosters(league_id)
-        roster = next((r for r in (rosters or []) if r.get('roster_id') == roster_id), None)
+        roster = next((r for r in (rosters or []) if r.get("roster_id") == roster_id), None)
         if roster:
             enhanced_roster = get_enhanced_info_for_roster(roster)
 
     return {
-        'players': enhanced_roster,
-        'scoring_rules': scoring_settings,
-        'status': league.get('status'),
-        'season': league.get('season'),
-        'name': league.get('name'),
+        "players": enhanced_roster,
+        "scoring_rules": scoring_settings,
+        "status": league.get("status"),
+        "season": league.get("season"),
+        "name": league.get("name"),
     }
 
 
@@ -198,7 +209,7 @@ def get_players(fresh: bool = False):
         if (not fresh) and os.path.exists(_PLAYERS_CACHE_FILE):
             mtime = os.path.getmtime(_PLAYERS_CACHE_FILE)
             if (time.time() - mtime) < _PLAYERS_TTL:
-                with open(_PLAYERS_CACHE_FILE, 'r') as f:
+                with open(_PLAYERS_CACHE_FILE) as f:
                     _PLAYERS_CACHE = json.load(f)
                     return _PLAYERS_CACHE
     except Exception:
@@ -212,21 +223,24 @@ def get_players(fresh: bool = False):
     # Save to disk best-effort
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        with open(_PLAYERS_CACHE_FILE, 'w') as f:
+        with open(_PLAYERS_CACHE_FILE, "w") as f:
             json.dump(data, f)
     except Exception:
         pass
     return data
 
+
 def get_available_defenses(username, season):
     # 1. Get all player metadata
     all_players = get_players()
-    all_defenses = {pid: pdata for pid, pdata in all_players.items() if pdata.get("position") == "DEF"}
+    all_defenses = {
+        pid: pdata for pid, pdata in all_players.items() if pdata.get("position") == "DEF"
+    }
 
     # 2. Get all rosters in the league
     user_id = get_user_id(username)
     leagues = get_user_leagues(user_id, season)
-    league_id = leagues[0]['league_id'] # TODO: Enhance to handle multiple leagues
+    league_id = leagues[0]["league_id"]  # TODO: Enhance to handle multiple leagues
     rosters = get_league_rosters(league_id)
     owned_def_ids = set()
     for roster in rosters:
@@ -235,5 +249,7 @@ def get_available_defenses(username, season):
                 owned_def_ids.add(pid)
 
     # 3. Find unowned defenses
-    available_defenses = {pid: pdata for pid, pdata in all_defenses.items() if pid not in owned_def_ids}
+    available_defenses = {
+        pid: pdata for pid, pdata in all_defenses.items() if pid not in owned_def_ids
+    }
     return available_defenses

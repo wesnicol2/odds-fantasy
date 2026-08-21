@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import argparse
-from typing import Dict
 
 import sleeper_api
 
-from .weekly_windows import compute_week_windows
-from .planner import plan_relevant_games_and_markets
+from . import odds_client, ratelimit
 from .aggregator import aggregate_by_week
+from .debug_tools import debug_rb_calculations, debug_te_calculations, debug_wr_calculations
+from .planner import plan_relevant_games_and_markets
 from .range_model import compute_fantasy_range
-from . import ratelimit
-from . import odds_client
-from .debug_tools import debug_rb_calculations, debug_wr_calculations, debug_te_calculations
+from .weekly_windows import compute_week_windows
 
 
 def _print_header(msg: str):
@@ -28,7 +26,7 @@ def _print_ratelimit(tag: str = ""):
         print(f"[RateLimit] {status}")
 
 
-def _print_plan_summary(plan_by_week: Dict[str, dict]):
+def _print_plan_summary(plan_by_week: dict[str, dict]):
     for w in ("this", "next"):
         plan = plan_by_week.get(w, {})
         games = len(plan)
@@ -42,8 +40,10 @@ def _print_plan_summary(plan_by_week: Dict[str, dict]):
                 print(f"      markets sample: {sample}")
 
 
-def _fetch_event_odds_for_plan(plan_by_week: Dict[str, dict], use_saved_data: bool) -> Dict[str, Dict[str, list]]:
-    out: Dict[str, Dict[str, list]] = {"this": {}, "next": {}}
+def _fetch_event_odds_for_plan(
+    plan_by_week: dict[str, dict], use_saved_data: bool
+) -> dict[str, dict[str, list]]:
+    out: dict[str, dict[str, list]] = {"this": {}, "next": {}}
     SAFE_MARKETS = {
         # widely supported
         "player_anytime_td",
@@ -64,7 +64,9 @@ def _fetch_event_odds_for_plan(plan_by_week: Dict[str, dict], use_saved_data: bo
             markets_str = ",".join(markets)
             print(f"    Fetching odds for {w} week game {gid} | markets={len(markets)}")
             try:
-                out[w][gid] = odds_client.get_event_player_odds(event_id=gid, markets=markets_str, use_saved_data=use_saved_data)
+                out[w][gid] = odds_client.get_event_player_odds(
+                    event_id=gid, markets=markets_str, use_saved_data=use_saved_data
+                )
                 _print_ratelimit(f"after fetch {w}:{gid}")
             except Exception as e:
                 print(f"      fetch failed ({type(e).__name__}): {e}")
@@ -73,7 +75,9 @@ def _fetch_event_odds_for_plan(plan_by_week: Dict[str, dict], use_saved_data: bo
                 if filt and filt != markets:
                     print(f"      retrying with safe markets subset ({len(filt)})")
                     try:
-                        out[w][gid] = odds_client.get_event_player_odds(event_id=gid, markets=",".join(filt), use_saved_data=use_saved_data)
+                        out[w][gid] = odds_client.get_event_player_odds(
+                            event_id=gid, markets=",".join(filt), use_saved_data=use_saved_data
+                        )
                         _print_ratelimit(f"after fetch (safe subset) {w}:{gid}")
                     except Exception as e2:
                         print(f"      still failed: {e2}; skipping game {gid}")
@@ -83,7 +87,7 @@ def _fetch_event_odds_for_plan(plan_by_week: Dict[str, dict], use_saved_data: bo
 
 
 def _format_table(rows, headers):
-    cols = list(zip(*([headers] + rows))) if rows else [headers]
+    cols = list(zip(*([headers, *rows]), strict=False)) if rows else [headers]
     widths = [max(len(str(c)) for c in col) for col in cols]
     fmt = "  ".join([f"{{:<{w}}}" for w in widths])
     print(fmt.format(*headers))
@@ -92,7 +96,13 @@ def _format_table(rows, headers):
         print(fmt.format(*r))
 
 
-def run(username: str, season: str, use_saved_data: bool, region: str, debug_positions: set[str] | None = None):
+def run(
+    username: str,
+    season: str,
+    use_saved_data: bool,
+    region: str,
+    debug_positions: set[str] | None = None,
+):
     # Step 1: Roster
     _print_header("Step 1/5: Fetch roster from Sleeper")
     roster = sleeper_api.get_user_sleeper_data(username, season)
@@ -101,12 +111,14 @@ def run(username: str, season: str, use_saved_data: bool, region: str, debug_pos
         return
     players = roster.get("players", {})
     print(f"Fetched {len(players)} players. Example:")
-    for pid, p in list(players.items())[:5]:
-        print(f"  - {p['name']['full']} | {p.get('primary_position')} | {p.get('editorial_team_full_name')}")
+    for _pid, p in list(players.items())[:5]:
+        print(
+            f"  - {p['name']['full']} | {p.get('primary_position')} | {p.get('editorial_team_full_name')}"
+        )
     # Positions breakdown
     pos_counts = {}
     for p in players.values():
-        pos = p.get('primary_position') or 'UNK'
+        pos = p.get("primary_position") or "UNK"
         pos_counts[pos] = pos_counts.get(pos, 0) + 1
     if pos_counts:
         print("  Positions:")
@@ -153,28 +165,52 @@ def run(username: str, season: str, use_saved_data: bool, region: str, debug_pos
         for alias, by_book in per_player_odds.items():
             p_info = info_by_alias.get(alias, {})
             scoring_rules = roster.get("scoring_rules", {})
-            floor, mid, ceil, _ = compute_fantasy_range(by_book, per_player_summaries.get(alias, {}), scoring_rules)
-            rows.append([
-                p_info.get("full_name", alias),
-                p_info.get("primary_position", ""),
-                p_info.get("editorial_team_full_name", ""),
-                f"{floor:.2f}",
-                f"{mid:.2f}",
-                f"{ceil:.2f}",
-            ])
+            floor, mid, ceil, _ = compute_fantasy_range(
+                by_book, per_player_summaries.get(alias, {}), scoring_rules
+            )
+            rows.append(
+                [
+                    p_info.get("full_name", alias),
+                    p_info.get("primary_position", ""),
+                    p_info.get("editorial_team_full_name", ""),
+                    f"{floor:.2f}",
+                    f"{mid:.2f}",
+                    f"{ceil:.2f}",
+                ]
+            )
 
             # Optional detailed debug per position
             if debug_positions:
                 pos = (p_info.get("primary_position") or "").upper()
                 try:
                     if "RB" in debug_positions and pos == "RB":
-                        debug_rb_calculations(p_info.get("full_name", alias), p_info, by_book, per_player_summaries.get(alias, {}), scoring_rules)
+                        debug_rb_calculations(
+                            p_info.get("full_name", alias),
+                            p_info,
+                            by_book,
+                            per_player_summaries.get(alias, {}),
+                            scoring_rules,
+                        )
                     if "WR" in debug_positions and pos == "WR":
-                        debug_wr_calculations(p_info.get("full_name", alias), p_info, by_book, per_player_summaries.get(alias, {}), scoring_rules)
+                        debug_wr_calculations(
+                            p_info.get("full_name", alias),
+                            p_info,
+                            by_book,
+                            per_player_summaries.get(alias, {}),
+                            scoring_rules,
+                        )
                     if "TE" in debug_positions and pos == "TE":
-                        debug_te_calculations(p_info.get("full_name", alias), p_info, by_book, per_player_summaries.get(alias, {}), scoring_rules)
+                        debug_te_calculations(
+                            p_info.get("full_name", alias),
+                            p_info,
+                            by_book,
+                            per_player_summaries.get(alias, {}),
+                            scoring_rules,
+                        )
                 except Exception as e:
-                    print(f"[DEBUG] error while debugging {p_info.get('full_name', alias)} ({pos}): {e}")
+                    print(
+                        f"[DEBUG] error while debugging {p_info.get('full_name', alias)} ({pos}): {e}"
+                    )
 
         rows.sort(key=lambda r: float(r[4]), reverse=True)
         print(f"{w.title()} Week Projections (players with available markets): {len(rows)}")
@@ -197,13 +233,27 @@ def main():
     parser.add_argument("--season", default="2025", help="Season year, e.g. 2025")
     parser.add_argument("--region", default="us", help="Odds API region, default 'us'")
     parser.add_argument("--fresh", action="store_true", help="Fetch fresh odds (ignore cache)")
-    parser.add_argument("--debug-positions", default="", help="Comma-separated positions to debug in detail (e.g., RB,WR)")
+    parser.add_argument(
+        "--debug-positions",
+        default="",
+        help="Comma-separated positions to debug in detail (e.g., RB,WR)",
+    )
     args = parser.parse_args()
 
-    dbg = {p.strip().upper() for p in args.debug_positions.split(',')} if args.debug_positions else set()
+    dbg = (
+        {p.strip().upper() for p in args.debug_positions.split(",")}
+        if args.debug_positions
+        else set()
+    )
     if "" in dbg:
         dbg.discard("")
-    run(username=args.username, season=args.season, use_saved_data=not args.fresh, region=args.region, debug_positions=dbg if dbg else None)
+    run(
+        username=args.username,
+        season=args.season,
+        use_saved_data=not args.fresh,
+        region=args.region,
+        debug_positions=dbg if dbg else None,
+    )
 
 
 if __name__ == "__main__":

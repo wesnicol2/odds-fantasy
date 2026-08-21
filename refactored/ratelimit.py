@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
-
 
 _LAST = {
-    "remaining": None,   # type: Optional[int]
-    "used": None,        # type: Optional[int]
-    "source": None,      # 'network' | 'cache' | None
-    "endpoint": None,    # 'events' | f'event_odds:{id}' | None
-    "ts": None,          # datetime
+    "remaining": None,  # type: Optional[int]
+    "used": None,  # type: Optional[int]
+    "source": None,  # 'network' | 'cache' | None
+    "endpoint": None,  # 'events' | f'event_odds:{id}' | None
+    "ts": None,  # datetime
 }
 
 
@@ -29,22 +27,26 @@ def update_from_response(headers: dict, endpoint: str):
                 used = int(v)
             except Exception:
                 used = v
-    _LAST.update({
-        "remaining": rem if rem is not None else _LAST.get("remaining"),
-        "used": used if used is not None else _LAST.get("used"),
-        "source": "network",
-        "endpoint": endpoint,
-        "ts": datetime.utcnow(),
-    })
+    _LAST.update(
+        {
+            "remaining": rem if rem is not None else _LAST.get("remaining"),
+            "used": used if used is not None else _LAST.get("used"),
+            "source": "network",
+            "endpoint": endpoint,
+            "ts": datetime.utcnow(),
+        }
+    )
 
 
 def update_cached(endpoint: str):
     global _LAST
-    _LAST.update({
-        "source": "cache",
-        "endpoint": endpoint,
-        "ts": datetime.utcnow(),
-    })
+    _LAST.update(
+        {
+            "source": "cache",
+            "endpoint": endpoint,
+            "ts": datetime.utcnow(),
+        }
+    )
 
 
 def format_status() -> str:

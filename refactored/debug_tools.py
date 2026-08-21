@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, Tuple
-
-from predicted_stats import implied_probability, calculate_weighted_stat
-from . import range_model
-from config import STAT_MARKET_MAPPING_SLEEPER
+import contextlib
 import statistics
 
+from config import STAT_MARKET_MAPPING_SLEEPER
+from predicted_stats import calculate_weighted_stat, implied_probability
+
+from . import range_model
 
 RB_DEBUG_MARKETS = (
     "player_rush_yds",
@@ -30,17 +30,17 @@ TE_DEBUG_MARKETS = (
 )
 
 
-def _median_from_by_book(by_book: Dict, market_key: str) -> Tuple[float, float, float, int]:
+def _median_from_by_book(by_book: dict, market_key: str) -> tuple[float, float, float, int]:
     over_vals = []
     under_vals = []
     thr_vals = []
-    for book_key, mkts in (by_book or {}).items():
+    for mkts in (by_book or {}).values():
         m = mkts.get(market_key)
         if not m:
             continue
         over = m.get("over")
         under = m.get("under")
-        # per-book de‑vig when both sides exist
+        # per-book de-vig when both sides exist
         if over and under and over.get("odds") and under.get("odds"):
             try:
                 o = implied_probability(over["odds"])
@@ -53,25 +53,19 @@ def _median_from_by_book(by_book: Dict, market_key: str) -> Tuple[float, float, 
                 pass
         else:
             if over and over.get("odds"):
-                try:
+                with contextlib.suppress(Exception):
                     over_vals.append(implied_probability(over["odds"]))
-                except Exception:
-                    pass
             if under and under.get("odds"):
-                try:
+                with contextlib.suppress(Exception):
                     under_vals.append(implied_probability(under["odds"]))
-                except Exception:
-                    pass
         pt = None
         if over and ("point" in over):
             pt = over.get("point")
         elif under and ("point" in under):
             pt = under.get("point")
         if pt is not None:
-            try:
+            with contextlib.suppress(Exception):
                 thr_vals.append(float(pt))
-            except Exception:
-                pass
     med_over = statistics.median(over_vals) if over_vals else 0.0
     med_under = statistics.median(under_vals) if under_vals else 0.0
     med_thr = statistics.median(thr_vals) if thr_vals else 0.0
@@ -79,7 +73,13 @@ def _median_from_by_book(by_book: Dict, market_key: str) -> Tuple[float, float, 
     return med_over, med_under, med_thr, samples
 
 
-def debug_rb_calculations(player_name: str, p_info: dict, by_book: Dict, market_summaries: Dict[str, object], scoring_rules: Dict[str, float]):
+def debug_rb_calculations(
+    player_name: str,
+    p_info: dict,
+    by_book: dict,
+    market_summaries: dict[str, object],
+    scoring_rules: dict[str, float],
+):
     pos = p_info.get("primary_position")
     if pos != "RB":
         return
@@ -87,7 +87,7 @@ def debug_rb_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     team = p_info.get("editorial_team_full_name", "")
     print(f"\n[RB DEBUG] {player_name} ({team})")
 
-    per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
+    per_market_ranges: dict[str, tuple[float, float, float]] = {}
 
     for mkey in RB_DEBUG_MARKETS:
         if (mkey not in by_book) and (mkey not in market_summaries):
@@ -108,7 +108,9 @@ def debug_rb_calculations(player_name: str, p_info: dict, by_book: Dict, market_
             under_point = under and under.get("point")
             over_prob = implied_probability(over_odds) if over_odds else None
             under_prob = implied_probability(under_odds) if under_odds else None
-            print(f"    {book_key}: over_odds={over_odds} (p={over_prob}), under_odds={under_odds} (p={under_prob}), point={over_point if over_point is not None else under_point}")
+            print(
+                f"    {book_key}: over_odds={over_odds} (p={over_prob}), under_odds={under_odds} (p={under_prob}), point={over_point if over_point is not None else under_point}"
+            )
 
         # 2) Averages from summaries or recompute if missing
         summ = market_summaries.get(mkey)
@@ -117,10 +119,14 @@ def debug_rb_calculations(player_name: str, p_info: dict, by_book: Dict, market_
             med_under = getattr(summ, "avg_under_prob", 0.0)
             med_thr = getattr(summ, "avg_threshold", 0.0)
             samples = getattr(summ, "samples", 0)
-            print(f"    Medians: over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}")
+            print(
+                f"    Medians: over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}"
+            )
         else:
             med_over, med_under, med_thr, samples = _median_from_by_book(by_book, mkey)
-            print(f"    Medians (computed): over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}")
+            print(
+                f"    Medians (computed): over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}"
+            )
 
         # 3) Normalization for vig and mean estimate (matches calculate_weighted_stat)
         total = med_over + med_under
@@ -132,13 +138,21 @@ def debug_rb_calculations(player_name: str, p_info: dict, by_book: Dict, market_
         if med_under == 0:
             print("    Note: No under lines; assuming 50% under for calculation")
         predicted_mean = calculate_weighted_stat(med_over, med_under, med_thr)
-        print(f"    Normalized probs: over_n={over_n:.4f}, under_n={under_n:.4f}; threshold={med_thr:.2f}")
+        print(
+            f"    Normalized probs: over_n={over_n:.4f}, under_n={under_n:.4f}; threshold={med_thr:.2f}"
+        )
         print(f"    Predicted mean stat: {predicted_mean:.3f}")
 
         # 4) Quantiles 15/50/85
-        q15, q50, q85 = range_model._market_quantiles(mkey, predicted_mean, med_thr, med_over, med_under)
+        q15, q50, q85 = range_model._market_quantiles(
+            mkey, predicted_mean, med_thr, med_over, med_under
+        )
         # also show sigma used
-        sigma = range_model._calc_sigma(predicted_mean, med_thr, med_over, med_under) if not (mkey == "player_anytime_td" or med_thr == 0) else None
+        sigma = (
+            range_model._calc_sigma(predicted_mean, med_thr, med_over, med_under)
+            if not (mkey == "player_anytime_td" or med_thr == 0)
+            else None
+        )
         if sigma is not None:
             print(f"    Sigma estimate={sigma:.4f}; q15={q15:.3f}, q50={q50:.3f}, q85={q85:.3f}")
         else:
@@ -155,9 +169,9 @@ def debug_rb_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     mid_stats = {k: v[1] for k, v in per_market_ranges.items()}
     ceil_stats = {k: v[2] for k, v in per_market_ranges.items()}
 
-    def contribs(stats: Dict[str, float]) -> Tuple[float, Dict[str, float]]:
+    def contribs(stats: dict[str, float]) -> tuple[float, dict[str, float]]:
         total = 0.0
-        parts: Dict[str, float] = {}
+        parts: dict[str, float] = {}
         for mk, val in stats.items():
             rule_key = STAT_MARKET_MAPPING_SLEEPER.get(mk)
             mult = float(scoring_rules.get(rule_key, 0)) if rule_key else 0.0
@@ -171,14 +185,22 @@ def debug_rb_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     c_total, c_parts = contribs(ceil_stats)
 
     print("  Fantasy points contributions:")
-    for mk in per_market_ranges.keys():
+    for mk in per_market_ranges:
         rk = STAT_MARKET_MAPPING_SLEEPER.get(mk, "-")
         mult = scoring_rules.get(rk, 0)
-        print(f"    {mk}: rule={rk}, mult={mult} | floor={f_parts.get(mk,0):.2f}, mid={m_parts.get(mk,0):.2f}, ceil={c_parts.get(mk,0):.2f}")
+        print(
+            f"    {mk}: rule={rk}, mult={mult} | floor={f_parts.get(mk, 0):.2f}, mid={m_parts.get(mk, 0):.2f}, ceil={c_parts.get(mk, 0):.2f}"
+        )
     print(f"  Totals: floor={f_total:.2f}, mid={m_total:.2f}, ceil={c_total:.2f}")
 
 
-def debug_wr_calculations(player_name: str, p_info: dict, by_book: Dict, market_summaries: Dict[str, object], scoring_rules: Dict[str, float]):
+def debug_wr_calculations(
+    player_name: str,
+    p_info: dict,
+    by_book: dict,
+    market_summaries: dict[str, object],
+    scoring_rules: dict[str, float],
+):
     pos = p_info.get("primary_position")
     if pos != "WR":
         return
@@ -186,7 +208,7 @@ def debug_wr_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     team = p_info.get("editorial_team_full_name", "")
     print(f"\n[WR DEBUG] {player_name} ({team})")
 
-    per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
+    per_market_ranges: dict[str, tuple[float, float, float]] = {}
 
     for mkey in WR_DEBUG_MARKETS:
         if (mkey not in by_book) and (mkey not in market_summaries):
@@ -207,19 +229,25 @@ def debug_wr_calculations(player_name: str, p_info: dict, by_book: Dict, market_
             under_point = under and under.get("point")
             over_prob = implied_probability(over_odds) if over_odds else None
             under_prob = implied_probability(under_odds) if under_odds else None
-            print(f"    {book_key}: over_odds={over_odds} (p={over_prob}), under_odds={under_odds} (p={under_prob}), point={over_point if over_point is not None else under_point}")
+            print(
+                f"    {book_key}: over_odds={over_odds} (p={over_prob}), under_odds={under_odds} (p={under_prob}), point={over_point if over_point is not None else under_point}"
+            )
 
-        # 2) Medians (de‑vigged) from summaries or compute
+        # 2) Medians (de-vigged) from summaries or compute
         summ = market_summaries.get(mkey)
         if summ:
             med_over = getattr(summ, "avg_over_prob", 0.0)
             med_under = getattr(summ, "avg_under_prob", 0.0)
             med_thr = getattr(summ, "avg_threshold", 0.0)
             samples = getattr(summ, "samples", 0)
-            print(f"    Medians: over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}")
+            print(
+                f"    Medians: over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}"
+            )
         else:
             med_over, med_under, med_thr, samples = _median_from_by_book(by_book, mkey)
-            print(f"    Medians (computed): over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}")
+            print(
+                f"    Medians (computed): over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}"
+            )
 
         # 3) Normalize and mean estimate
         total = med_over + med_under
@@ -231,12 +259,20 @@ def debug_wr_calculations(player_name: str, p_info: dict, by_book: Dict, market_
         if med_under == 0:
             print("    Note: No under lines; assuming 50% under for calculation")
         predicted_mean = calculate_weighted_stat(med_over, med_under, med_thr)
-        print(f"    Normalized probs: over_n={over_n:.4f}, under_n={under_n:.4f}; threshold={med_thr:.2f}")
+        print(
+            f"    Normalized probs: over_n={over_n:.4f}, under_n={under_n:.4f}; threshold={med_thr:.2f}"
+        )
         print(f"    Predicted mean stat: {predicted_mean:.3f}")
 
         # 4) Quantiles
-        q15, q50, q85 = range_model._market_quantiles(mkey, predicted_mean, med_thr, med_over, med_under)
-        sigma = range_model._calc_sigma(predicted_mean, med_thr, med_over, med_under) if not (mkey == "player_anytime_td" or med_thr == 0) else None
+        q15, q50, q85 = range_model._market_quantiles(
+            mkey, predicted_mean, med_thr, med_over, med_under
+        )
+        sigma = (
+            range_model._calc_sigma(predicted_mean, med_thr, med_over, med_under)
+            if not (mkey == "player_anytime_td" or med_thr == 0)
+            else None
+        )
         if sigma is not None:
             print(f"    Sigma estimate={sigma:.4f}; q15={q15:.3f}, q50={q50:.3f}, q85={q85:.3f}")
         else:
@@ -253,9 +289,9 @@ def debug_wr_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     mid_stats = {k: v[1] for k, v in per_market_ranges.items()}
     ceil_stats = {k: v[2] for k, v in per_market_ranges.items()}
 
-    def contribs(stats: Dict[str, float]):
+    def contribs(stats: dict[str, float]):
         total = 0.0
-        parts: Dict[str, float] = {}
+        parts: dict[str, float] = {}
         for mk, val in stats.items():
             rule_key = STAT_MARKET_MAPPING_SLEEPER.get(mk)
             mult = float(scoring_rules.get(rule_key, 0)) if rule_key else 0.0
@@ -269,14 +305,22 @@ def debug_wr_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     c_total, c_parts = contribs(ceil_stats)
 
     print("  Fantasy points contributions:")
-    for mk in per_market_ranges.keys():
+    for mk in per_market_ranges:
         rk = STAT_MARKET_MAPPING_SLEEPER.get(mk, "-")
         mult = scoring_rules.get(rk, 0)
-        print(f"    {mk}: rule={rk}, mult={mult} | floor={f_parts.get(mk,0):.2f}, mid={m_parts.get(mk,0):.2f}, ceil={c_parts.get(mk,0):.2f}")
+        print(
+            f"    {mk}: rule={rk}, mult={mult} | floor={f_parts.get(mk, 0):.2f}, mid={m_parts.get(mk, 0):.2f}, ceil={c_parts.get(mk, 0):.2f}"
+        )
     print(f"  Totals: floor={f_total:.2f}, mid={m_total:.2f}, ceil={c_total:.2f}")
 
 
-def debug_te_calculations(player_name: str, p_info: dict, by_book: Dict, market_summaries: Dict[str, object], scoring_rules: Dict[str, float]):
+def debug_te_calculations(
+    player_name: str,
+    p_info: dict,
+    by_book: dict,
+    market_summaries: dict[str, object],
+    scoring_rules: dict[str, float],
+):
     pos = p_info.get("primary_position")
     if pos != "TE":
         return
@@ -284,7 +328,7 @@ def debug_te_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     team = p_info.get("editorial_team_full_name", "")
     print(f"\n[TE DEBUG] {player_name} ({team})")
 
-    per_market_ranges: Dict[str, Tuple[float, float, float]] = {}
+    per_market_ranges: dict[str, tuple[float, float, float]] = {}
 
     for mkey in TE_DEBUG_MARKETS:
         if (mkey not in by_book) and (mkey not in market_summaries):
@@ -305,19 +349,25 @@ def debug_te_calculations(player_name: str, p_info: dict, by_book: Dict, market_
             under_point = under and under.get("point")
             over_prob = implied_probability(over_odds) if over_odds else None
             under_prob = implied_probability(under_odds) if under_odds else None
-            print(f"    {book_key}: over_odds={over_odds} (p={over_prob}), under_odds={under_odds} (p={under_prob}), point={over_point if over_point is not None else under_point}")
+            print(
+                f"    {book_key}: over_odds={over_odds} (p={over_prob}), under_odds={under_odds} (p={under_prob}), point={over_point if over_point is not None else under_point}"
+            )
 
-        # 2) Medians (de‑vigged)
+        # 2) Medians (de-vigged)
         summ = market_summaries.get(mkey)
         if summ:
             med_over = getattr(summ, "avg_over_prob", 0.0)
             med_under = getattr(summ, "avg_under_prob", 0.0)
             med_thr = getattr(summ, "avg_threshold", 0.0)
             samples = getattr(summ, "samples", 0)
-            print(f"    Medians: over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}")
+            print(
+                f"    Medians: over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}"
+            )
         else:
             med_over, med_under, med_thr, samples = _median_from_by_book(by_book, mkey)
-            print(f"    Medians (computed): over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}")
+            print(
+                f"    Medians (computed): over={med_over:.4f}, under={med_under:.4f}, threshold={med_thr:.2f}, samples={samples}"
+            )
 
         # 3) Normalize and mean estimate
         total = med_over + med_under
@@ -329,12 +379,20 @@ def debug_te_calculations(player_name: str, p_info: dict, by_book: Dict, market_
         if med_under == 0:
             print("    Note: No under lines; assuming 50% under for calculation")
         predicted_mean = calculate_weighted_stat(med_over, med_under, med_thr)
-        print(f"    Normalized probs: over_n={over_n:.4f}, under_n={under_n:.4f}; threshold={med_thr:.2f}")
+        print(
+            f"    Normalized probs: over_n={over_n:.4f}, under_n={under_n:.4f}; threshold={med_thr:.2f}"
+        )
         print(f"    Predicted mean stat: {predicted_mean:.3f}")
 
         # 4) Quantiles
-        q15, q50, q85 = range_model._market_quantiles(mkey, predicted_mean, med_thr, med_over, med_under)
-        sigma = range_model._calc_sigma(predicted_mean, med_thr, med_over, med_under) if not (mkey == "player_anytime_td" or med_thr == 0) else None
+        q15, q50, q85 = range_model._market_quantiles(
+            mkey, predicted_mean, med_thr, med_over, med_under
+        )
+        sigma = (
+            range_model._calc_sigma(predicted_mean, med_thr, med_over, med_under)
+            if not (mkey == "player_anytime_td" or med_thr == 0)
+            else None
+        )
         if sigma is not None:
             print(f"    Sigma estimate={sigma:.4f}; q15={q15:.3f}, q50={q50:.3f}, q85={q85:.3f}")
         else:
@@ -351,9 +409,9 @@ def debug_te_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     mid_stats = {k: v[1] for k, v in per_market_ranges.items()}
     ceil_stats = {k: v[2] for k, v in per_market_ranges.items()}
 
-    def contribs(stats: Dict[str, float]):
+    def contribs(stats: dict[str, float]):
         total = 0.0
-        parts: Dict[str, float] = {}
+        parts: dict[str, float] = {}
         for mk, val in stats.items():
             rule_key = STAT_MARKET_MAPPING_SLEEPER.get(mk)
             mult = float(scoring_rules.get(rule_key, 0)) if rule_key else 0.0
@@ -367,8 +425,10 @@ def debug_te_calculations(player_name: str, p_info: dict, by_book: Dict, market_
     c_total, c_parts = contribs(ceil_stats)
 
     print("  Fantasy points contributions:")
-    for mk in per_market_ranges.keys():
+    for mk in per_market_ranges:
         rk = STAT_MARKET_MAPPING_SLEEPER.get(mk, "-")
         mult = scoring_rules.get(rk, 0)
-        print(f"    {mk}: rule={rk}, mult={mult} | floor={f_parts.get(mk,0):.2f}, mid={m_parts.get(mk,0):.2f}, ceil={c_parts.get(mk,0):.2f}")
+        print(
+            f"    {mk}: rule={rk}, mult={mult} | floor={f_parts.get(mk, 0):.2f}, mid={m_parts.get(mk, 0):.2f}, ceil={c_parts.get(mk, 0):.2f}"
+        )
     print(f"  Totals: floor={f_total:.2f}, mid={m_total:.2f}, ceil={c_total:.2f}")
