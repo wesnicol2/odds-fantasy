@@ -1637,16 +1637,9 @@ document.addEventListener('DOMContentLoaded', function(){
 
 
 // Note: "incomplete" badge rendering (players/lineup rows missing odds
-// coverage) lives directly in script.js's renderPlayers/renderLineup now --
-// see that file. It used to live here as a pair of runtime overrides (one
-// inline, one dynamically loaded from a since-deleted /ui/overrides.js,
-// found via a real headless-browser console-error check -- an earlier
-// cleanup pass that deleted overrides.js as "unreferenced by index.html"
-// missed that this file injected a <script src="/ui/overrides.js"> at
-// runtime, which a grep over index.html's static <script> tags won't catch.
-// The inline copy that lived here also had corrupted markup from some
-// earlier edit (mojibake'd em-dash, malformed class attributes like
-// `class="pill pill"warn-`), so it wasn't safe to just keep as-is either.
+// coverage) lives in script.js's renderPlayers/renderLineup now. It used to be
+// a pair of runtime overrides here; see "The overrides.js trap" in AGENTS.md
+// before deleting any UI file that looks unreferenced.
 
 
 
