@@ -9,9 +9,8 @@ from typing import Any
 import requests
 from requests.adapters import HTTPAdapter
 
-from config import API_KEY, DATA_DIR, EVENTS_URL
-
 from . import ratelimit
+from .config import API_KEY, DATA_DIR, EVENTS_URL
 
 REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
 

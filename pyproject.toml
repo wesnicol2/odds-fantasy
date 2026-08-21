@@ -39,9 +39,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests bind fixtures and intermediate values that exist for readability, and
-# they bootstrap sys.path before importing the package under test.
-"tests/*" = ["RUF059", "E402"]
+# Tests bind fixtures and intermediate values that exist for readability.
+"tests/*" = ["RUF059"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

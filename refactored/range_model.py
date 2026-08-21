@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from statistics import NormalDist
 
-from config import STAT_MARKET_MAPPING_SLEEPER
-from predicted_stats import predict_stats_for_player
-
+from .config import STAT_MARKET_MAPPING_SLEEPER
+from .predicted_stats import predict_stats_for_player
 from .prob_models import (  # type: ignore
     _fit_lognormal_from_two_points,
     _lognormal_quantile,

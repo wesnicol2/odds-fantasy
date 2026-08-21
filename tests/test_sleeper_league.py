@@ -1,13 +1,7 @@
-import os
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-import sleeper_api
+from refactored import sleeper_api
 
 
 def _fake_response(payload):
@@ -18,7 +12,7 @@ def _fake_response(payload):
 
 
 class GetLeagueTest(unittest.TestCase):
-    @patch("sleeper_api.requests.get")
+    @patch("refactored.sleeper_api.requests.get")
     def test_returns_raw_league_object(self, mock_get):
         mock_get.return_value = _fake_response(
             {
@@ -37,8 +31,8 @@ class GetLeagueTest(unittest.TestCase):
 
 
 class GetLeagueTeamsTest(unittest.TestCase):
-    @patch("sleeper_api.get_league_users")
-    @patch("sleeper_api.get_league_rosters")
+    @patch("refactored.sleeper_api.get_league_users")
+    @patch("refactored.sleeper_api.get_league_rosters")
     def test_team_name_falls_back_through_metadata_then_display_name_then_generic(
         self, mock_rosters, mock_users
     ):
@@ -60,7 +54,7 @@ class GetLeagueTeamsTest(unittest.TestCase):
 
 
 class GetLeagueRosterDataTest(unittest.TestCase):
-    @patch("sleeper_api.get_league")
+    @patch("refactored.sleeper_api.get_league")
     def test_no_roster_id_returns_empty_players_but_real_scoring(self, mock_league):
         mock_league.return_value = {
             "status": "pre_draft",
@@ -73,9 +67,9 @@ class GetLeagueRosterDataTest(unittest.TestCase):
         self.assertEqual(data["scoring_rules"], {"rec": 0.5})
         self.assertEqual(data["status"], "pre_draft")
 
-    @patch("sleeper_api.get_enhanced_info_for_roster")
-    @patch("sleeper_api.get_league_rosters")
-    @patch("sleeper_api.get_league")
+    @patch("refactored.sleeper_api.get_enhanced_info_for_roster")
+    @patch("refactored.sleeper_api.get_league_rosters")
+    @patch("refactored.sleeper_api.get_league")
     def test_roster_id_scopes_to_that_roster_only(self, mock_league, mock_rosters, mock_enhanced):
         mock_league.return_value = {
             "status": "in_season",
@@ -145,7 +139,7 @@ class CurrentNflSeasonTest(unittest.TestCase):
         # Sanity check against the real clock rather than hardcoding a
         # brittle expected year -- just verify the Jan/Feb-is-still-last-
         # season rule is actually applied.
-        import config
+        from refactored import config
 
         now = __import__("datetime").datetime.utcnow()
         expected = str(now.year if now.month >= 3 else now.year - 1)

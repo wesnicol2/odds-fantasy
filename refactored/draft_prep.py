@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import datetime as _dt
 
-import sleeper_api
-from config import SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, SLEEPER_TO_ODDSAPI_TEAM
-
-from . import odds_client
+from . import odds_client, sleeper_api
+from .config import SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, SLEEPER_TO_ODDSAPI_TEAM
 from .planner import PlannedGame
 from .weekly_windows import earliest_future_week_start, in_window
 

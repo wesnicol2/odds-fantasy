@@ -83,12 +83,12 @@ work as a fallback for anyone who hasn't set up a league.
   thing but for every player league-wide (pre-draft, before you have a
   roster to scope to), and `refactored/odds_client.py` +
   `refactored/ratelimit.py` for caching and Odds-API rate-limit tracking.
-- `config.py`: Loads environment configuration and defines shared constants
-  (position→market mappings, Sleeper↔Odds-API name/team mappings, scoring
-  key mappings).
-- `predicted_stats.py`: Shared de-vig + mean-stat-estimate helpers used by
-  `refactored/`.
-- `sleeper_api.py`: Sleeper API client (roster, scoring rules, league/owner data).
+- `refactored/config.py`: Loads environment configuration and defines shared
+  constants (position→market mappings, Sleeper↔Odds-API name/team mappings,
+  scoring key mappings).
+- `refactored/predicted_stats.py`: Shared de-vig + mean-stat-estimate helpers.
+- `refactored/sleeper_api.py`: Sleeper API client (roster, scoring rules,
+  league/owner data).
 - `ui/`: Static frontend served by `refactored/api.py`.
 - `data/`: Cached API responses and Sleeper player metadata (persist this
   directory across runs). Odds cache entries auto-expire after `ODDS_TTL`

@@ -5,7 +5,7 @@ import os
 import statistics
 from dataclasses import dataclass
 
-from predicted_stats import implied_probability
+from .predicted_stats import implied_probability
 
 
 @dataclass

@@ -4,7 +4,7 @@ import time
 
 import requests
 
-from config import DATA_DIR, SLEEPER_TO_ODDSAPI_TEAM
+from .config import DATA_DIR, SLEEPER_TO_ODDSAPI_TEAM
 
 SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
 # Allow overriding request timeouts via env; default (connect=5s, read=20s)
