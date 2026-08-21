@@ -4,7 +4,7 @@ This is a single-maintainer hobby project, not a public OSS project soliciting
 outside contributions — this doc exists so future-you (or an AI assistant
 picking the repo back up next season) doesn't have to re-derive "how do we do
 things here" from scratch, and so the repo doesn't quietly rot into two
-divergent implementations again (see: `main.py` vs `refactored/`, discovered
+divergent implementations again (see: `main.py` vs `oddsfantasy/`, discovered
 and removed August 2026).
 
 ## Branching model
@@ -45,7 +45,7 @@ Naming: `feature/kebab-case-name`, `dev/kebab-case-name`. No other prefixes.
    fixes). Even solo, use a PR rather than pushing directly — it keeps the
    diff reviewable and matches the rest of this repo's history.
 4. Once a feature branch has everything it needs, actually run it
-   (`python -m refactored.api`, or the Docker image) against live data for at
+   (`python -m oddsfantasy.api`, or the Docker image) against live data for at
    least one real session before opening the `feature/*` → `main` PR. Unit
    tests catch regressions in the math; they don't catch "the lineup looks
    wrong" or "this endpoint times out against real odds data."
@@ -64,7 +64,7 @@ place — treat a red check as a hard stop, not a "merge anyway and fix later."
 ## Keeping the repo from rotting again
 
 The August 2026 cleanup found two full parallel implementations
-(`main.py`+`predicted_stats.py`+`odds_api.py` vs. `refactored/`), a dead
+(`main.py`+`predicted_stats.py`+`odds_api.py` vs. `oddsfantasy/`), a dead
 Yahoo integration nobody removed after switching to Sleeper, a UI file
 (`overrides.js`) not even linked from `index.html`, and a README describing
 an app that hadn't been the real entrypoint in months. None of that was
@@ -91,12 +91,12 @@ when a solo project doesn't have a rule against it. So:
 ## Odds API quota awareness
 
 The Odds API quota is a real, shared, metered resource — not just a rate
-limit to retry past. `refactored/ratelimit.py` tracks remaining quota from
-response headers; `refactored/odds_client.py` TTL-caches responses
+limit to retry past. `oddsfantasy/ratelimit.py` tracks remaining quota from
+response headers; `oddsfantasy/odds_client.py` TTL-caches responses
 (`ODDS_TTL`, default 12h) so routine use doesn't re-fetch every request.
 
 Any new feature that fetches odds for **more than the caller's own roster**
-(the way `refactored/draft_prep.py`'s draft board does — it has to look at
+(the way `oddsfantasy/draft_prep.py`'s draft board does — it has to look at
 every relevant player on every team playing that week, not just yours) is a
 meaningfully bigger quota cost than the weekly lineup flow. When adding
 something like that:

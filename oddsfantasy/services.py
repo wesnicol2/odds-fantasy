@@ -624,7 +624,7 @@ def compute_draft_board(
     when there's no roster to scope to yet (or the league's roster is still
     empty). Reuses the exact same odds-devig -> quantile -> fantasy-points
     pipeline as compute_projections(); the only real difference is where the
-    player list comes from (refactored/draft_prep.py, sourced from Sleeper's
+    player list comes from (oddsfantasy/draft_prep.py, sourced from Sleeper's
     full player DB) and that it uses a smaller, quota-conscious market set.
 
     Only `scoring_rules` is needed here (there's no roster to scope the

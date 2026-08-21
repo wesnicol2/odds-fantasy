@@ -12,7 +12,7 @@ moved to odds_details.py, so they are exercised there.
 import unittest
 from unittest.mock import patch
 
-from refactored import odds_details, services
+from oddsfantasy import odds_details, services
 
 FAKE_ROSTER = {"players": {}, "scoring_rules": {}}
 
@@ -22,8 +22,8 @@ class NoGamesScheduledYetTest(unittest.TestCase):
     what happens during the pre-season gap -- the Odds API simply hasn't
     posted the next real slate yet."""
 
-    @patch("refactored.services.odds_client.get_nfl_events")
-    @patch("refactored.services._resolve_identity")
+    @patch("oddsfantasy.services.odds_client.get_nfl_events")
+    @patch("oddsfantasy.services._resolve_identity")
     def test_compute_projections_surfaces_message_instead_of_bare_empty_list(
         self, mock_identity, mock_events
     ):
@@ -38,8 +38,8 @@ class NoGamesScheduledYetTest(unittest.TestCase):
         self.assertIn("message", result)
         self.assertIn("No scheduled games", result["message"])
 
-    @patch("refactored.services.odds_client.get_nfl_events")
-    @patch("refactored.services._resolve_identity")
+    @patch("oddsfantasy.services.odds_client.get_nfl_events")
+    @patch("oddsfantasy.services._resolve_identity")
     def test_list_defenses_surfaces_message_instead_of_bare_empty_list(
         self, mock_identity, mock_events
     ):
@@ -52,7 +52,7 @@ class NoGamesScheduledYetTest(unittest.TestCase):
         self.assertIn("message", result)
         self.assertIn("No scheduled games", result["message"])
 
-    @patch("refactored.odds_details.odds_client.get_nfl_events")
+    @patch("oddsfantasy.odds_details.odds_client.get_nfl_events")
     def test_get_player_odds_details_surfaces_message_instead_of_bare_empty_result(
         self, mock_events
     ):
@@ -66,7 +66,7 @@ class NoGamesScheduledYetTest(unittest.TestCase):
         self.assertIn("message", result)
         self.assertIn("No scheduled games", result["message"])
 
-    @patch("refactored.odds_details.odds_client.get_nfl_events")
+    @patch("oddsfantasy.odds_details.odds_client.get_nfl_events")
     def test_get_defense_odds_details_surfaces_message_instead_of_bare_empty_result(
         self, mock_events
     ):

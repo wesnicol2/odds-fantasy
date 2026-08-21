@@ -28,4 +28,4 @@ jobs:
 
       # Catches syntax errors in anything ruff happened to skip.
       - name: Compile check
-        run: python -m compileall -q refactored tests
+        run: python -m compileall -q oddsfantasy tests

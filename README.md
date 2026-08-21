@@ -70,26 +70,26 @@ with `league_id` taking priority when both are present (see
 work as a fallback for anyone who hasn't set up a league.
 
 ## Project Structure
-- `refactored/`: **This is the real application.** `refactored/api.py` is the
+- `oddsfantasy/`: **This is the real application.** `oddsfantasy/api.py` is the
   entrypoint (`CMD` in the `Dockerfile`) — a stdlib WSGI server exposing
   `/health`, `/user/leagues`, `/league/resolve`, `/projections`, `/lineup`, `/lineup/diffs`,
   `/defenses`, `/draft-board`, `/player/odds`, `/defense/odds`, and
   `/dashboard`, and serving the UI under `/` and `/ui/*`. See
-  `refactored/services.py` for the orchestration layer,
-  `refactored/range_model.py` + `refactored/prob_models.py` for how
+  `oddsfantasy/services.py` for the orchestration layer,
+  `oddsfantasy/range_model.py` + `oddsfantasy/prob_models.py` for how
   betting-line probabilities become floor/mid/ceiling fantasy point ranges,
-  `refactored/aggregator.py` + `refactored/planner.py` for how odds are
-  fetched/grouped for your roster, `refactored/draft_prep.py` for the same
+  `oddsfantasy/aggregator.py` + `oddsfantasy/planner.py` for how odds are
+  fetched/grouped for your roster, `oddsfantasy/draft_prep.py` for the same
   thing but for every player league-wide (pre-draft, before you have a
-  roster to scope to), and `refactored/odds_client.py` +
-  `refactored/ratelimit.py` for caching and Odds-API rate-limit tracking.
-- `refactored/config.py`: Loads environment configuration and defines shared
+  roster to scope to), and `oddsfantasy/odds_client.py` +
+  `oddsfantasy/ratelimit.py` for caching and Odds-API rate-limit tracking.
+- `oddsfantasy/config.py`: Loads environment configuration and defines shared
   constants (position→market mappings, Sleeper↔Odds-API name/team mappings,
   scoring key mappings).
-- `refactored/predicted_stats.py`: Shared de-vig + mean-stat-estimate helpers.
-- `refactored/sleeper_api.py`: Sleeper API client (roster, scoring rules,
+- `oddsfantasy/predicted_stats.py`: Shared de-vig + mean-stat-estimate helpers.
+- `oddsfantasy/sleeper_api.py`: Sleeper API client (roster, scoring rules,
   league/owner data).
-- `ui/`: Static frontend served by `refactored/api.py`.
+- `ui/`: Static frontend served by `oddsfantasy/api.py`.
 - `data/`: Cached API responses and Sleeper player metadata (persist this
   directory across runs). Odds cache entries auto-expire after `ODDS_TTL`
   seconds (default 12h); pass `fresh=1` to any endpoint to bypass the cache.

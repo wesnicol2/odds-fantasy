@@ -18,7 +18,7 @@ dev = [
 
 [tool.setuptools]
 # Flat layout: be explicit, or setuptools auto-discovery trips over tests/.
-packages = ["refactored"]
+packages = ["oddsfantasy"]
 
 [tool.ruff]
 target-version = "py311"
