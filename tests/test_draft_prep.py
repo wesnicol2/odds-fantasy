@@ -1,27 +1,29 @@
 import datetime as dt
-import os
-import sys
 import unittest
 from unittest.mock import patch
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-from refactored import draft_prep
+from oddsfantasy import draft_prep
 
 FAKE_SLEEPER_PLAYERS = {
     "1": {"full_name": "Josh Allen", "position": "QB", "team": "BUF"},
     "2": {"full_name": "James Cook", "position": "RB", "team": "BUF"},
-    "3": {"full_name": "Some Kicker", "position": "K", "team": "BUF"},  # excluded: not a draft position
+    "3": {
+        "full_name": "Some Kicker",
+        "position": "K",
+        "team": "BUF",
+    },  # excluded: not a draft position
     "4": {"full_name": "Free Agent Guy", "position": "WR", "team": None},  # excluded: no team
-    "5": {"full_name": "Retired Guy", "position": "RB", "team": "ZZZ"},  # excluded: unmapped team abbr
+    "5": {
+        "full_name": "Retired Guy",
+        "position": "RB",
+        "team": "ZZZ",
+    },  # excluded: unmapped team abbr
     "6": {"full_name": "Patrick Mahomes", "position": "QB", "team": "KC"},
 }
 
 
 class ActivePlayersByTeamTest(unittest.TestCase):
-    @patch("refactored.draft_prep.sleeper_api.get_players")
+    @patch("oddsfantasy.draft_prep.sleeper_api.get_players")
     def test_filters_to_skill_positions_with_a_mapped_team(self, mock_get_players):
         mock_get_players.return_value = FAKE_SLEEPER_PLAYERS
         by_team = draft_prep._all_active_players_by_team()
@@ -47,7 +49,9 @@ class ResolveDraftWeekWindowTest(unittest.TestCase):
     def test_none_when_no_upcoming_games(self):
         now = dt.datetime(2026, 8, 19)
         past_game = {"commence_time": _ts(now - dt.timedelta(days=5))}
-        self.assertIsNone(draft_prep._resolve_draft_week_window([past_game], which="this", now_utc=now))
+        self.assertIsNone(
+            draft_prep._resolve_draft_week_window([past_game], which="this", now_utc=now)
+        )
 
     def test_week1_anchors_to_earliest_future_game_not_today(self):
         # "Today" is deep in the off-season; the earliest real game is over
@@ -75,8 +79,8 @@ class ResolveDraftWeekWindowTest(unittest.TestCase):
 
 
 class PlanWeekForDraftTest(unittest.TestCase):
-    @patch("refactored.draft_prep.odds_client.get_nfl_events")
-    @patch("refactored.draft_prep.sleeper_api.get_players")
+    @patch("oddsfantasy.draft_prep.odds_client.get_nfl_events")
+    @patch("oddsfantasy.draft_prep.sleeper_api.get_players")
     def test_builds_plan_for_week1_and_week2_separately(self, mock_get_players, mock_get_events):
         mock_get_players.return_value = FAKE_SLEEPER_PLAYERS
         now = dt.datetime.utcnow()
@@ -118,7 +122,7 @@ class PlanWeekForDraftTest(unittest.TestCase):
         player_names = {p["full_name"] for p in game.players}
         self.assertEqual(player_names, {"Josh Allen", "James Cook", "Patrick Mahomes"})
 
-    @patch("refactored.draft_prep.odds_client.get_nfl_events")
+    @patch("oddsfantasy.draft_prep.odds_client.get_nfl_events")
     def test_empty_plan_when_no_games_scheduled_yet(self, mock_get_events):
         mock_get_events.return_value = []
         self.assertEqual(draft_prep.plan_week_for_draft(week="this"), {})

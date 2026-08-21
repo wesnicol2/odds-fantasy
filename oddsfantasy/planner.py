@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List, Tuple, Iterable
 import datetime as _dt
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from . import odds_client
-from config import POSITION_STAT_CONFIG, SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, STAT_MARKET_MAPPING
+from .config import POSITION_STAT_CONFIG, SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, STAT_MARKET_MAPPING
 from .weekly_windows import in_window
 
 
@@ -15,8 +15,8 @@ class PlannedGame:
     home_team: str
     away_team: str
     commence_time: str  # ISO Z
-    players: List[dict]
-    markets: List[str]
+    players: list[dict]
+    markets: list[str]
 
 
 def _player_alias(full_name: str) -> str:
@@ -46,7 +46,7 @@ def _normalize_market(stat_key: str) -> str | None:
     return stat_key
 
 
-def _markets_for_positions(positions: Iterable[str]) -> List[str]:
+def _markets_for_positions(positions: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     for pos in positions:
         for raw in POSITION_STAT_CONFIG.get(pos, []):
@@ -66,11 +66,11 @@ def _markets_for_positions(positions: Iterable[str]) -> List[str]:
 
 def plan_relevant_games_and_markets(
     roster: dict,
-    week_windows: Tuple[Tuple[_dt.datetime, _dt.datetime], Tuple[_dt.datetime, _dt.datetime]],
+    week_windows: tuple[tuple[_dt.datetime, _dt.datetime], tuple[_dt.datetime, _dt.datetime]],
     regions: str = "us",
     use_saved_data: bool | None = None,
     cache_mode: str = "auto",
-) -> Dict[str, Dict[str, PlannedGame]]:
+) -> dict[str, dict[str, PlannedGame]]:
     """Plan minimal event-odds calls by week window.
 
     Returns a dict with keys 'this' and 'next', each mapping game_id -> PlannedGame.
@@ -78,7 +78,7 @@ def plan_relevant_games_and_markets(
     (this_start, this_end), (next_start, next_end) = week_windows
     # Backward-compat: map use_saved_data to cache_mode when provided
     if use_saved_data is not None:
-        cache_mode = 'cache' if use_saved_data else 'fresh'
+        cache_mode = "cache" if use_saved_data else "fresh"
     events = odds_client.get_nfl_events(regions=regions, mode=cache_mode)
 
     # Index events by window
@@ -91,8 +91,8 @@ def plan_relevant_games_and_markets(
         elif in_window(ts, (next_start, next_end)):
             next_events[e["id"]] = e
 
-    def plan_for(events_by_id: dict[str, dict]) -> Dict[str, PlannedGame]:
-        plan: Dict[str, PlannedGame] = {}
+    def plan_for(events_by_id: dict[str, dict]) -> dict[str, PlannedGame]:
+        plan: dict[str, PlannedGame] = {}
         # Group roster players by events they participate in
         for p in roster.get("players", {}).values():
             team = p.get("editorial_team_full_name")
@@ -114,15 +114,17 @@ def plan_relevant_games_and_markets(
                         players=[],
                         markets=[],
                     )
-                plan[gid].players.append({
-                    "full_name": full_name,
-                    "alias": alias,
-                    "primary_position": pos,
-                    "editorial_team_full_name": team,
-                })
+                plan[gid].players.append(
+                    {
+                        "full_name": full_name,
+                        "alias": alias,
+                        "primary_position": pos,
+                        "editorial_team_full_name": team,
+                    }
+                )
 
         # Determine minimal markets per game (union of player position markets)
-        for gid, g in plan.items():
+        for g in plan.values():
             positions = [p["primary_position"] for p in g.players]
             g.markets = _markets_for_positions(positions)
 

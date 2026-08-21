@@ -1,5 +1,6 @@
-import os
 import datetime as _dt
+import os
+
 from dotenv import load_dotenv
 
 # Load environment variables from the .env file
@@ -26,21 +27,55 @@ def current_nfl_season() -> str:
 DEFAULT_SEASON = current_nfl_season()
 
 # API configuration for The Odds API
-API_KEY = os.getenv('API_KEY')
-BASE_URL = 'https://api.the-odds-api.com/v4'
-EVENTS_URL = f'{BASE_URL}/sports/americanfootball_nfl/events'
+API_KEY = os.getenv("API_KEY")
+BASE_URL = "https://api.the-odds-api.com/v4"
+EVENTS_URL = f"{BASE_URL}/sports/americanfootball_nfl/events"
 
 # Data directory for saving various data
-DATA_DIR = './data'
+DATA_DIR = "./data"
 
 # Position-Stat Configuration (define relevant stats for each position) - These stats should be in Odds API format
 POSITION_STAT_CONFIG = {
-    "QB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_pass_yds", "player_pass_yds_alternate", "player_pass_tds", "player_pass_tds_alternate", "player_interceptions"],
-    "RB": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate", "player_reception_yds"],
-    "WR": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate", "player_reception_yds"],
-    "TE": ["player_rush_yds", "player_rush_yds_alternate", "player_rush_tds", "player_rush_tds_alternate", "player_receptions", "player_receptions_alternate", "player_reception_yds"],
-    "K":  ["player_field_goals", "player_kicking_points", "player_pats"],  
-    "DEF": ["spreads", "totals"]
+    "QB": [
+        "player_rush_yds",
+        "player_rush_yds_alternate",
+        "player_rush_tds",
+        "player_rush_tds_alternate",
+        "player_pass_yds",
+        "player_pass_yds_alternate",
+        "player_pass_tds",
+        "player_pass_tds_alternate",
+        "player_interceptions",
+    ],
+    "RB": [
+        "player_rush_yds",
+        "player_rush_yds_alternate",
+        "player_rush_tds",
+        "player_rush_tds_alternate",
+        "player_receptions",
+        "player_receptions_alternate",
+        "player_reception_yds",
+    ],
+    "WR": [
+        "player_rush_yds",
+        "player_rush_yds_alternate",
+        "player_rush_tds",
+        "player_rush_tds_alternate",
+        "player_receptions",
+        "player_receptions_alternate",
+        "player_reception_yds",
+    ],
+    "TE": [
+        "player_rush_yds",
+        "player_rush_yds_alternate",
+        "player_rush_tds",
+        "player_rush_tds_alternate",
+        "player_receptions",
+        "player_receptions_alternate",
+        "player_reception_yds",
+    ],
+    "K": ["player_field_goals", "player_kicking_points", "player_pats"],
+    "DEF": ["spreads", "totals"],
 }
 
 # This mapping holds a key = yahoo Stat name and value = corresponding odds api market
@@ -56,19 +91,13 @@ STAT_MARKET_MAPPING = {
 }
 
 
-
-# Mapping between player names on yahoo and odds api. 
+# Mapping between player names on yahoo and odds api.
 # Left side is Yahoo, right side is Odds API
-YAHOO_ODDS_API_PLAYER_NAME_MAPPING ={
-    "A.J. Brown": "AJ Brown"
-}
+YAHOO_ODDS_API_PLAYER_NAME_MAPPING = {"A.J. Brown": "AJ Brown"}
 
 
-
-# Sleeper API 
-SLEEPER_ODDS_API_PLAYER_NAME_MAPPING = {
-    "A.J. Brown": "AJ Brown"
-}
+# Sleeper API
+SLEEPER_ODDS_API_PLAYER_NAME_MAPPING = {"A.J. Brown": "AJ Brown"}
 
 
 # Mapping from Sleeper stat names to Odds API market names
@@ -80,14 +109,12 @@ STAT_MARKET_MAPPING_SLEEPER = {
     "player_pass_2pt": "pass_2pt",
     "player_pass_yds_bonus_300": "bonus_pass_yd_300",
     "player_pass_yds_bonus_400": "bonus_pass_yd_400",
-
     # Rushing
     "player_rush_yds": "rush_yd",
     "player_anytime_td": "rush_td",
     "player_rush_2pt": "rush_2pt",
     "player_rush_yds_bonus_100": "bonus_rush_yd_100",
     "player_rush_yds_bonus_200": "bonus_rush_yd_200",
-
     # Receiving
     "player_receptions": "rec",
     "player_reception_yds": "rec_yd",
@@ -95,11 +122,9 @@ STAT_MARKET_MAPPING_SLEEPER = {
     "player_reception_2pt": "rec_2pt",
     "player_reception_yds_bonus_100": "bonus_rec_yd_100",
     "player_reception_yds_bonus_200": "bonus_rec_yd_200",
-
     # Fumbles
     "player_fumbles": "fum",
     "player_fumbles_lost": "fum_lost",
-
     # Kicking
     "player_fg_made_0_19": "fgm_0_19",
     "player_fg_made_20_29": "fgm_20_29",
@@ -116,7 +141,6 @@ STAT_MARKET_MAPPING_SLEEPER = {
     "player_fg_missed_60_plus": "fgmiss_60p",
     "player_xp_made": "xpm",
     "player_xp_missed": "xpmiss",
-
     # Defense/Special Teams
     "player_sacks": "sack",
     "player_def_interceptions": "int",
@@ -132,7 +156,6 @@ STAT_MARKET_MAPPING_SLEEPER = {
     "player_safeties": "safe",
     "player_blocked_kick": "blk_kick",
     "player_forced_fumble": "ff",
-
     # Points allowed (for D/ST)
     "player_pts_allow_0": "pts_allow_0",
     "player_pts_allow_1_6": "pts_allow_1_6",
@@ -155,25 +178,25 @@ SLEEPER_TO_ODDSAPI_TEAM = {
     "DAL": "Dallas Cowboys",
     "DEN": "Denver Broncos",
     "DET": "Detroit Lions",
-    "GB":  "Green Bay Packers",
+    "GB": "Green Bay Packers",
     "HOU": "Houston Texans",
     "IND": "Indianapolis Colts",
     "JAX": "Jacksonville Jaguars",
-    "KC":  "Kansas City Chiefs",
-    "LV":  "Las Vegas Raiders",
+    "KC": "Kansas City Chiefs",
+    "LV": "Las Vegas Raiders",
     "LAC": "Los Angeles Chargers",
     "LAR": "Los Angeles Rams",
     "MIA": "Miami Dolphins",
     "MIN": "Minnesota Vikings",
-    "NE":  "New England Patriots",
-    "NO":  "New Orleans Saints",
+    "NE": "New England Patriots",
+    "NO": "New Orleans Saints",
     "NYG": "New York Giants",
     "NYJ": "New York Jets",
     "PHI": "Philadelphia Eagles",
     "PIT": "Pittsburgh Steelers",
     "SEA": "Seattle Seahawks",
-    "SF":  "San Francisco 49ers",
-    "TB":  "Tampa Bay Buccaneers",
+    "SF": "San Francisco 49ers",
+    "TB": "Tampa Bay Buccaneers",
     "TEN": "Tennessee Titans",
     "WAS": "Washington Commanders",
 }

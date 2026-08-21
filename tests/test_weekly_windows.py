@@ -1,13 +1,7 @@
 import datetime as dt
-import os
-import sys
 import unittest
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-from refactored import weekly_windows as ww
+from oddsfantasy import weekly_windows as ww
 
 
 def _ts(d: dt.datetime) -> str:
@@ -113,14 +107,16 @@ class ResolveWeekWindowsTest(unittest.TestCase):
     def test_agrees_with_draft_prep_week1_anchor_during_the_pre_season_gap(self):
         # Both features are solving "what's the week of the soonest real
         # game" in this situation -- they should agree.
-        from refactored import draft_prep
+        from oddsfantasy import draft_prep
 
         now = dt.datetime(2026, 8, 19)
         season_opener = dt.datetime(2026, 9, 10, 20, 0, 0)
         events = [{"commence_time": _ts(season_opener)}]
 
         (lineup_this_start, _), _ = ww.resolve_week_windows(events, now_utc=now)
-        draft_week1_start, _ = draft_prep._resolve_draft_week_window(events, which="this", now_utc=now)
+        draft_week1_start, _ = draft_prep._resolve_draft_week_window(
+            events, which="this", now_utc=now
+        )
         self.assertEqual(lineup_this_start, draft_week1_start)
 
 

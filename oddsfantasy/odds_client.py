@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import os
 import json
-import time
+import os
 import threading
+import time
+from typing import Any
+
 import requests
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from typing import Any
+
+from . import ratelimit
+from .config import API_KEY, DATA_DIR, EVENTS_URL
+
 REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
 
 # Reuse HTTP connections for speed
@@ -15,9 +19,6 @@ _SESSION = requests.Session()
 _SESSION.headers.update({"Accept": "application/json"})
 _SESSION.mount("https://", HTTPAdapter(pool_connections=16, pool_maxsize=32))
 _SESSION.mount("http://", HTTPAdapter(pool_connections=16, pool_maxsize=32))
-from config import API_KEY, EVENTS_URL, DATA_DIR
-from . import ratelimit
-
 
 _CACHE_FILE = os.path.join(DATA_DIR, "odds_api_cache.json")
 _META_FILE = os.path.join(DATA_DIR, "odds_api_cache_meta.json")
@@ -29,7 +30,12 @@ _META: dict | None = None
 ODDS_TTL = int(os.getenv("ODDS_TTL", "43200"))  # 12h default
 
 # Debug toggle for cache timing
-_DBG = os.getenv("CACHE_DEBUG") in ("1", "true", "True") or os.getenv("API_DEBUG") in ("1", "true", "True")
+_DBG = os.getenv("CACHE_DEBUG") in ("1", "true", "True") or os.getenv("API_DEBUG") in (
+    "1",
+    "true",
+    "True",
+)
+
 
 def _log(msg: str):
     if _DBG:
@@ -51,7 +57,7 @@ def _load_cache() -> dict:
         except Exception:
             size = -1
         try:
-            with open(_CACHE_FILE, "r", encoding="utf-8") as f:
+            with open(_CACHE_FILE, encoding="utf-8") as f:
                 _MEM_CACHE = json.load(f)
             dt = (time.perf_counter() - t0) * 1000.0
             _log(f"load: disk bytes={size} keys={len(_MEM_CACHE)} dt_ms={dt:.1f}")
@@ -97,7 +103,7 @@ def _load_meta() -> dict:
             _META = {}
             return _META
         try:
-            with open(_META_FILE, "r", encoding="utf-8") as f:
+            with open(_META_FILE, encoding="utf-8") as f:
                 _META = json.load(f)
         except Exception:
             _META = {}
@@ -113,29 +119,31 @@ def _is_fresh_enough(url: str) -> bool:
     return age < ODDS_TTL
 
 
-def get_nfl_events(regions: str = "us", mode: str = "auto", use_saved_data: bool | None = None) -> list[dict[str, Any]]:
+def get_nfl_events(
+    regions: str = "us", mode: str = "auto", use_saved_data: bool | None = None
+) -> list[dict[str, Any]]:
     """Fetch NFL events with per-URL TTL cache.
 
     mode: 'auto' (TTL), 'cache' (cache-only), 'fresh' (network only)
     use_saved_data: legacy flag; when provided overrides mode mapping to 'cache'/'fresh'.
     """
     if use_saved_data is not None:
-        mode = 'cache' if use_saved_data else 'fresh'
+        mode = "cache" if use_saved_data else "fresh"
     url = f"{EVENTS_URL}?apiKey={API_KEY}&regions={regions}"
     t0 = time.perf_counter()
     cache = _load_cache()
-    if mode == 'cache':
+    if mode == "cache":
         # Strict cache-only behavior
         if url in cache:
-            _log(f"events: CACHE_HIT dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
+            _log(f"events: CACHE_HIT dt_ms={(time.perf_counter() - t0) * 1000.0:.1f}")
             ratelimit.update_cached("events")
             return cache[url]
         _log("events: CACHE_MISS strict")
         ratelimit.update_cached("events")
         return []
-    if mode == 'auto':
+    if mode == "auto":
         if url in cache and _is_fresh_enough(url):
-            _log(f"events: TTL_HIT dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
+            _log(f"events: TTL_HIT dt_ms={(time.perf_counter() - t0) * 1000.0:.1f}")
             ratelimit.update_cached("events")
             return cache[url]
         _log("events: TTL_EXPIRED or MISS; fetching")
@@ -147,29 +155,34 @@ def get_nfl_events(regions: str = "us", mode: str = "auto", use_saved_data: bool
     ratelimit.update_from_response(resp.headers, "events")
     cache[url] = data
     _save_cache(cache, url)
-    _log(f"events: NETWORK dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
+    _log(f"events: NETWORK dt_ms={(time.perf_counter() - t0) * 1000.0:.1f}")
     return data
 
 
-def get_event_player_odds(event_id: str, regions: str = "us", markets: str = "", mode: str = "auto", use_saved_data: bool | None = None):
+def get_event_player_odds(
+    event_id: str,
+    regions: str = "us",
+    markets: str = "",
+    mode: str = "auto",
+    use_saved_data: bool | None = None,
+):
     if use_saved_data is not None:
-        mode = 'cache' if use_saved_data else 'fresh'
+        mode = "cache" if use_saved_data else "fresh"
     url = f"{EVENTS_URL}/{event_id}/odds?apiKey={API_KEY}&regions={regions}&markets={markets}"
     t0 = time.perf_counter()
     cache = _load_cache()
-    if mode == 'cache':
+    if mode == "cache":
         if url in cache:
-            _log(f"event:{event_id} CACHE_HIT dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
+            _log(f"event:{event_id} CACHE_HIT dt_ms={(time.perf_counter() - t0) * 1000.0:.1f}")
             ratelimit.update_cached(f"event_odds:{event_id}")
             return cache[url]
         _log(f"event:{event_id} CACHE_MISS strict")
         ratelimit.update_cached(f"event_odds:{event_id}")
         return {}
-    if mode == 'auto':
-        if url in cache and _is_fresh_enough(url):
-            _log(f"event:{event_id} TTL_HIT dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
-            ratelimit.update_cached(f"event_odds:{event_id}")
-            return cache[url]
+    if mode == "auto" and url in cache and _is_fresh_enough(url):
+        _log(f"event:{event_id} TTL_HIT dt_ms={(time.perf_counter() - t0) * 1000.0:.1f}")
+        ratelimit.update_cached(f"event_odds:{event_id}")
+        return cache[url]
 
     resp = _SESSION.get(url, timeout=REQ_TIMEOUT)
     resp.raise_for_status()
@@ -177,5 +190,5 @@ def get_event_player_odds(event_id: str, regions: str = "us", markets: str = "",
     ratelimit.update_from_response(resp.headers, f"event_odds:{event_id}")
     cache[url] = data
     _save_cache(cache, url)
-    _log(f"event:{event_id} NETWORK dt_ms={(time.perf_counter()-t0)*1000.0:.1f}")
+    _log(f"event:{event_id} NETWORK dt_ms={(time.perf_counter() - t0) * 1000.0:.1f}")
     return data

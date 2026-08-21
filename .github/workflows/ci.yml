@@ -1,0 +1,53 @@
+name: CI
+
+# The only entrypoint. Everything else in this directory is a reusable
+# workflow called from here, so there is exactly one place to look when you
+# want to know what runs on a push.
+on:
+  push:
+    branches:
+      - main
+      - "dev/**"
+      - "feature/**"
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Maps branch -> environment tag. See CONTRIBUTING.md "Environments".
+  #   dev/**     -> :e1  (E1, shared by every dev branch: last push wins)
+  #   feature/** -> :e2  (E2)
+  #   main       -> :latest (E3, production)
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.derive.outputs.image_tag }}
+    steps:
+      - name: Derive image tag from ref
+        id: derive
+        run: |
+          case "${{ github.ref }}" in
+            refs/heads/main)       tag=latest ;;
+            refs/heads/feature/*)  tag=e2 ;;
+            refs/heads/dev/*)      tag=e1 ;;
+            *)                     tag= ;;
+          esac
+          echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ref=${{ github.ref }} -> tag=${tag:-<none>}"
+
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    uses: ./.github/workflows/test.yml
+
+  publish:
+    needs: [tag, lint, test]
+    # A pull request proves the code is good; the merge is what deploys.
+    if: github.event_name == 'push' && needs.tag.outputs.image_tag != ''
+    uses: ./.github/workflows/publish.yml
+    with:
+      image_tag: ${{ needs.tag.outputs.image_tag }}
+    secrets: inherit

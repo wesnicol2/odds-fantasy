@@ -1,13 +1,7 @@
-import os
-import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-import sleeper_api
+from oddsfantasy import sleeper_api
 
 
 def _fake_response(payload):
@@ -18,15 +12,17 @@ def _fake_response(payload):
 
 
 class GetLeagueTest(unittest.TestCase):
-    @patch("sleeper_api.requests.get")
+    @patch("oddsfantasy.sleeper_api.requests.get")
     def test_returns_raw_league_object(self, mock_get):
-        mock_get.return_value = _fake_response({
-            "league_id": "123",
-            "status": "pre_draft",
-            "season": "2026",
-            "name": "My League",
-            "scoring_settings": {"rec": 1.0},
-        })
+        mock_get.return_value = _fake_response(
+            {
+                "league_id": "123",
+                "status": "pre_draft",
+                "season": "2026",
+                "name": "My League",
+                "scoring_settings": {"rec": 1.0},
+            }
+        )
         league = sleeper_api.get_league("123")
         self.assertEqual(league["status"], "pre_draft")
         self.assertEqual(league["name"], "My League")
@@ -35,9 +31,11 @@ class GetLeagueTest(unittest.TestCase):
 
 
 class GetLeagueTeamsTest(unittest.TestCase):
-    @patch("sleeper_api.get_league_users")
-    @patch("sleeper_api.get_league_rosters")
-    def test_team_name_falls_back_through_metadata_then_display_name_then_generic(self, mock_rosters, mock_users):
+    @patch("oddsfantasy.sleeper_api.get_league_users")
+    @patch("oddsfantasy.sleeper_api.get_league_rosters")
+    def test_team_name_falls_back_through_metadata_then_display_name_then_generic(
+        self, mock_rosters, mock_users
+    ):
         mock_rosters.return_value = [
             {"roster_id": 1, "owner_id": "u1", "metadata": {"team_name": "The Custom Name"}},
             {"roster_id": 2, "owner_id": "u2", "metadata": {}},
@@ -56,10 +54,12 @@ class GetLeagueTeamsTest(unittest.TestCase):
 
 
 class GetLeagueRosterDataTest(unittest.TestCase):
-    @patch("sleeper_api.get_league")
+    @patch("oddsfantasy.sleeper_api.get_league")
     def test_no_roster_id_returns_empty_players_but_real_scoring(self, mock_league):
         mock_league.return_value = {
-            "status": "pre_draft", "season": "2026", "name": "My League",
+            "status": "pre_draft",
+            "season": "2026",
+            "name": "My League",
             "scoring_settings": {"rec": 0.5},
         }
         data = sleeper_api.get_league_roster_data("123", roster_id=None)
@@ -67,11 +67,16 @@ class GetLeagueRosterDataTest(unittest.TestCase):
         self.assertEqual(data["scoring_rules"], {"rec": 0.5})
         self.assertEqual(data["status"], "pre_draft")
 
-    @patch("sleeper_api.get_enhanced_info_for_roster")
-    @patch("sleeper_api.get_league_rosters")
-    @patch("sleeper_api.get_league")
+    @patch("oddsfantasy.sleeper_api.get_enhanced_info_for_roster")
+    @patch("oddsfantasy.sleeper_api.get_league_rosters")
+    @patch("oddsfantasy.sleeper_api.get_league")
     def test_roster_id_scopes_to_that_roster_only(self, mock_league, mock_rosters, mock_enhanced):
-        mock_league.return_value = {"status": "in_season", "season": "2026", "name": "L", "scoring_settings": {}}
+        mock_league.return_value = {
+            "status": "in_season",
+            "season": "2026",
+            "name": "L",
+            "scoring_settings": {},
+        }
         mock_rosters.return_value = [
             {"roster_id": 1, "players": ["p1"]},
             {"roster_id": 2, "players": ["p2"]},
@@ -84,32 +89,44 @@ class GetLeagueRosterDataTest(unittest.TestCase):
 
 
 class ResolveUserLeaguesTest(unittest.TestCase):
-    @patch("refactored.services.sleeper_api.get_user_leagues")
-    @patch("refactored.services.sleeper_api.get_user_id")
+    @patch("oddsfantasy.services.sleeper_api.get_user_leagues")
+    @patch("oddsfantasy.services.sleeper_api.get_user_id")
     def test_returns_trimmed_league_list(self, mock_user_id, mock_leagues):
-        from refactored.services import resolve_user_leagues
+        from oddsfantasy.services import resolve_user_leagues
+
         mock_user_id.return_value = "u123"
         mock_leagues.return_value = [
-            {"league_id": "L1", "name": "Dynasty Dudes", "status": "in_season", "season": "2026", "extra_junk": True},
+            {
+                "league_id": "L1",
+                "name": "Dynasty Dudes",
+                "status": "in_season",
+                "season": "2026",
+                "extra_junk": True,
+            },
             {"league_id": "L2", "name": "Redraft Rivals", "status": "pre_draft", "season": "2026"},
         ]
         result = resolve_user_leagues("wesnicol", "2026")
         self.assertEqual(result["user_id"], "u123")
         self.assertEqual(len(result["leagues"]), 2)
-        self.assertEqual(result["leagues"][0], {"league_id": "L1", "name": "Dynasty Dudes", "status": "in_season", "season": "2026"})
+        self.assertEqual(
+            result["leagues"][0],
+            {"league_id": "L1", "name": "Dynasty Dudes", "status": "in_season", "season": "2026"},
+        )
         mock_leagues.assert_called_once_with("u123", "2026")
 
-    @patch("refactored.services.sleeper_api.get_user_id")
+    @patch("oddsfantasy.services.sleeper_api.get_user_id")
     def test_unknown_username_returns_error_not_exception(self, mock_user_id):
-        from refactored.services import resolve_user_leagues
+        from oddsfantasy.services import resolve_user_leagues
+
         mock_user_id.side_effect = Exception("404 not found")
         result = resolve_user_leagues("nobody", "2026")
         self.assertEqual(result["error"], "user_not_found")
 
-    @patch("refactored.services.sleeper_api.get_user_leagues")
-    @patch("refactored.services.sleeper_api.get_user_id")
+    @patch("oddsfantasy.services.sleeper_api.get_user_leagues")
+    @patch("oddsfantasy.services.sleeper_api.get_user_id")
     def test_no_leagues_for_season_returns_empty_list_not_error(self, mock_user_id, mock_leagues):
-        from refactored.services import resolve_user_leagues
+        from oddsfantasy.services import resolve_user_leagues
+
         mock_user_id.return_value = "u123"
         mock_leagues.return_value = []
         result = resolve_user_leagues("wesnicol", "2019")
@@ -122,7 +139,8 @@ class CurrentNflSeasonTest(unittest.TestCase):
         # Sanity check against the real clock rather than hardcoding a
         # brittle expected year -- just verify the Jan/Feb-is-still-last-
         # season rule is actually applied.
-        import config
+        from oddsfantasy import config
+
         now = __import__("datetime").datetime.utcnow()
         expected = str(now.year if now.month >= 3 else now.year - 1)
         self.assertEqual(config.current_nfl_season(), expected)
@@ -135,20 +153,22 @@ class ResolveIdentityPriorityTest(unittest.TestCase):
     resolution silently guesses "first league for this user" and can pick
     the wrong league for anyone in more than one."""
 
-    @patch("refactored.services.sleeper_api.get_user_sleeper_data")
-    @patch("refactored.services.sleeper_api.get_league_roster_data")
+    @patch("oddsfantasy.services.sleeper_api.get_user_sleeper_data")
+    @patch("oddsfantasy.services.sleeper_api.get_league_roster_data")
     def test_league_id_takes_priority_over_username(self, mock_league_roster, mock_user_data):
-        from refactored.services import _resolve_identity
+        from oddsfantasy.services import _resolve_identity
+
         mock_league_roster.return_value = {"players": {}, "scoring_rules": {"rec": 1.0}}
         result = _resolve_identity("someuser", "2025", league_id="LEAGUE123", roster_id=5)
         mock_league_roster.assert_called_once_with("LEAGUE123", roster_id=5)
         mock_user_data.assert_not_called()
         self.assertEqual(result["scoring_rules"], {"rec": 1.0})
 
-    @patch("refactored.services.sleeper_api.get_user_sleeper_data")
-    @patch("refactored.services.sleeper_api.get_league_roster_data")
+    @patch("oddsfantasy.services.sleeper_api.get_user_sleeper_data")
+    @patch("oddsfantasy.services.sleeper_api.get_league_roster_data")
     def test_falls_back_to_username_when_no_league_id(self, mock_league_roster, mock_user_data):
-        from refactored.services import _resolve_identity
+        from oddsfantasy.services import _resolve_identity
+
         mock_user_data.return_value = {"players": {}, "scoring_rules": {"pass_td": 4.0}}
         result = _resolve_identity("someuser", "2025")
         mock_user_data.assert_called_once_with("someuser", "2025")

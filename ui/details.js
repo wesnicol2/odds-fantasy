@@ -782,36 +782,9 @@ function _prettyMarketLabel(key) {
   }
 }
 
+
 // Collapsible market block rendering
 function renderMarketBlock(key, payload) {
-  if (!payload) return '';
-  var s = payload.summary || {}; var mean = payload.mean_stat; var impact = payload.impact_score || 0;
-  var safeKey = (key || '').replace(/[^a-z0-9_]/gi, '_');
-  var header = [
-    '<div class="market"summary- aria-expanded="false" data-target="mk_', safeKey, '">',
-      '<div class="title">', _prettyMarketLabel(key), '</div>',
-      '<div class="meta">predicted: ', (mean!=null ? _fmt(mean) : 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â'),
-      ' <span class="pill">impact ', _fmt(impact), '</span>',
-      s && (s.samples!=null) ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : '',
-      '</div>',
-      '<div class="chev">&#9656;</div>',
-    '</div>'
-  ].join('');
-  var rows = (payload.books || []).map(function(b){
-    return '<tr>'
-      + '<td>' + (b.book||'') + '</td>'
-      + '<td>' + (b.over && b.over.odds!=null?_fmt(b.over.odds):'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â') + '</td>'
-      + '<td>' + (b.over && b.over.point!=null?_fmt(b.over.point):'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â') + '</td>'
-      + '<td>' + (b.under && b.under.odds!=null?_fmt(b.under.odds):'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â') + '</td>'
-      + '<td>' + (b.under && b.under.point!=null?_fmt(b.under.point):'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â') + '</td>'
-      + '</tr>';
-  }).join('');
-  var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
-  return '<div class="market">' + header + '<div id="mk_' + safeKey + '" class="market"details hidden->' + table + '</div></div>';
-}
-
-// New clean renderer used by redesigned modal
-function renderMarketBlock2(key, payload) {
   if (!payload) return '';
   var s = payload.summary || {}; var mean = payload.mean_stat; var impact = payload.impact_score || 0;
   var safeKey = (key || '').replace(/[^a-z0-9_]/gi, '_');
@@ -976,10 +949,10 @@ async function openPlayerDetails(name, week, opts) {
       '</div>'
     ].join('');
 
-  var primaryHtml = primary.map(function(k){ return renderMarketBlock2(k, markets[k]); }).join('');
+  var primaryHtml = primary.map(function(k){ return renderMarketBlock(k, markets[k]); }).join('');
   if (!primaryHtml) primaryHtml = '<div class="muted">No primary markets.</div>';
   var others = (data.all_order || []).filter(function(k){ return primary.indexOf(k) === -1; });
-  var otherHtml = others.map(function(k){ return renderMarketBlock2(k, markets[k]); }).join('');
+  var otherHtml = others.map(function(k){ return renderMarketBlock(k, markets[k]); }).join('');
   if (!otherHtml) otherHtml = '<div class="muted">No other markets.</div>';
   // Build a single-column layout: remove markets panel to maximize graph space
   var html = [
@@ -1662,48 +1635,11 @@ document.addEventListener('DOMContentLoaded', function(){
   } catch (e) {}
 });
 
-// Fix dropdown markup regression: override with correct HTML structure
-(function(){
-  function _fmtSafe(v){ return (v==null || Number.isNaN(Number(v))) ? '-' : Number(v).toFixed(2); }
-  window.renderMarketBlock = function(key, payload) {
-    if (!payload) return '';
-    var s = payload.summary || {}; var mean = payload.mean_stat; var impact = payload.impact_score || 0;
-    var safeKey = (key || '').replace(/[^a-z0-9_]/gi, '_');
-    var header = [
-      '<div class="market-summary" aria-expanded="false" data-target="mk_', safeKey, '">',
-        '<div class="title">', _prettyMarketLabel(key), '</div>',
-        '<div class="meta">predicted: ', (mean!=null ? _fmtSafe(mean) : '-'),
-        ' <span class="pill">impact ', _fmtSafe(impact), '</span>',
-        (s && s.samples!=null ? (' <span class="pill">n ' + (s.samples||0) + '</span>') : ''),
-        '</div>',
-        '<div class="chev">&#9656;</div>',
-      '</div>'
-    ].join('');
-    var rows = (payload.books || []).map(function(b){
-      return '<tr>'
-        + '<td>' + (b.book||'') + '</td>'
-        + '<td>' + (b.over && b.over.odds!=null?_fmtSafe(b.over.odds):'-') + '</td>'
-        + '<td>' + (b.over && b.over.point!=null?_fmtSafe(b.over.point):'-') + '</td>'
-        + '<td>' + (b.under && b.under.odds!=null?_fmtSafe(b.under.odds):'-') + '</td>'
-        + '<td>' + (b.under && b.under.point!=null?_fmtSafe(b.under.point):'-') + '</td>'
-        + '</tr>';
-    }).join('');
-    var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
-    return '<div class="market">' + header + '<div id="mk_' + safeKey + '" class="market-details hidden">' + table + '</div></div>';
-  };
-})();
 
 // Note: "incomplete" badge rendering (players/lineup rows missing odds
-// coverage) lives directly in script.js's renderPlayers/renderLineup now --
-// see that file. It used to live here as a pair of runtime overrides (one
-// inline, one dynamically loaded from a since-deleted /ui/overrides.js,
-// found via a real headless-browser console-error check -- an earlier
-// cleanup pass that deleted overrides.js as "unreferenced by index.html"
-// missed that this file injected a <script src="/ui/overrides.js"> at
-// runtime, which a grep over index.html's static <script> tags won't catch.
-// The inline copy that lived here also had corrupted markup from some
-// earlier edit (mojibake'd em-dash, malformed class attributes like
-// `class="pill pill"warn-`), so it wasn't safe to just keep as-is either.
+// coverage) lives in script.js's renderPlayers/renderLineup now. It used to be
+// a pair of runtime overrides here; see "The overrides.js trap" in AGENTS.md
+// before deleting any UI file that looks unreferenced.
 
 
 

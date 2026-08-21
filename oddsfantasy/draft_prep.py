@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Dict, List, Optional, Tuple
 
-import sleeper_api
-from config import SLEEPER_TO_ODDSAPI_TEAM, SLEEPER_ODDS_API_PLAYER_NAME_MAPPING
+from . import odds_client, sleeper_api
+from .config import SLEEPER_ODDS_API_PLAYER_NAME_MAPPING, SLEEPER_TO_ODDSAPI_TEAM
 from .planner import PlannedGame
 from .weekly_windows import earliest_future_week_start, in_window
-from . import odds_client
 
 # Draft prep only covers positions the rest of the app already knows how to
 # turn into fantasy points (see PRIMARY_MARKET_WHITELIST in range_model.py).
@@ -33,7 +31,7 @@ CORE_DRAFT_MARKETS = (
 )
 
 
-def _all_active_players_by_team() -> Dict[str, List[dict]]:
+def _all_active_players_by_team() -> dict[str, list[dict]]:
     """Sleeper's full player DB, filtered to skill positions and grouped by
     Odds-API-style full team name. Unlike planner.py, this is NOT scoped to
     any single roster -- that's the entire point of draft prep.
@@ -44,7 +42,7 @@ def _all_active_players_by_team() -> Dict[str, List[dict]]:
     a draft board is supposed to be broad.
     """
     all_players = sleeper_api.get_players()
-    by_team: Dict[str, List[dict]] = {}
+    by_team: dict[str, list[dict]] = {}
     for pdata in all_players.values():
         pos = pdata.get("position")
         if pos not in DRAFT_POSITIONS:
@@ -59,20 +57,22 @@ def _all_active_players_by_team() -> Dict[str, List[dict]]:
         if not full_name:
             continue
         alias = SLEEPER_ODDS_API_PLAYER_NAME_MAPPING.get(full_name, full_name)
-        by_team.setdefault(full_team, []).append({
-            "full_name": full_name,
-            "alias": alias,
-            "primary_position": pos,
-            "editorial_team_full_name": full_team,
-        })
+        by_team.setdefault(full_team, []).append(
+            {
+                "full_name": full_name,
+                "alias": alias,
+                "primary_position": pos,
+                "editorial_team_full_name": full_team,
+            }
+        )
     return by_team
 
 
 def _resolve_draft_week_window(
-    events: List[dict],
+    events: list[dict],
     which: str = "this",
-    now_utc: Optional[_dt.datetime] = None,
-) -> Optional[Tuple[_dt.datetime, _dt.datetime]]:
+    now_utc: _dt.datetime | None = None,
+) -> tuple[_dt.datetime, _dt.datetime] | None:
     """Resolve "Week 1" / "Week 2" for draft purposes.
 
     Unlike the in-season lineup flow (weekly_windows.compute_week_windows,
@@ -98,7 +98,9 @@ def _resolve_draft_week_window(
     return week_start, week_end
 
 
-def plan_week_for_draft(week: str = "this", regions: str = "us", cache_mode: str = "auto") -> Dict[str, PlannedGame]:
+def plan_week_for_draft(
+    week: str = "this", regions: str = "us", cache_mode: str = "auto"
+) -> dict[str, PlannedGame]:
     """Like planner.plan_relevant_games_and_markets, but for every active
     skill player on every team playing in the target week -- not just one
     roster. Returns game_id -> PlannedGame for the requested window only.
@@ -114,7 +116,7 @@ def plan_week_for_draft(week: str = "this", regions: str = "us", cache_mode: str
 
     by_team = _all_active_players_by_team()
 
-    plan: Dict[str, PlannedGame] = {}
+    plan: dict[str, PlannedGame] = {}
     for e in events:
         ts = e.get("commence_time")
         if not ts or not in_window(ts, (start, end)):
