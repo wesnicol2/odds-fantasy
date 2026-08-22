@@ -235,11 +235,19 @@ directly in `script.js`'s `renderPlayers`/`renderLineup`.
 
 ## Deployment shape
 
-Three environments (E1/E2/E3), each pinned to its own GHCR tag, with Watchtower
-on the home server polling and recreating containers. CI never reaches into the
-server. The full model is in CONTRIBUTING.md; the reasoning for it is just that
-a pull-based deploy needs no inbound access to a home network and no credentials
-stored in GitHub beyond a registry token.
+Two environments -- Test (`:test`) and Production (`:latest`) -- each pinned to
+its own GHCR tag, with Watchtower on the home server polling and recreating
+containers. CI never reaches into the server. The full model is in
+CONTRIBUTING.md; the reasoning for it is just that a pull-based deploy needs no
+inbound access to a home network and no credentials stored in GitHub beyond a
+registry token.
+
+There was briefly a third tier, a per-`dev/*` environment on a shared `:e1` tag.
+It was dropped before anything ran on it: one shared tag across every dev branch
+means concurrent branches clobber each other's deploy, which makes the
+environment untrustworthy exactly when more than one thing is in flight. Dev
+branches still get full CI; they just don't deploy. Verification against a
+running app happens on Test.
 
 The app is dormant ~8 months a year. A container sitting `Exited` in the Unraid
 Docker tab most of the year is the expected steady state, not a fault.

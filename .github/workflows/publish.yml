@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       image_tag:
-        description: "GHCR tag to publish (e1 | e2 | latest)"
+        description: "GHCR tag to publish (test | latest)"
         required: true
         type: string
 
