@@ -24,6 +24,11 @@ and reads `.env`:
 docker compose up -d
 ```
 
+That brings up **two** services: `odds-fantasy` (production, `:latest`, port
+8001) and `odds-fantasy-test` (test, `:test`, port 8003, its own `./data-test`
+volume). For just the one, name it: `docker compose up -d odds-fantasy`. The
+two environments are described in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 Mount `/app/data` somewhere persistent — the odds cache and Sleeper player
 metadata live there, and losing it means re-spending API quota.
 
