@@ -1,19 +1,20 @@
 - Draft companion
-    - Will keep up with draft and suggest players at each point. 
-    - Need to define clear draft plan DONE (see below)
+    - Will keep up with draft and suggest players at each point based on draft plan
     - Auto update with top suggestions for each round depending on team construction + my preferences
-    - Simplify my choices by highlighting the following:
-        - synergy with existing team
-        - upside possibility (strong handcuffs, players with new, better coaches, players with new, better teammates)
-            - We should statically identify the upside of every single player. Automated upside would be a stretch goal.
-        - Show season long curve comparison between top 5 players or so based on season long props from odds api (stretch goal)
+    
             
 
 Minimum viable product: A auto updating UI (no interaction needed from user) which shows top picks based on draft plan. Players should be highlighted with different colors based on how many draft plan criteria they have
 
+NEXT STEPS: 
+- Simplify my choices by highlighting the following:
+    - synergy with existing team
+    - upside possibility (strong handcuffs, players with new, better coaches, players with new, better teammates, starter injury possibility, etc...)
+
+
 STRETCH GOALS: 
-    - calculate predicted Wins Above Replacement (WAR) for every player and rank based on that
     - Show season long curve comparison between top 5 players or so based on season long props from odds api (stretch goal)
+    - calculate predicted Wins Above Replacement (WAR) for every player and rank based on that
 
 
 DRAFT PLAN: 
