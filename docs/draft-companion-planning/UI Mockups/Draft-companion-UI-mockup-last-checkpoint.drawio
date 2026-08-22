@@ -73,7 +73,7 @@
         <mxCell id="ZKEAz0sFbWCkWhe-I1pX-32" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="End at 32 because that is the total number of picks left in this checkpoint. Theoretically it should show every option even if all others are drafted first&amp;nbsp;" vertex="1">
           <mxGeometry height="40" width="580" x="160" y="1270" as="geometry" />
         </mxCell>
-        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-33" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;NEEDS&lt;/b&gt;&lt;div&gt;(one box for each player that is REQUIRED in this checkpoint&lt;/div&gt;" vertex="1">
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-33" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;NEEDS&lt;/b&gt;&lt;div&gt;(one box for each player that is REQUIRED in this checkpoint&lt;/div&gt;&lt;div&gt;for this exaple: we&#39;re seeing the end of the draft where we need at least 4 RBs, 5 WR, 1QB and 1TE.&lt;/div&gt;&lt;div&gt;In this situation, we still need one more RB and one more TE. QB is weaker overall and therefore is sorted a little higher than WR on the columns sorting&lt;/div&gt;" vertex="1">
           <mxGeometry height="30" width="330" x="-190" y="-15" as="geometry" />
         </mxCell>
         <mxCell id="ZKEAz0sFbWCkWhe-I1pX-35" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;aspect=fixed;" value="QB" vertex="1">
