@@ -86,10 +86,16 @@ image tag from `github.ref`, then calls three stages in sequence:
 **A red check is a hard stop**, not a "merge anyway and fix later."
 
 > **Built.** `ci.yml`, `lint.yml`, `test.yml` and `publish.yml` are all in place
-> and `build.yml` is gone. Keep in mind that **files under `.github/workflows/`
-> must be added and edited by a human** — GitHub rejects automation tokens
-> without an explicit `workflow` scope — so a change that needs a workflow edit
-> cannot be completed by an assistant end to end.
+> and `build.yml` is gone.
+
+**Editing workflow files is not human-only.** This file used to claim that
+anything under `.github/workflows/` had to be added or edited by a person,
+because GitHub rejects automation tokens lacking an explicit `workflow` scope.
+That rejection is real but conditional — it depends entirely on the credential
+in use. A Claude Code session pushed five workflow files to this repo on
+2026-08-22 without hitting it. So don't route a workflow change around an
+assistant on principle; try the push, and only fall back to doing it by hand
+if the remote actually refuses it.
 
 ## Documentation
 
