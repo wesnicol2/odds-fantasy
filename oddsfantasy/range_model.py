@@ -11,6 +11,7 @@ from .prob_models import (  # type: ignore
     get_model_registry,
     poisson_quantile,
 )
+from .projection import project_player
 
 PRIMARY_MARKET_WHITELIST = {
     # Passing
@@ -205,6 +206,33 @@ def compute_fantasy_range(
     return floor_fp, mid_fp, ceil_fp, per_market_ranges
 
 
+# Model key for the engine that implements docs/fantasy-projection-methodology.md
+# end to end. The other keys are the earlier single-anchor models, kept
+# selectable so the two can be compared on the same odds.
+METHODOLOGY_MODEL = "market"
+
+
+def compute_methodology_fantasy_range(
+    per_bookmaker_odds: dict,
+    scoring_rules: dict[str, float],
+) -> tuple[float, float, float, dict[str, tuple[float, float, float]]]:
+    """Floor/mid/ceiling straight from docs/fantasy-projection-methodology.md.
+
+    The whole pipeline lives in projection.py (which composes market_math.py
+    and scoring.py); this is the adapter that presents it in the same shape as
+    the older models, so every call site is indifferent to which one is
+    selected. Floor and ceiling here are the 10th and 90th percentiles of the
+    player's fantasy-points curve (§5), not the 15th/85th the older models use.
+    """
+    projection = project_player(per_bookmaker_odds, scoring_rules)
+    return (
+        projection.floor,
+        projection.mid,
+        projection.ceiling,
+        projection.per_market_ranges,
+    )
+
+
 def compute_fantasy_range_model(
     per_bookmaker_odds: dict,
     market_summaries: dict[str, object],
@@ -212,6 +240,8 @@ def compute_fantasy_range_model(
     model: str = "baseline",
 ) -> tuple[float, float, float, dict[str, tuple[float, float, float]]]:
     model = (model or "baseline").lower()
+    if model == METHODOLOGY_MODEL:
+        return compute_methodology_fantasy_range(per_bookmaker_odds, scoring_rules)
     if model == "baseline":
         return compute_fantasy_range(per_bookmaker_odds, market_summaries, scoring_rules)
 

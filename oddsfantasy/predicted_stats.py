@@ -85,8 +85,14 @@ def predict_stats_for_player(player_odds):
     # Iterate over all bookmakers and markets for the player
     for markets in player_odds.values():
         for market_key, market_data in markets.items():
-            over_data = market_data["over"]
+            # Alternate ladders are stored as {"alts": {...}} and carry no
+            # single over/under pair, so there is no one threshold to average
+            # here. Skip them rather than raising -- they're consumed by the
+            # models that read the whole ladder (market_math.collect_anchors).
+            over_data = market_data.get("over")
             under_data = market_data.get("under")
+            if not over_data and not under_data:
+                continue
 
             # Initialize stats if this market hasn't been processed yet
             if market_key not in predicted_stats:
