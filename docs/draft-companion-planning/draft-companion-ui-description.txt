@@ -16,7 +16,7 @@ COLUMN ORDER
 
 
 CELLS 
-- Each player cell should make it obvious 1) Player Name 2) Position (color coordinated) 3) Team (with logo) and 4) Picture
+- Each player cell should make it obvious 1) Player Name 2) Team (with logo) and 3) Picture 4) Age
 - Highlight players based on the following criteria (color, bolding, etc... we will decide how each property is highlighted later)
     - Team synergy (Once a WR from a specifc team is drafted, that team's QB should be positivly highlighted. The WR from the same team should be negatively highlighted)
         - TODO: What other team synergys do we want to highlight? 

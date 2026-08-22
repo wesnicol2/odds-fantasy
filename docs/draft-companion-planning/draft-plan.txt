@@ -8,13 +8,13 @@ Minimums by end of R3: RB ≥1, WR ≥1
 Rounds 4–6
 Take elite QB/TE only if:
 Stack synergy is available, OR
-They’re last-of-tier (top 3 QB/TE). TODO: Identify top 3 QB/TEs
+They’re falling far past ADP
 Otherwise: keep hammering RB/WR.
 Minimums by end of R6: RB ≥2, WR ≥2, QB ≥0, TE ≥0
 
 
 Rounds 7–9
-Fill in TE if you don't have one yet 
+Fill in TE if you don't have one yet (do not overpay)
 Prioritize best available RB/WR value. (lean WR) 
 Do not overpay for QB/TE depth yet.
 Minimums by end of R9: RB ≥3, WR ≥4
@@ -28,5 +28,5 @@ High-upside RB backups
 Exactly one WR dart (rookie/role-shift in strong offense), 
 Optional: add one upside QB or TE.
 Minimums by end of R14: RB ≥4, WR ≥5, QB ≥1, TE ≥1
-Round 15 – maybe Defense
-TODO: Identify top defenses for week 1 by implied total
+Round 15 – Defense - draft the defense with the easiest matchup (opponent has lowest implied team total)
+Defenses for 2026 week 1: Jaguars, Chargers, Raiders, Titans, Steelers
