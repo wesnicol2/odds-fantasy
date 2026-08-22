@@ -6,6 +6,34 @@ decisions, the constraints they answer to, and the things that were tried and
 rejected. There is no length limit here. If you are about to write a paragraph
 of rationale in a code comment or in the README, it probably belongs here.
 
+## Which docs an agent may change
+
+The four documents in this repo are not equally open to edit. An assistant
+working here should treat them as two tiers.
+
+**Keep current as you go — `README.md` and `AGENTS.md`.** If a change you make
+contradicts something either file says, update it in the same commit. A change
+that alters how someone runs or uses the app belongs in the README; a change
+that alters why the code is shaped the way it is belongs here. This is not
+optional tidying: a doc that describes an app that no longer exists is exactly
+how this repo rotted the first time, and the next reader has no way to tell
+that a stale sentence is stale. Do not leave it for a follow-up.
+
+**Do not touch without explicit human approval — `CONTRIBUTING.md` and
+`docs/fantasy-projection-methodology.md`.** These two are the contracts. One
+defines how work moves through the repo, the other defines what the model is
+supposed to compute; the rest of the repo is measured against them, so an
+agent editing them unasked is an agent quietly moving the goalposts it is
+being judged by. Ask first and get a clear yes, every time. This holds on a
+`dev/` branch as much as anywhere else — being unmerged is not permission,
+because review is precisely where an unrequested change to a contract is
+easiest to wave through. If work seems to require changing one of them, say
+so, propose the specific edit and wait.
+
+The asymmetry is deliberate. Getting a stale README fixed is cheap and the
+downside of not fixing it is real; changing a contract is cheap to do and
+expensive to notice.
+
 ---
 
 ## The core idea
