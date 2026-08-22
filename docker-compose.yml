@@ -1,4 +1,5 @@
 services:
+  # Production. Tracks :latest, which CI publishes on every merge to main.
   odds-fantasy:
     image: ghcr.io/wesnicol2/odds-fantasy:latest
     env_file:
@@ -7,4 +8,20 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+    restart: unless-stopped
+
+  # Test. Tracks :test, which CI publishes on every merge into a feature
+  # branch. Deliberately given its own data volume rather than sharing
+  # ./data: that directory holds the cached-odds store, and letting test
+  # traffic write into production's cache would corrupt it. The cost of
+  # separating them is that each environment spends its own Odds API quota,
+  # which is the right trade but worth knowing before exercising Test hard.
+  odds-fantasy-test:
+    image: ghcr.io/wesnicol2/odds-fantasy:test
+    env_file:
+      - .env
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data-test:/app/data
     restart: unless-stopped
