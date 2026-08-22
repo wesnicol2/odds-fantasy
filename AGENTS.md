@@ -53,9 +53,14 @@ Everything below follows from that.
 
 Raw implied probabilities from a two-sided market sum to more than 1 — that
 excess is the book's margin (the "vig"). Using raw implied probability
-systematically overstates every event. `predicted_stats.implied_probability`
-converts American odds to a probability, and `aggregator.py` de-vigs per book
-when both sides of a market are present, normalising over/under to sum to 1.
+systematically overstates every event. The feed quotes **decimal** odds (The
+Odds API's default format, and no `oddsFormat` is passed), so the conversion is
+just `1/odds` — `predicted_stats.implied_probability` and
+`market_math.decimal_to_probability`. `aggregator.py` and `market_math.py` both
+de-vig per book when both sides of a market are present, normalising over/under
+to sum to 1. `market_math.american_to_probability` exists only so the
+methodology doc's worked examples, which are quoted in American odds, can be
+run through the real code as tests.
 
 De-vig **per book, then combine across books** — not the other way around. Books
 carry different margins, so combining raw implied probabilities across books
@@ -69,10 +74,91 @@ naming debt — `MarketSummary` still calls the fields `avg_over_prob`,
 `avg_under_prob` and `avg_threshold` from when this was a mean, and the values
 they hold are medians.
 
+### The methodology engine (`model=market`, the default)
+
+`docs/fantasy-projection-methodology.md` is the spec: it argues, from the
+market up and independent of any code, what the model should compute. Three
+modules implement it, one per stage, and nothing else in the package needs to
+know which stage it is talking to:
+
+- **`scoring.py`** — the league's rules as configuration. Values, the
+  per-reception value and bonus *(threshold, amount)* pairs all come from
+  Sleeper's `scoring_settings`. The threshold is the part that used to be
+  hardcoded: Sleeper only gives us a key like `bonus_rush_yd_100`, so the
+  number is parsed out of the key name rather than paired with a literal `100`
+  in the code. A league with `bonus_rush_yd_150` therefore works with no code
+  change, which is what "ruleset-agnostic" has to mean to be worth claiming.
+- **`market_math.py`** — odds to distribution. Per-book proportional de-vig,
+  median across books, isotonic (PAV) to kill any dip, then either monotone
+  cubic (PCHIP) between anchors with lognormal tails for yardage, or straight
+  differencing of the cumulative lines for counts.
+- **`projection.py`** — the player's curve. Draw from every stat, score each
+  draw with the real configured scoring, sum, and read floor / mid / ceiling
+  off the result as its 10th / 50th / 90th percentiles.
+
+Four decisions inside that are worth not re-deriving:
+
+**Counts are differenced, not fitted.** For touchdowns, receptions,
+interceptions and passing touchdowns the posted cumulative lines *are* the
+survival curve, so the distribution is read off directly: `P(0) = 1 - P(≥1)`,
+`P(exactly 1) = P(≥1) - P(≥2)`, and so on. The highest posted line becomes the
+top bucket scored at its floor — those games have *at least* that many, and
+with no higher line we don't invent the mass above it. A Poisson fit survives
+only for the genuinely under-determined case (the ladder starts above 1, so
+differencing can't reach `P(0)`), which the doc leaves open pending
+calibration.
+
+**Bonuses stack.** A 210-yard rushing game collects both the 100- and the
+200-yard bonus. The older code awarded only the highest (`elif`), which
+contradicts the doc's expectation identity
+`E = rate × E[stat] + Σ amount_i × P(≥ threshold_i)` — that only holds if each
+threshold pays independently. Sleeper's own scoring stacks them too.
+
+**Stats are summed independently, and that understates the right tail.** This
+is the one place the market-translation-only principle bites: a player's stats
+genuinely move together, but books quote marginals and this feed carries no
+market that prices the joint. The alternatives were to assume independence or
+to invent a correlation matrix; we took the first and say so. Ceilings are
+therefore conservative for tightly coupled stats, a QB's passing yards and
+passing touchdowns most of all.
+
+**Sampling is seeded.** A fixed seed means the same odds produce the same
+projection every time, so refreshing a page can't reshuffle a lineup. The seed
+is shared across players, which makes the draws common random numbers: two
+players compared on one screen were dealt the same luck.
+
+Two smaller judgement calls, both places the doc stops short:
+
+- A **one-sided ladder rung** ("125+" with no under posted) can't be de-vigged
+  as a two-way market. It's corrected by that same book's *own* measured
+  overround on that market — its margin, read off its two-way lines. That
+  keeps it market-derived rather than picking a constant.
+- A **continuous market with a single anchor** is under-determined: two points
+  is the minimum a lognormal needs. It falls back to the shape described in the
+  next section, and stops doing so the moment a second distinct threshold shows
+  up anywhere in the feed — which multiple books usually supply on their own,
+  since they rarely post the identical line.
+- **Anchors that carry no slope.** Two books posting nearly the same price at
+  slightly different lines say almost nothing about how fast the curve falls,
+  and a lognormal fitted straight through them is meaningless — this produced a
+  51-yard floor and a ceiling pinned to the top line for a 261-yard passer
+  before it was guarded. So the tail fit walks inward for a pair actually
+  separated in probability, and when isotonic flattens *every* anchor to one
+  value (books disagreeing about which way the line leans) the market has given
+  one point of information, not several, and it is treated as a single anchor.
+  Neither guard changes what an anchor says; they change which anchors a tail
+  is fitted through.
+
+The older models (`const`, `puelz`, `angelini`, `baseline`) are still reachable
+via `?model=`, so the two approaches can be compared on the same odds, but they
+are no longer offered in the UI — one engine is the answer, and a dropdown
+inviting a choice between five implied that four of them were live options. The
+section below is what they do.
+
 ### One line is not a distribution, so pick a shape
 
-Usually there's a single (threshold, over-probability) pair per market, which
-pins exactly one point on the CDF. Getting floor/mid/ceiling out of one point
+The older models take a single (threshold, over-probability) pair per market,
+which pins exactly one point on the CDF. Getting floor/mid/ceiling out of one point
 requires assuming a shape, and the shape matters more than it looks:
 
 - **Yardage markets** (`*_yds`) are right-skewed. A receiver with a 49.5-yard
@@ -96,32 +182,53 @@ Floor/mid/ceiling are the 15th/50th/85th percentiles, not min/expected/max.
 
 ### As-built here, target in `docs/fantasy-projection-methodology.md`
 
-This section describes **what the code does today**. `docs/fantasy-projection-methodology.md`
-describes the **target method** — derived from first principles, independent of
-any code, and explicitly "the reference the implementation is measured against."
-The two are meant to differ; a reader hitting one without the other is the
-problem, so the current gaps are worth naming:
+This section tracks **what the code does today** against the **target method**
+in `docs/fantasy-projection-methodology.md` — derived from first principles,
+independent of any code, and explicitly "the reference the implementation is
+measured against." A reader hitting one without the other is the problem, so
+the live position is worth naming. `model=market` is the default engine; the
+older models are the row's second column.
 
-| | As built (this file) | Target (methodology doc) |
-| --- | --- | --- |
-| CDF anchors | one (threshold, probability) pair per market; `*_alternate` ladders skipped for quota | the full alternate ladder, interpolated (PCHIP) between anchors |
-| Count stats | Poisson fit to the single CDF point | difference the cumulative lines (`§4`); Poisson/NB only where lines are sparse |
-| Floor / ceiling | 15th / 85th percentiles | 10th / 90th (`§5`) |
-| Bonus thresholds | yardage thresholds hardcoded in `odds_details.py`; only the point *amounts* come from Sleeper | thresholds and amounts both configuration (`§2.4`) |
-| Aggregation | per-stat only; no player-level joint model | player-level sum, with cross-stat correlation an open question (`§2.5`) |
+| | Target (methodology doc) | `model=market` | Older models |
+| --- | --- | --- | --- |
+| CDF anchors | full ladder, PCHIP between anchors | every threshold any book posts, base and `*_alternate` alike | one (threshold, probability) pair |
+| Count stats | difference the cumulative lines (`§4`) | differenced; Poisson only where the ladder starts above 1 | Poisson fit to the single CDF point |
+| Floor / ceiling | 10th / 90th (`§5`) | 10th / 90th of the player's curve | 15th / 85th, per stat |
+| Bonus thresholds | thresholds and amounts both configuration (`§2.4`) | both parsed from the league's scoring settings | thresholds hardcoded next to the amounts |
+| Bonus scoring | kink priced per outcome (`§2.4`) | exact, applied per simulated draw | expected-value ramp, highest bonus only |
+| Aggregation | player-level sum (`§2.5`) | Monte Carlo sum of the stat curves | per-stat only; no joint model |
 
-Cross-book median de-vigging is the one place they already agree. Closing any of
-the rest is a code change, not a doc change — the doc is the spec, so update it
-first if the target itself should move.
+What is still open, and why:
 
-### Alternate lines are deliberately not used by default
+- **Cross-stat correlation** (`§2.5`) — assumed independent. Not closable from
+  this feed; see the engine section above.
+- **De-vig method** (`§2.1`) — proportional, as the doc's current choice. Shin
+  and power de-vig are candidates the doc wants decided by calibration, and
+  there is no calibration harness yet.
+- **Sparse single-line counts** (`§2.3`) — Poisson, as an interim. Poisson vs
+  negative-binomial is likewise a calibration question.
+- **DEF and K** (`§7`) — untouched by the new engine; see the defense section
+  below for why the market can't price them.
+- **Fumbles and 2-point conversions** — no clean market, so omitted rather
+  than estimated.
+
+Closing any of these is a code change, not a doc change — the doc is the spec,
+so update it first if the target itself should move.
+
+### Alternate lines are requested for three markets, not all of them
 
 The Odds API sells `*_alternate` markets — the full ladder of thresholds, which
-would give many CDF anchors instead of one and make the fits genuinely
-data-driven rather than assumed. They are skipped by default anyway, because
-they multiply request size for a refinement the lognormal/Poisson fallback
-already approximates reasonably. This is a quota decision, not a modelling one.
-See the quota section.
+is what turns a fit into a reconstruction. `planner._markets_for_positions`
+asks for three of them: `player_rush_yds`, `player_reception_yds` and
+`player_receptions`. Passing yards, passing touchdowns and the touchdown
+ladders are not requested, so those stats reach the engine with whatever
+thresholds the books happen to differ on.
+
+That split is a quota decision, not a modelling one — each extra market
+multiplies request size — and it is the main lever left if the yardage curves
+look too coarse. The engine reads whatever ladder is present and invents
+nothing where one isn't, so widening the set is a one-line change in
+`planner.py` with a real cost attached. See the quota section.
 
 ### Defense scoring is a known partial model
 
@@ -261,6 +368,59 @@ and occasionally load-bearing.
 The incomplete-badge rendering that used to live in those overrides is now
 directly in `script.js`'s `renderPlayers`/`renderLineup`.
 
+## The UI is two screens
+
+The app answers two questions and the UI is now shaped as exactly those two,
+picked automatically from the league's Sleeper status:
+
+- **Pre-Draft** — who to take next, when you are torn between players you rate
+  similarly. It is the league-wide board, ranked, with two columns that exist
+  specifically to break a tie: **Upside** (ceiling − mid), because the top-3
+  payout means leaning on the right tail (`§5` of the methodology doc), and
+  **Books**, flagged when a projection rests on too few bookmakers to lean on.
+- **In-Season** — your roster this week: lineup, all players, defenses.
+
+**There is no season-total projection, and that is a decision, not a gap.** The
+books only post props for the upcoming slate, so a "season projection" here
+could only be the per-game number times a games constant. That is a monotone
+transform: it reorders nothing, adds no information a draft decision can use,
+and would present itself as a market read while being arithmetic we made up.
+The Odds API sells no season-long player market to replace it with — its player
+props are per-event, and the only NFL futures key is a team outright.
+
+### What was removed and why
+
+The screen had accumulated a second copy of everything. Removed:
+
+- **The Compare Curves and Book Coverage modals** (~640 lines). Both existed to
+  compare the older models against each other. One engine now, and coverage
+  became a column on the board where it is actually read.
+- **The Advanced Tools panel** — five buttons and a `<pre>` JSON dump of
+  `/projections`. Debugging surface on the main screen.
+- **The model dropdown**, and its cousins inside the player modal and the debug
+  overlay (a "compare vs" select, per-model checkboxes, two multi-model graph
+  renderers).
+- **A second `<footer>`** rendering the same rate-limit string as the header.
+- **A dead duplicate of `_attachFpVisualHandlers`.** Two definitions, and
+  hoisting meant the later one won — so the earlier one's drag-to-select-a-range
+  feature had never run once. It is in git history if it is ever wanted back.
+
+Three things were **broken**, not merely redundant, and are fixed:
+
+- **The settings gear never opened anything.** The panel ships with `hidden`
+  (`display: none !important`) and the button toggled a class `open` that no
+  rule acted on, so the data-mode control and the username fallback behind it
+  were unreachable.
+- **The player detail modal had no close button** in the markup, though the
+  script wired one; it closed only on Escape or a click outside.
+- **Table sorting decided numeric columns by column index** (`colIdx >= 3`).
+  The tables don't share a column order, so that silently sorted a text column
+  as numbers. It reads the data now, and numeric columns sort highest-first.
+
+Also repaired: fourteen mojibake sequences (`Ã¢â‚¬â€` for an em dash, and worse
+— some double-encoded) left in `details.js` by an earlier bad edit, plus a stray
+BOM at the top of the file.
+
 ## Deployment shape
 
 Two environments -- Test (`:test`) and Production (`:latest`) -- each pinned to
@@ -279,6 +439,34 @@ running app happens on Test.
 
 The app is dormant ~8 months a year. A container sitting `Exited` in the Unraid
 Docker tab most of the year is the expected steady state, not a fault.
+
+### The build stamp
+
+The cost of a pull-based deploy is that nothing in the loop reports back. CI
+pushes a digest, Watchtower notices it at some point in its polling interval,
+and the container restarts -- so "is my change live yet?" was answerable only by
+guessing from timestamps, and "which commit is Test actually running?" not at
+all. Watchtower's interval and a browser cache are enough to make a stale page
+look like a broken change.
+
+So the commit is stamped into the image at build time (`publish.yml` passes
+`github.sha` as a build arg, the Dockerfile turns it into `APP_COMMIT`),
+reported by `/health`, and rendered in a footer the UI keeps on screen at all
+times. `build_info.py` resolves it from three sources in order: the baked env
+var, then `git rev-parse` for a source checkout, then `unknown`.
+
+Three details worth keeping:
+
+- **The env var is the only source that works in a container.**
+  `.dockerignore` excludes `.git`, so an image has no repository to
+  interrogate. The git path exists purely for `python -m oddsfantasy.api` in a
+  checkout.
+- **A dirty checkout says so.** Running from source with uncommitted changes
+  shows `+local changes`, because a footer naming a commit whose code you have
+  since edited is worse than one admitting it doesn't know.
+- **An unstamped build reads `unknown`, not blank.** A plain `docker build` with
+  no build arg gets the Dockerfile's default, and the footer says as much. The
+  failure mode to avoid is a footer that looks confident and is wrong.
 
 ## Things deliberately not done
 

@@ -21,6 +21,7 @@ from . import (
     odds_details,  # for the /player/odds and /defense/odds endpoints
     ratelimit,
 )
+from .build_info import build_info
 from .config import DEFAULT_SEASON
 from .lineup import build_lineup, build_lineup_diffs
 from .services import (
@@ -173,6 +174,7 @@ def application(environ, start_response):
                 "200 OK",
                 {
                     "status": "ok",
+                    "build": build_info(),
                     "ratelimit": ratelimit.format_status(),
                     "ratelimit_info": ratelimit.get_details(),
                 },
@@ -214,7 +216,7 @@ def application(environ, start_response):
             season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
-            model = q("model", "const")
+            model = q("model", "market")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             league_id, roster_id = q_identity()
@@ -243,7 +245,7 @@ def application(environ, start_response):
             season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
-            model = q("model", "const")
+            model = q("model", "market")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             league_id, roster_id = q_identity()
@@ -272,7 +274,7 @@ def application(environ, start_response):
             week = q("week", "this")
             target = q("target", "mid")
             region = q("region", "us")
-            model = q("model", "const")
+            model = q("model", "market")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             league_id, roster_id = q_identity()
@@ -317,7 +319,7 @@ def application(environ, start_response):
             season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
-            model = q("model", "const")
+            model = q("model", "market")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             league_id, roster_id = q_identity()
@@ -392,7 +394,7 @@ def application(environ, start_response):
             week = q("week", "this")
             region = q("region", "us")
             name = q("name", "")
-            model = q("model", "const")
+            model = q("model", "market")
             mode = q("mode", "auto")
             league_id, roster_id = q_identity()
             t0 = time.time()
@@ -444,7 +446,7 @@ def application(environ, start_response):
             season = q("season", DEFAULT_SEASON)
             week = q("week", "this")
             region = q("region", "us")
-            model = q("model", "const")
+            model = q("model", "market")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             positions_raw = q("positions", "")
@@ -475,7 +477,7 @@ def application(environ, start_response):
             username = q("username", "wesnicol")
             season = q("season", DEFAULT_SEASON)
             region = q("region", "us")
-            model = q("model", "const")
+            model = q("model", "market")
             fresh = q("fresh", "0") in ("1", "true", "True")
             mode = q("mode", "auto")
             weeks = q("weeks", "this")  # default lighter workload
