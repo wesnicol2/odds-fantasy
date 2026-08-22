@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from oddsfantasy import draft_prep
+from oddsfantasy.weekly_windows import earliest_future_week_start
 
 FAKE_SLEEPER_PLAYERS = {
     "1": {"full_name": "Josh Allen", "position": "QB", "team": "BUF"},
@@ -84,8 +85,17 @@ class PlanWeekForDraftTest(unittest.TestCase):
     def test_builds_plan_for_week1_and_week2_separately(self, mock_get_players, mock_get_events):
         mock_get_players.return_value = FAKE_SLEEPER_PLAYERS
         now = dt.datetime.utcnow()
-        week1_ts = _ts(now + dt.timedelta(days=10))
-        week2_ts = _ts(now + dt.timedelta(days=17))
+        # Anchor the fixture to the Thu-Mon slate the planner will actually
+        # resolve, rather than to a bare "now + N days" offset. A fixed offset
+        # makes this test depend on the weekday it runs on: two days in seven
+        # it lands on a Tue/Wed, which is outside any Thu-Mon window, and
+        # plan_week_for_draft correctly returns nothing. Real NFL games never
+        # fall there, so the fixture -- not the planner -- was wrong.
+        week1_start = earliest_future_week_start(
+            [{"commence_time": _ts(now + dt.timedelta(days=10))}], now
+        )
+        week1_ts = _ts(week1_start + dt.timedelta(days=1))
+        week2_ts = _ts(week1_start + dt.timedelta(days=8))
         mock_get_events.return_value = [
             {
                 "id": "game-week1",
