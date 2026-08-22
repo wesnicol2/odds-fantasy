@@ -1,5 +1,5 @@
 - Draft companion
-    - Will keep up with draft and suggest players at each point based on draft plan
+    - Will keep up with draft and suggest players at each point based on draft plan (draft plan should be configured in config files only)
     - Auto update with top suggestions for each round depending on team construction + my preferences
     
             
