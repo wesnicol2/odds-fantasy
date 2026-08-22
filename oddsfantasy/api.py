@@ -21,6 +21,7 @@ from . import (
     odds_details,  # for the /player/odds and /defense/odds endpoints
     ratelimit,
 )
+from .build_info import build_info
 from .config import DEFAULT_SEASON
 from .lineup import build_lineup, build_lineup_diffs
 from .services import (
@@ -173,6 +174,7 @@ def application(environ, start_response):
                 "200 OK",
                 {
                     "status": "ok",
+                    "build": build_info(),
                     "ratelimit": ratelimit.format_status(),
                     "ratelimit_info": ratelimit.get_details(),
                 },

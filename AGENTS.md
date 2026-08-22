@@ -385,6 +385,34 @@ running app happens on Test.
 The app is dormant ~8 months a year. A container sitting `Exited` in the Unraid
 Docker tab most of the year is the expected steady state, not a fault.
 
+### The build stamp
+
+The cost of a pull-based deploy is that nothing in the loop reports back. CI
+pushes a digest, Watchtower notices it at some point in its polling interval,
+and the container restarts -- so "is my change live yet?" was answerable only by
+guessing from timestamps, and "which commit is Test actually running?" not at
+all. Watchtower's interval and a browser cache are enough to make a stale page
+look like a broken change.
+
+So the commit is stamped into the image at build time (`publish.yml` passes
+`github.sha` as a build arg, the Dockerfile turns it into `APP_COMMIT`),
+reported by `/health`, and rendered in a footer the UI keeps on screen at all
+times. `build_info.py` resolves it from three sources in order: the baked env
+var, then `git rev-parse` for a source checkout, then `unknown`.
+
+Three details worth keeping:
+
+- **The env var is the only source that works in a container.**
+  `.dockerignore` excludes `.git`, so an image has no repository to
+  interrogate. The git path exists purely for `python -m oddsfantasy.api` in a
+  checkout.
+- **A dirty checkout says so.** Running from source with uncommitted changes
+  shows `+local changes`, because a footer naming a commit whose code you have
+  since edited is worse than one admitting it doesn't know.
+- **An unstamped build reads `unknown`, not blank.** A plain `docker build` with
+  no build arg gets the Dockerfile's default, and the footer says as much. The
+  failure mode to avoid is a footer that looks confident and is wrong.
+
 ## Things deliberately not done
 
 - **No database.** Everything is JSON files under `data/`. The dataset is one

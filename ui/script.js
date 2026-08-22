@@ -338,6 +338,73 @@ async function fetchJSON(url) {
   return { ok: res.ok, status: res.status, data };
 }
 
+// ---- Build stamp ------------------------------------------------------
+// Deployment is pull-based (Watchtower recreates the container when the GHCR
+// digest moves), so nothing else tells you which commit is actually serving
+// this page. /health reports it; this renders it in the footer.
+const GITHUB_REPO_URL = 'https://github.com/wesnicol2/odds-fantasy';
+
+function _renderBuildFooter(build) {
+  const el = $('buildText');
+  if (!el) return;
+  el.textContent = '';
+  if (!build || !build.commit || build.commit === 'unknown') {
+    el.textContent = 'build unknown';
+    el.title = 'This build carries no commit stamp.';
+    return;
+  }
+
+  // Built as DOM nodes rather than an HTML string: the commit goes into an
+  // href, and there is no escaping to get wrong this way.
+  const pieces = [];
+  const link = document.createElement('a');
+  link.className = 'build-mono';
+  link.href = GITHUB_REPO_URL + '/commit/' + encodeURIComponent(build.commit);
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = build.commit_short || build.commit.slice(0, 7);
+  const stamp = document.createElement('span');
+  stamp.append('build ', link);
+  pieces.push(stamp);
+
+  // A dirty tree means the running code is not the commit named, so say so
+  // rather than showing a stamp that quietly isn't true.
+  if (build.dirty) {
+    const warn = document.createElement('span');
+    warn.className = 'build-warn';
+    warn.textContent = '+local changes';
+    pieces.push(warn);
+  }
+
+  const labels = [];
+  if (build.image_tag) labels.push(build.image_tag);
+  else if (build.source === 'git') labels.push('source');
+  if (build.branch) labels.push(build.branch);
+  if (labels.length) pieces.push(document.createTextNode(labels.join(' ')));
+  if (build.built_at) pieces.push(document.createTextNode(build.built_at));
+
+  pieces.forEach((piece, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'build-sep';
+      sep.textContent = '·';
+      el.appendChild(sep);
+    }
+    el.appendChild(piece);
+  });
+  el.title = build.commit + (build.dirty ? ' (working tree had uncommitted changes)' : '');
+}
+
+async function loadBuildFooter() {
+  try {
+    const { ok, data } = await fetchJSON(apiUrl('/health'));
+    if (ok && data) _renderBuildFooter(data.build);
+    else _renderBuildFooter(null);
+  } catch (e) {
+    _renderBuildFooter(null);
+  }
+}
+
 function apiUrl(path, params = {}) {
   const q = new URLSearchParams(params);
   const query = q.toString();
@@ -586,6 +653,7 @@ async function dbgProjections(week) {
 
 // Wire handlers
 document.addEventListener('DOMContentLoaded', () => {
+  loadBuildFooter();
   loadSettings();
   attachSettingsListeners();
 

@@ -36,6 +36,19 @@ two environments are described in [CONTRIBUTING.md](CONTRIBUTING.md).
 Mount `/app/data` somewhere persistent — the odds cache and Sleeper player
 metadata live there, and losing it means re-spending API quota.
 
+### What's deployed
+
+Every page carries a footer with the commit the running instance was built
+from, linked to it on GitHub, plus the image tag (`test` / `latest`) and build
+time. Deployment is pull-based — Watchtower notices a new digest and recreates
+the container on its own schedule — so this is the way to tell whether a change
+has actually landed rather than inferring it from timestamps. `GET /health`
+returns the same information as JSON.
+
+Running from source shows the checkout's commit instead, marked `+local
+changes` if the working tree is dirty. An image built without the commit build
+arg reads `build unknown`.
+
 ### Configuration
 
 | Variable              | Required | Default | Purpose                                             |

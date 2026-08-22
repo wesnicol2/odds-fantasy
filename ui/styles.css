@@ -344,3 +344,22 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Toggle row for stat graph */
  
+
+/* Build stamp -----------------------------------------------------------
+   Fixed to the bottom so it is visible on every screen without scrolling.
+   Below the header (1000) and well below the overlays (1200) so a modal
+   always covers it. body gets matching bottom padding so it can never sit
+   on top of page content. */
+.build-footer {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+  background: #0f172a; color: #94a3b8;
+  font-size: 11.5px; line-height: 1; letter-spacing: 0.02em;
+  padding: 7px 12px; text-align: right;
+  border-top: 1px solid #1e293b;
+}
+.build-footer a { color: #94a3b8; text-decoration: none; }
+.build-footer a:hover { color: #93c5fd; text-decoration: underline; }
+.build-footer .build-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #cbd5e1; }
+.build-footer .build-warn { color: #fbbf24; }
+.build-footer .build-sep { opacity: 0.5; margin: 0 6px; }
+body { padding-bottom: 30px; }
