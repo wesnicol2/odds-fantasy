@@ -149,9 +149,11 @@ Two smaller judgement calls, both places the doc stops short:
   Neither guard changes what an anchor says; they change which anchors a tail
   is fitted through.
 
-The older models (`const`, `puelz`, `angelini`, `baseline`) are still
-selectable via `?model=`, so the two approaches can be compared on the same
-odds; the section below is what they do.
+The older models (`const`, `puelz`, `angelini`, `baseline`) are still reachable
+via `?model=`, so the two approaches can be compared on the same odds, but they
+are no longer offered in the UI — one engine is the answer, and a dropdown
+inviting a choice between five implied that four of them were live options. The
+section below is what they do.
 
 ### One line is not a distribution, so pick a shape
 
@@ -365,6 +367,59 @@ and occasionally load-bearing.
 
 The incomplete-badge rendering that used to live in those overrides is now
 directly in `script.js`'s `renderPlayers`/`renderLineup`.
+
+## The UI is two screens
+
+The app answers two questions and the UI is now shaped as exactly those two,
+picked automatically from the league's Sleeper status:
+
+- **Pre-Draft** — who to take next, when you are torn between players you rate
+  similarly. It is the league-wide board, ranked, with two columns that exist
+  specifically to break a tie: **Upside** (ceiling − mid), because the top-3
+  payout means leaning on the right tail (`§5` of the methodology doc), and
+  **Books**, flagged when a projection rests on too few bookmakers to lean on.
+- **In-Season** — your roster this week: lineup, all players, defenses.
+
+**There is no season-total projection, and that is a decision, not a gap.** The
+books only post props for the upcoming slate, so a "season projection" here
+could only be the per-game number times a games constant. That is a monotone
+transform: it reorders nothing, adds no information a draft decision can use,
+and would present itself as a market read while being arithmetic we made up.
+The Odds API sells no season-long player market to replace it with — its player
+props are per-event, and the only NFL futures key is a team outright.
+
+### What was removed and why
+
+The screen had accumulated a second copy of everything. Removed:
+
+- **The Compare Curves and Book Coverage modals** (~640 lines). Both existed to
+  compare the older models against each other. One engine now, and coverage
+  became a column on the board where it is actually read.
+- **The Advanced Tools panel** — five buttons and a `<pre>` JSON dump of
+  `/projections`. Debugging surface on the main screen.
+- **The model dropdown**, and its cousins inside the player modal and the debug
+  overlay (a "compare vs" select, per-model checkboxes, two multi-model graph
+  renderers).
+- **A second `<footer>`** rendering the same rate-limit string as the header.
+- **A dead duplicate of `_attachFpVisualHandlers`.** Two definitions, and
+  hoisting meant the later one won — so the earlier one's drag-to-select-a-range
+  feature had never run once. It is in git history if it is ever wanted back.
+
+Three things were **broken**, not merely redundant, and are fixed:
+
+- **The settings gear never opened anything.** The panel ships with `hidden`
+  (`display: none !important`) and the button toggled a class `open` that no
+  rule acted on, so the data-mode control and the username fallback behind it
+  were unreachable.
+- **The player detail modal had no close button** in the markup, though the
+  script wired one; it closed only on Escape or a click outside.
+- **Table sorting decided numeric columns by column index** (`colIdx >= 3`).
+  The tables don't share a column order, so that silently sorted a text column
+  as numbers. It reads the data now, and numeric columns sort highest-first.
+
+Also repaired: fourteen mojibake sequences (`Ã¢â‚¬â€` for an em dash, and worse
+— some double-encoded) left in `details.js` by an earlier bad edit, plus a stray
+BOM at the top of the file.
 
 ## Deployment shape
 

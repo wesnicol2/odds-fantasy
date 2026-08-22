@@ -61,15 +61,32 @@ arg reads `build unknown`.
 Sleeper's API needs no auth — just a username. Pass `fresh=1` to any endpoint
 to bypass the cache for a single request.
 
+### The two modes
+
+The UI has exactly two screens, and the league's Sleeper status picks which one
+opens:
+
+- **Pre-Draft** — every draftable player on the slate, ranked, for breaking ties
+  between players you already rate similarly. Alongside floor/mid/ceiling it
+  shows **Upside** (ceiling − mid), which is the number to compare when two
+  players project the same, and **Books** — how many bookmakers backed the
+  projection, flagged when it's too few to tiebreak on.
+- **In-Season** — your roster, week by week: optimal lineup, all players, and
+  defenses.
+
+There is deliberately no season-total projection. Books only post props for the
+upcoming slate, so a season number could only be the per-game one multiplied by
+a games constant — same ordering, no extra information, and it would read as a
+market number when it isn't one.
+
 ### Choosing a projection model
 
-Every projection endpoint takes `?model=`. The default, `market`, is the engine
-that implements the methodology doc: it reads every threshold the books post,
-de-vigs each book, takes the median across books, rebuilds each stat's
-distribution, and simulates the player's fantasy points under your league's
-scoring. `const`, `puelz`, `angelini` and `baseline` are the earlier
-single-line models, kept so the two can be compared on the same odds; the UI's
-model dropdown switches between them.
+Projections use the engine that implements the methodology doc: it reads every
+threshold the books post, de-vigs each book, takes the median across books,
+rebuilds each stat's distribution, and simulates the player's fantasy points
+under your league's scoring. The earlier single-line models are still reachable
+by hand for comparison — `?model=const|puelz|angelini|baseline` on any
+projection endpoint — but they are no longer offered in the UI.
 
 Scoring is read entirely from your league's Sleeper settings — point values,
 PPR, and bonus thresholds alike — so a rules change needs no code change.
