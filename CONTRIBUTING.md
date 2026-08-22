@@ -57,13 +57,13 @@ Naming: `feature/kebab-case-name`, `dev/kebab-case-name`. No other prefixes.
 2. Make the change. Run `ruff check`, `ruff format --check`, and
    `python -m pytest tests/` locally before pushing.
 3. Push. Every commit auto-deploys to **E1** — verify the change there.
-4. Open a PR `dev/*` → its feature branch. Merging auto-deploys to **E2**.
+4. Open a PR `dev/*` → its feature branch. Merging auto-deploys to **E2**. Delete
+   the `dev/` branch as soon as it is merged.
 5. Exercise E2 against live data for at least one real session. Unit tests catch
    regressions in the math; they don't catch "the lineup looks wrong" or "this
    endpoint times out against real odds data."
 6. Open a PR `feature/*` → `main` and get a review from the repo owner. Merging
-   auto-deploys to **E3**. Deleting the feature/dev branches afterward is fine —
-   the merge commits keep the history.
+   auto-deploys to **E3**. Delete the `feature/` branch as soon as it is merged.
 
 ## CI/CD pipeline
 
@@ -85,16 +85,17 @@ image tag from `github.ref`, then calls three stages in sequence:
 
 **A red check is a hard stop**, not a "merge anyway and fix later."
 
-> **Planned, not built.** Today the repo has `test.yml` (pytest on PRs and pushes
-> to `main`) and `build.yml` (pushes `:latest` on `main`). The pipeline above is
-> the target and lands as a separate change, because **files under
-> `.github/workflows/` must be added and edited by a human** — GitHub rejects
-> automation tokens without an explicit `workflow` scope.
+> **Built.** `ci.yml`, `lint.yml`, `test.yml` and `publish.yml` are all in place
+> and `build.yml` is gone. Keep in mind that **files under `.github/workflows/`
+> must be added and edited by a human** — GitHub rejects automation tokens
+> without an explicit `workflow` scope — so a change that needs a workflow edit
+> cannot be completed by an assistant end to end.
 
 ## Documentation
 
-Three files, three jobs — keeping them separate is what stops the README from
-drifting into describing an app that stopped being the real entrypoint.
+Three files plus `docs/`, each with one job — keeping them separate is what stops
+the README from drifting into describing an app that stopped being the real
+entrypoint.
 
 - **`README.md`** — concise, external perspective: how to use it, how to test it.
   Not inner workings. Updated in the same commit as any change that alters how
@@ -103,6 +104,12 @@ drifting into describing an app that stopped being the real entrypoint.
   details. Why the model is shaped this way, why the quota rules exist, what was
   tried and rejected. No length limit. *(Written during the cleanup pass.)*
 - **`CONTRIBUTING.md`** — this file. Process only. Rationale goes in `AGENTS.md`.
+- **`docs/*.md`** — long-form specs that stand on their own and outlive any one
+  implementation, e.g. `docs/fantasy-projection-methodology.md`. A spec says what
+  the model *should* do, argued independently of the code; `AGENTS.md` says what
+  the code *does* and where it diverges. Every file here must be linked from
+  `AGENTS.md` — an unreferenced spec is how two divergent accounts of the same
+  model start.
 
 ## Keeping the repo from rotting again
 
@@ -124,13 +131,21 @@ default outcome when a solo project has no rule against it. So:
   double check before `git add -A` on anything touching config or caching.
 - **If a file isn't imported/linked from anywhere, it's dead — delete it, don't
   comment it out.** Verify with `grep` first, then delete completely.
+- **Delete every branch as soon as its PR is merged**, `dev/` and `feature/`
+  alike. The merge commit already holds the history, so a merged branch carries
+  nothing the repo doesn't have — it just clutters the branch list and invites
+  someone (or some assistant) to add commits to a branch whose work already
+  shipped. The GitHub merge screen offers a **Delete branch** button; use it
+  there and it never gets forgotten. Merged `dev/` branches matter most: E1 is
+  one shared `:e1` tag, so a stale dev branch someone pushes to will overwrite
+  whatever is deployed there.
 
 ## Odds API quota awareness
 
 The quota is a metered, shared resource, not a rate limit to retry past.
-`refactored/ratelimit.py` tracks it from response headers; `refactored/odds_client.py`
+`oddsfantasy/ratelimit.py` tracks it from response headers; `oddsfantasy/odds_client.py`
 TTL-caches responses (`ODDS_TTL`, default 12h). Any feature fetching odds for
-**more than the caller's own roster** (the way `refactored/draft_prep.py`'s draft
+**more than the caller's own roster** (the way `oddsfantasy/draft_prep.py`'s draft
 board does) costs meaningfully more than the weekly lineup flow, so:
 
 - Default to a conservative market set; skip `_alternate` markets without a
