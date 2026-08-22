@@ -57,13 +57,13 @@ Naming: `feature/kebab-case-name`, `dev/kebab-case-name`. No other prefixes.
 2. Make the change. Run `ruff check`, `ruff format --check`, and
    `python -m pytest tests/` locally before pushing.
 3. Push. Every commit auto-deploys to **E1** — verify the change there.
-4. Open a PR `dev/*` → its feature branch. Merging auto-deploys to **E2**.
+4. Open a PR `dev/*` → its feature branch. Merging auto-deploys to **E2**. Delete
+   the `dev/` branch as soon as it is merged.
 5. Exercise E2 against live data for at least one real session. Unit tests catch
    regressions in the math; they don't catch "the lineup looks wrong" or "this
    endpoint times out against real odds data."
 6. Open a PR `feature/*` → `main` and get a review from the repo owner. Merging
-   auto-deploys to **E3**. Deleting the feature/dev branches afterward is fine —
-   the merge commits keep the history.
+   auto-deploys to **E3**. Delete the `feature/` branch as soon as it is merged.
 
 ## CI/CD pipeline
 
@@ -131,6 +131,14 @@ default outcome when a solo project has no rule against it. So:
   double check before `git add -A` on anything touching config or caching.
 - **If a file isn't imported/linked from anywhere, it's dead — delete it, don't
   comment it out.** Verify with `grep` first, then delete completely.
+- **Delete every branch as soon as its PR is merged**, `dev/` and `feature/`
+  alike. The merge commit already holds the history, so a merged branch carries
+  nothing the repo doesn't have — it just clutters the branch list and invites
+  someone (or some assistant) to add commits to a branch whose work already
+  shipped. The GitHub merge screen offers a **Delete branch** button; use it
+  there and it never gets forgotten. Merged `dev/` branches matter most: E1 is
+  one shared `:e1` tag, so a stale dev branch someone pushes to will overwrite
+  whatever is deployed there.
 
 ## Odds API quota awareness
 
