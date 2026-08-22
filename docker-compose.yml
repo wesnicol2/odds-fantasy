@@ -5,7 +5,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
@@ -21,7 +21,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8001:8000"
+      - "8003:8000"
     volumes:
       - ./data-test:/app/data
     restart: unless-stopped
