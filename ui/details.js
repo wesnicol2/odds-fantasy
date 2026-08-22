@@ -1,4 +1,4 @@
-﻿// Details modal helpers and on-demand odds detail viewers
+// Details modal helpers and on-demand odds detail viewers
 
 function showDetails(title, html) {
   var overlay = document.getElementById('detailsOverlay');
@@ -43,96 +43,6 @@ function _escapeHtml(s) {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-  } catch (e) {
-    return '';
-  }
-}
-
-const COVERAGE_MARKET_ORDER_UI = [
-  'player_anytime_td',
-  'player_reception_yds',
-  'player_rush_yds',
-  'player_pass_yds',
-  'player_pass_tds',
-  'player_pass_interceptions',
-  'player_receptions',
-];
-
-const COVERAGE_MARKET_LABELS = {
-  player_anytime_td: 'Anytime TD',
-  player_reception_yds: 'Rec Yards',
-  player_rush_yds: 'Rush Yards',
-  player_pass_yds: 'Pass Yards',
-  player_pass_tds: 'Pass TDs',
-  player_pass_interceptions: 'Pass INTs',
-  player_receptions: 'Receptions',
-};
-
-function _coverageNameKey(name) {
-  try {
-    return String(name || '')
-      .toLowerCase()
-      .replace(/[\.'`-]/g, ' ')
-      .replace(/[^a-z0-9 ]/g, '')
-      .replace(/(jr|sr|ii|iii|iv|v)/g, '')
-      .replace(/\s+/g, '')
-      .trim();
-  } catch (e) {
-    return '';
-  }
-}
-
-function _mergeCoverageOrder(order) {
-  var base = COVERAGE_MARKET_ORDER_UI.slice();
-  (Array.isArray(order) ? order : []).forEach(function(key) {
-    if (base.indexOf(key) === -1) { base.push(key); }
-  });
-  return base;
-}
-
-function buildCoverageMiniDots(row, orderOverride) {
-  try {
-    var markets = (row && row.markets) || {};
-    var order = _mergeCoverageOrder(orderOverride);
-    var vitalSet = new Set();
-    var minorSet = new Set();
-    (Array.isArray(row && row.vital_markets) ? row.vital_markets : []).forEach(function(key) {
-      try { vitalSet.add(String(key)); } catch (e) { vitalSet.add(key); }
-    });
-    (Array.isArray(row && row.minor_markets) ? row.minor_markets : []).forEach(function(key) {
-      try { minorSet.add(String(key)); } catch (e) { minorSet.add(key); }
-    });
-    var parts = [];
-    var desc = [];
-    order.forEach(function(key) {
-      var keyStr = String(key);
-      var count = parseInt(markets[key] || 0, 10) || 0;
-      var level = 'cov-none';
-      if (count >= 3) level = 'cov-high';
-      else if (count >= 1) level = 'cov-mid';
-      var label = COVERAGE_MARKET_LABELS[key] || key;
-      var importanceClass = '';
-      var importanceLabel = '';
-      if (vitalSet.has(keyStr)) {
-        importanceClass = ' cov-vital';
-        importanceLabel = ' (vital)';
-      } else if (minorSet.has(keyStr)) {
-        importanceClass = ' cov-minor';
-        importanceLabel = ' (secondary)';
-      }
-      var titleText = label + ': ' + count + ' book' + (count === 1 ? '' : 's') + importanceLabel;
-      desc.push(titleText);
-      parts.push('<span class="cov-dot ' + level + importanceClass + '" data-market="' + key + '" data-count="' + count + '" title="' + _escapeHtml(titleText) + '"></span>');
-    });
-    if (!parts.length) {
-      parts.push('<span class="cov-dot cov-none" title="No coverage data"></span>');
-      desc.push('No coverage data');
-    }
-    var classes = ['coverage-mini'];
-    if (row && row.incomplete) { classes.push('coverage-mini-incomplete'); }
-    if (vitalSet.size) { classes.push('coverage-mini-has-vital'); }
-    var aria = 'Coverage - ' + desc.join('; ');
-    return '<span class="' + classes.join(' ') + '" role="img" aria-label="' + _escapeHtml(aria) + '">' + parts.join('') + '</span>';
   } catch (e) {
     return '';
   }
@@ -206,442 +116,6 @@ function _renderFpVisual(floor, mid, ceil) {
   }
 }
 
-// Multi-curve comparison popup for a position and week
-function openCompareCurves(week) {
-  try {
-    showDetails('Compare Curves', '<div class="status"><span class="spinner"></span> Loading curves...</div>');
-  var projUrl = apiUrl('/projections', { ...identityParams(), week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const')) });
-    fetchJSON(projUrl).then(function(res){
-      if (!res.ok) { hideDetails(); alert('Failed to load projections'); return; }
-      var all = (res.data && res.data.players) || [];
-      var coverageData = {};
-      var coverageOrder = null;
-      try {
-        var bc = (res.data && res.data.book_coverage) || {};
-        if (Array.isArray(bc.markets) && bc.markets.length) { coverageOrder = bc.markets.slice(); }
-        (Array.isArray(bc.rows) ? bc.rows : []).forEach(function(row) {
-          if (!row) { return; }
-          var aliasKey = row.alias ? ('alias:' + String(row.alias).toLowerCase()) : null;
-          if (aliasKey) { coverageData[aliasKey] = row; }
-          var nameKey = _coverageNameKey(row.name);
-          if (nameKey) { coverageData['name:' + nameKey] = row; }
-        });
-      } catch (e) { coverageData = {}; coverageOrder = null; }
-      function _coverageRowForPlayer(player) {
-        if (!player) { return null; }
-        var aliasKey = player.alias ? ('alias:' + String(player.alias).toLowerCase()) : null;
-        if (aliasKey && coverageData[aliasKey]) { return coverageData[aliasKey]; }
-        var nameKey = _coverageNameKey(player.name);
-        if (nameKey && coverageData['name:' + nameKey]) { return coverageData['name:' + nameKey]; }
-        return null;
-      }
-      // Compute global FP range across all players and store globally
-      try {
-        var gMax = 0;
-        (all||[]).forEach(function(p){ var c = Number(p.ceiling||0); if (c > gMax) gMax = c; });
-        if (!(gMax > 0)) gMax = 1;
-        window.GLOBAL_FP_RANGE = { minX: 0, maxX: gMax };
-      } catch (e) {}
-      var curTarget = 'mid';
-      var posTabs = ['LINEUP','ALL','QB','RB','WR','TE','FLEX'];
-      var tabsHtml = '<div class="details-section"><div class="section-title">Select (' + (week==='next'?'Next Week':'This Week') + ')</div>'
-        + posTabs.map(function(p){ return '<button class="pill" data-pos="'+p+'">'+p+'</button>'; }).join(' ')
-        + ' <span class="muted" style="margin-left:10px;">Target:</span> '
-        + ['floor','mid','ceiling'].map(function(t){ return '<button class="pill target-pill" data-target="'+t+'">'+t.toUpperCase()+'</button>'; }).join(' ')
-        + '</div>';
-      var controls = '<div class="cmp-controls">'
-        + '<input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" />'
-        + '<label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label>'
-        + '<span class="muted" style="margin-left:10px;">Model:</span> '
-        + '<select id="cmpModelGlobal"><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select>'
-        + '<button id="cmpApplyGlobal" class="secondary" style="margin-left:6px;">Apply</button>'
-        + '</div>';
-      var grid = controls + '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
-      var body = document.getElementById('detailsBody');
-      body.innerHTML = tabsHtml + grid + '<div class="details-section" id="cmpLineup" style="display:none"></div>';
-      function _renderTargetPills(){ try{ var pills=body.querySelectorAll('.target-pill'); pills.forEach(function(btn){ var t=btn.getAttribute('data-target'); btn.classList.toggle('pill-active', String(t)===String(curTarget)); }); }catch(e){} }
-      try { var mg = document.getElementById('cmpModelGlobal'); if (mg) mg.value = (typeof getModel==='function'? getModel() : 'const'); } catch (e) {}
-      try {
-        var apply = document.getElementById('cmpApplyGlobal');
-        if (apply) apply.addEventListener('click', function(){
-          try {
-            var mg = document.getElementById('cmpModelGlobal'); var chosen = (mg && mg.value) || 'const';
-            var ms = document.getElementById('modelSelect'); var mf = document.getElementById('modelSelectFloating');
-            if (ms) ms.value = chosen; if (mf) mf.value = chosen;
-            try { if (typeof saveSettings==='function') saveSettings(); } catch(e){}
-            openCompareCurves(week);
-            try { if (typeof refreshAll==='function') refreshAll(); } catch(e){}
-          } catch (e) {}
-        });
-      } catch (e) {}
-      function renderForPos(pos){
-        var pool = all.filter(function(p){ return pos==='FLEX' ? (['WR','RB','TE'].indexOf(p.pos)>=0) : ((pos==='ALL'||pos==='LINEUP') ? true : (p.pos===pos)); }).slice();
-        var slotByName = {};
-        if ((pos==='ALL' || pos==='LINEUP') && typeof computeLineupFromPlayers==='function'){
-          try { var lp = computeLineupFromPlayers(all, curTarget||'mid'); (lp.lineup||[]).forEach(function(r){ if (r.slot!=='BENCH') slotByName[r.name]=r.slot; }); pool = all.filter(function(p){ return !!slotByName[p.name]; }); } catch(e){}
-        }
-        var targetKey = curTarget || 'mid';
-        if (pos === 'LINEUP') {
-          var slotPriority = ['QB','RB1','RB2','RB','WR1','WR2','WR','TE1','TE','FLEX'];
-          var slotRank = {};
-          slotPriority.forEach(function(slot, idx){ if (slotRank[slot] == null) { slotRank[slot] = idx; } });
-          pool.sort(function(a,b){
-            var slotA = slotByName[a.name] || '';
-            var slotB = slotByName[b.name] || '';
-            var rankA = Object.prototype.hasOwnProperty.call(slotRank, slotA) ? slotRank[slotA] : 999;
-            var rankB = Object.prototype.hasOwnProperty.call(slotRank, slotB) ? slotRank[slotB] : 999;
-            if (rankA !== rankB) { return rankA - rankB; }
-            if (slotA !== slotB) { return slotA.localeCompare(slotB); }
-            return a.name.localeCompare(b.name);
-          });
-        } else {
-          pool.sort(function(a,b){ return Number(b[targetKey]||0) - Number(a[targetKey]||0); });
-          pool = pool.slice(0, 20);
-        }
-        var z85=1.036;
-        var minX = (window && window.GLOBAL_FP_RANGE ? Number(window.GLOBAL_FP_RANGE.minX)||0 : 0);
-        var maxX = (window && window.GLOBAL_FP_RANGE ? Number(window.GLOBAL_FP_RANGE.maxX)||1 : 1);
-        var W=800,H=360,PAD=24;
-        function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
-        function yScale(y){ return H - PAD - y * (H - 2*PAD); }
-        function pathFor(floor, mid, ceil){ var f=Number(floor||0), m=Number(mid||0), c=Number(ceil||0); var sigR=Math.max(0.1, Math.abs(c-m)/z85), sigL=Math.max(0.1, Math.abs(m-f)/z85); var N=120; var pts=[], maxY=0; for (var i=0;i<=N;i++){ var x=minX+(maxX-minX)*i/N; var s=(x>=m?sigR:sigL); var y=Math.exp(-0.5*Math.pow((x-m)/s,2)); if (y>maxY) maxY=y; pts.push([xScale(x), y]); } var d=''; pts.forEach(function(p,i){ var X=p[0],Y=yScale((p[1]/(maxY||1))*1); d+=(i?'L':'M')+X.toFixed(1)+','+Y.toFixed(1); }); return d; }
-        // Keep curve params for hover density calculations
-        var curves = pool.map(function(p){ var f=Number(p.floor||0), m=Number(p.mid||0), c=Number(p.ceiling||0); return { f:f, m:m, c:c, sigR: Math.max(0.1, Math.abs(c-m)/z85), sigL: Math.max(0.1, Math.abs(m-f)/z85) }; });
-        function pdfAt(i, x){ var cur=curves[i]; var s=(x>=cur.m?cur.sigR:cur.sigL); return Math.exp(-0.5*Math.pow((x-cur.m)/s,2)); }
-        // Build a palette with maximum visual spread given number of players
-        var palette = (function(){
-          var n = pool.length; var cols = [];
-          if (n <= 0) return cols;
-          if (n === 1) { cols.push('hsl(0,80%,60%)'); return cols; }
-          if (n === 2) { cols = ['hsl(0,80%,58%)','hsl(130,75%,52%)']; return cols; }
-          var sat = 72, light = 58;
-          for (var i=0;i<n;i++) { var hue = Math.round((360*i)/n) % 360; cols.push('hsl('+hue+','+sat+'%,'+light+'%)'); }
-          return cols;
-        })();
-        var list = document.getElementById('cmpList');
-        list.innerHTML = pool.map(function(p,idx){
-          var col=palette[idx]||'hsl(200,70%,55%)';
-          var coverageRow = _coverageRowForPlayer(p);
-          if (coverageRow) {
-            if (!Array.isArray(coverageRow.vital_markets) && Array.isArray(p.vital_markets)) { coverageRow.vital_markets = p.vital_markets.slice(); }
-            if (!Array.isArray(coverageRow.minor_markets) && Array.isArray(p.minor_markets)) { coverageRow.minor_markets = p.minor_markets.slice(); }
-          } else {
-            coverageRow = {
-              markets: {},
-              incomplete: !!p.incomplete,
-              vital_markets: Array.isArray(p.vital_markets) ? p.vital_markets.slice() : [],
-              minor_markets: Array.isArray(p.minor_markets) ? p.minor_markets.slice() : [],
-            };
-          }
-          var coverageHtml = buildCoverageMiniDots(coverageRow, coverageOrder);
-          var slotLabel = slotByName[p.name] ? ('<span class="pill lineup-slot" title="Lineup slot">'+slotByName[p.name]+'</span>') : '';
-          var floorVal = Number(p.floor || 0).toFixed(1);
-          var midVal = Number(p.mid || 0).toFixed(1);
-          var ceilVal = Number(p.ceiling || 0).toFixed(1);
-          var statsHtml = '<div class="player-fmc">' +
-            '<span class="fmc-item fmc-ceiling">C ' + ceilVal + '</span>' +
-            '<span class="fmc-item fmc-mid">M ' + midVal + '</span>' +
-            '<span class="fmc-item fmc-floor">F ' + floorVal + '</span>' +
-            '</div>';
-          var coverageBlock = coverageHtml ? '<div class="player-coverage">'+coverageHtml+'</div>' : '';
-          var detailsBtn = '<button class="mini details" data-name="'+_escapeHtml(p.name)+'" title="Details">&rsaquo;</button>';
-          var nameBtn = '<button class="name-link" data-name="'+_escapeHtml(p.name)+'">'+_escapeHtml(p.name)+'</button>';
-          return '<div class="player" data-idx="'+idx+'" data-name="'+_escapeHtml(p.name.toLowerCase())+'">'
-            + '<div class="player-header">'
-              + '<div class="player-title"><span class="dot" style="background:'+col+'"></span>' + (slotLabel ? slotLabel + ' ' : '') + nameBtn + '</div>'
-              + '<div class="player-actions">'+detailsBtn+'</div>'
-            + '</div>'
-            + '<div class="player-meta">' + coverageBlock + statsHtml + '</div>'
-            + '</div>';
-        }).join('');
-        var svg = document.getElementById('cmpSvg');
-        var grid=''; for (var gi=1; gi<=6; gi++){ var xv=minX+(maxX-minX)*gi/7; grid += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; }
-        var ax = grid + '<line class="axis" x1="'+xScale(minX)+'" y1="'+yScale(0)+'" x2="'+xScale(maxX)+'" y2="'+yScale(0)+'" />';
-        var labels='<text class="axis-label" x="'+xScale(maxX)+'" y="'+(yScale(0)+16)+'" text-anchor="end">Fantasy Points (pts)</text>'+
-                    '<text class="axis-label" transform="translate('+(xScale(minX)-12)+','+(H/2)+') rotate(-90)" text-anchor="middle">Density</text>';
-        svg.innerHTML = ax + labels + pool.map(function(p,idx){ var d=pathFor(p.floor,p.mid,p.ceiling); var col=palette[idx]||'hsl(200,70%,55%)'; return '<path class="curve-line" data-idx="'+idx+'" stroke="'+col+'" d="'+d+'" />'; }).join('') + '<line class="hover-x" x1="0" y1="'+yScale(1)+'" x2="0" y2="'+yScale(0)+'" style="display:none" />' + '<circle class="hover-dot" cx="0" cy="0" r="3" style="display:none" />';
-        // Tooltip element inside graph
-        var graph = svg.parentElement; var tip = graph.querySelector('.fp-tooltip'); if (!tip){ tip = document.createElement('div'); tip.className='fp-tooltip'; tip.style.display='none'; graph.appendChild(tip); }
-        var pinned=new Set(); var hoverIdx=null; var showPinnedOnly=false; var locked=null;
-        function setHighlight(i){ hoverIdx = (i==null ? null : String(i)); applyHighlight(); }
-        function applyHighlight(){ var paths=svg.querySelectorAll('.curve-line'); var items=list.querySelectorAll('.player'); var anyPinned = pinned.size>0; var focusSet = new Set(anyPinned ? Array.from(pinned) : (hoverIdx!=null?[String(hoverIdx)]:[])); paths.forEach(function(p){ var idx=p.getAttribute('data-idx'); p.classList.remove('highlight'); p.classList.remove('dim'); var show=true; if (showPinnedOnly && anyPinned && !focusSet.has(idx)) show=false; if (!show) { p.style.display='none'; return; } p.style.display=''; if (focusSet.size===0) return; if (focusSet.has(idx)) p.classList.add('highlight'); else p.classList.add('dim'); }); items.forEach(function(it){ var idx=it.getAttribute('data-idx'); it.classList.toggle('active', focusSet.has(idx)); if (showPinnedOnly && anyPinned && !focusSet.has(idx)) it.style.display='none'; else it.style.display=''; }); }
-        list.querySelectorAll('.player').forEach(function(it){
-          it.addEventListener('mouseenter', function(){ hoverIdx = it.getAttribute('data-idx'); if (pinned.size===0) applyHighlight(); });
-          it.addEventListener('mouseleave', function(){ hoverIdx = null; if (pinned.size===0) applyHighlight(); });
-          it.addEventListener('click', function(){
-            var idx=it.getAttribute('data-idx');
-            if (pinned.has(idx)) pinned.delete(idx); else pinned.add(idx);
-            locked = (pinned.size>0 ? parseInt(Array.from(pinned)[0]) : null);
-            applyHighlight();
-          });
-        });
-        // Details buttons
-        list.querySelectorAll('.player .details').forEach(function(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); var name=btn.getAttribute('data-name')||''; openPlayerDetails(name, week); }); });
-        // Clicking the name opens the single-player popup
-        list.querySelectorAll('.player .name-link').forEach(function(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); var name=btn.getAttribute('data-name')||''; openPlayerDetails(name, week); }); });
-        var search = document.getElementById('cmpSearch'); if (search){ search.value=''; search.oninput = function(){ var q=(search.value||'').toLowerCase().trim(); list.querySelectorAll('.player').forEach(function(it){ var name=(it.getAttribute('data-name')||''); it.style.display = (q==='' || name.indexOf(q)>=0) ? '' : 'none'; }); }; }
-        var chk = document.getElementById('cmpShowPinned'); if (chk){ chk.checked=false; chk.onchange = function(){ showPinnedOnly = !!chk.checked; applyHighlight(); }; }
-        applyHighlight();
-        // Hover over SVG to show nearest curve values
-        var hoverX = svg.querySelector('.hover-x'); var hoverDot = svg.querySelector('.hover-dot');
-        function onMove(evt){
-          var rect = svg.getBoundingClientRect();
-          var localX = Math.min(W-PAD, Math.max(PAD, (evt.clientX-rect.left)*(W/rect.width)));
-          var localY = Math.min(H-PAD, Math.max(PAD, (evt.clientY-rect.top)*(H/rect.height)));
-          // Search nearest point on any curve within a small x-window around cursor
-          var best = { idx: null, xPx: localX, yPx: localY, xVal: null, dens: -1, dist2: Infinity };
-          var windowPx = 14; // +/- px horizontally to allow nearest on curve (not just same x)
-          var steps = 24;
-          for (var i=0;i<curves.length;i++){
-            for (var s=-steps; s<=steps; s++){
-              var candXpx = localX + (s*windowPx/steps);
-              if (candXpx < PAD || candXpx > (W-PAD)) continue;
-              var candXVal = minX + (candXpx-PAD)*(maxX-minX)/(W-2*PAD);
-              var dens = pdfAt(i, candXVal);
-          var candYpx = yScale(dens*1);
-              var dx = candXpx - localX; var dy = candYpx - localY; var d2 = dx*dx + dy*dy;
-              if (d2 < best.dist2){ best = { idx: i, xPx: candXpx, yPx: candYpx, xVal: candXVal, dens: dens, dist2: d2 }; }
-            }
-          }
-          if (best.idx != null){
-            if (locked==null) setHighlight(best.idx);
-            if (hoverX){ hoverX.setAttribute('x1', best.xPx); hoverX.setAttribute('x2', best.xPx); hoverX.style.display='block'; }
-            if (hoverDot){ hoverDot.setAttribute('cx', best.xPx); hoverDot.setAttribute('cy', best.yPx); hoverDot.style.display='block'; }
-            if (tip){ var bx=graph.getBoundingClientRect(); tip.style.display='block'; tip.style.left=(evt.clientX-bx.left+8)+'px'; tip.style.top=(evt.clientY-bx.top-8)+'px'; tip.textContent='FP: ' + best.xVal.toFixed(2) + ' pts, Density: ' + best.dens.toFixed(3); }
-          }
-        }
-        function onLeave(){ if (locked==null) setHighlight(null); if (hoverX) hoverX.style.display='none'; if (hoverDot) hoverDot.style.display='none'; if (tip) tip.style.display='none'; }
-        svg.addEventListener('mousemove', onMove); svg.addEventListener('mouseleave', onLeave);
-        // Render lineup table when LINEUP tab is active
-        try {
-          var lc = document.getElementById('cmpLineup');
-          if (pos === 'LINEUP') {
-            if (lc) { lc.style.display='block'; }
-            if (typeof computeLineupFromPlayers==='function') {
-              var lpp = computeLineupFromPlayers(all, curTarget||'mid');
-              if (lc) renderLineup('cmpLineup', 'Optimal Lineup', lpp);
-            }
-          } else {
-            if (lc) { lc.style.display='none'; lc.innerHTML=''; }
-          }
-        } catch(e){}
-      }
-      function saveLastPos(pos){ try{ localStorage.setItem('ofdash.cmp.lastPos.'+week, pos);}catch(e){} }
-      function loadLastPos(){ try{ return localStorage.getItem('ofdash.cmp.lastPos.'+week) || 'LINEUP'; }catch(e){ return 'LINEUP'; } }
-      function activateTab(pos){ var pills = body.querySelectorAll('.details-section .pill[data-pos]'); pills.forEach(function(b){ b.classList.toggle('pill-active', b.getAttribute('data-pos')===pos); }); saveLastPos(pos); renderForPos(pos); }
-      body.querySelectorAll('.details-section .pill[data-pos]').forEach(function(btn){ btn.addEventListener('click', function(){ activateTab(btn.getAttribute('data-pos')); }); });
-      // Target selector for lineup optimization
-      body.querySelectorAll('.target-pill').forEach(function(btn){ btn.addEventListener('click', function(){ curTarget = btn.getAttribute('data-target')||'mid'; _renderTargetPills(); var active = body.querySelector('.details-section .pill.pill-active[data-pos]'); var pos = active ? active.getAttribute('data-pos') : 'LINEUP'; renderForPos(pos||'LINEUP'); }); });
-      _renderTargetPills();
-      activateTab(loadLastPos());
-      try { history.replaceState({ detailsOpen: true, modal: 'compare', week: week }, '', '#details'); } catch (e) {}
-    }).catch(function(e){
-      try { console.error('[compare] error', e); } catch(_){ }
-      hideDetails();
-      alert('Failed to load data: ' + (e && (e.message || e.toString ? e.toString() : e)));
-    });
-  } catch (e) { try { hideDetails(); } catch(_){} }
-}
-function openBookCoverage(initialWeek) {
-  var week = initialWeek === 'next' ? 'next' : 'this';
-  try {
-    showDetails('Book Coverage', '<div class="status"><span class="spinner"></span> Loading coverage...</div>');
-    var body = document.getElementById('detailsBody');
-    var title = document.getElementById('detailsTitle');
-    if (!body) { return; }
-    var cache = {};
-    var currentWeek = week;
-    body.innerHTML = [
-      '<div class="coverage-grid">',
-        '<div class="details-section coverage-controls-section">',
-          '<div class="coverage-controls">',
-            '<div class="coverage-week-group" role="group" aria-label="Select week">',
-              '<button class="pill coverage-week" data-week="this">This Week</button>',
-              '<button class="pill coverage-week" data-week="next">Next Week</button>',
-            '</div>',
-            '<input type="search" class="coverage-search cmp-search" placeholder="Filter players or teams" />',
-            '<div class="coverage-legend">',
-              '<span class="legend-item"><span class="legend-swatch swatch-none"></span>0 books</span>',
-              '<span class="legend-item"><span class="legend-swatch swatch-low"></span>1-2 books</span>',
-              '<span class="legend-item"><span class="legend-swatch swatch-high"></span>3+ books</span>',
-              '<span class="legend-item"><span class="legend-swatch swatch-vital"></span>Vital market</span>',
-              '<span class="legend-item"><span class="legend-swatch swatch-secondary"></span>Secondary market</span>',
-            '</div>',
-          '</div>',
-        '</div>',
-        '<div class="details-section coverage-table-section">',
-          '<div id="coverageTableWrap" class="coverage-table-wrap">',
-            '<div class="status"><span class="spinner"></span> Loading coverage...</div>',
-          '</div>',
-        '</div>',
-      '</div>'
-    ].join('');
-    var searchInput = body.querySelector('.coverage-search');
-    var weekButtons = Array.from(body.querySelectorAll('.coverage-week'));
-
-    function updateTitle(w) {
-      if (!title) { return; }
-      try { title.textContent = 'Book Coverage - ' + (w === 'next' ? 'Next Week' : 'This Week'); } catch (err) { /* ignore */ }
-    }
-
-    function setActiveWeek(w) {
-      weekButtons.forEach(function(btn) {
-        var val = btn.getAttribute('data-week') || 'this';
-        btn.classList.toggle('pill-active', val === w);
-      });
-    }
-
-    function coverageColor(count, max) {
-      if (!count) { return { bg: '#541616', fg: '#fca5a5' }; }
-      var denom = max > 0 ? max : 1;
-      var ratio = Math.min(1, count / denom);
-      if (ratio <= 0.34) {
-        return { bg: '#92400e', fg: '#fef3c7' };
-      }
-      var hue = 110 + Math.round(20 * (ratio - 0.34) / 0.66);
-      var light = 28 + (ratio * 20);
-      return { bg: 'hsl(' + hue + ', 70%, ' + light.toFixed(1) + '%)', fg: '#052e16' };
-    }
-
-    function normalizeMarkets(list) {
-      return _mergeCoverageOrder(Array.isArray(list) ? list : []);
-    }
-
-    function render(w) {
-      var data = cache[w] || {};
-      var wrap = body.querySelector('#coverageTableWrap');
-      if (!wrap) { return; }
-      var coverage = data.coverage || {};
-      var keys = normalizeMarkets(coverage.markets);
-      var rows = Array.isArray(coverage.rows) ? coverage.rows.slice() : [];
-      rows.sort(function(a, b) {
-        var bt = (b && (b.total_books || 0)) || 0;
-        var at = (a && (a.total_books || 0)) || 0;
-        if (bt !== at) { return bt - at; }
-        return String((a && a.name) || '').localeCompare(String((b && b.name) || ''));
-      });
-      var term = (searchInput && searchInput.value || '').trim().toLowerCase();
-      var filtered = rows.filter(function(row) {
-        if (!term) { return true; }
-        var name = String(row && row.name || '').toLowerCase();
-        var pos = String(row && row.pos || '').toLowerCase();
-        var team = String(row && row.team || '').toLowerCase();
-        return name.includes(term) || pos.includes(term) || team.includes(term);
-      });
-      var maxCount = 0;
-      filtered.forEach(function(row) {
-        var markets = row && row.markets || {};
-        keys.forEach(function(key) {
-          var val = parseInt(markets[key] || 0, 10) || 0;
-          if (val > maxCount) { maxCount = val; }
-        });
-      });
-      if (!filtered.length) {
-        wrap.innerHTML = '<div class="status">No players match the current filters.</div>';
-        return;
-      }
-      var header = [
-        '<th>Player</th>',
-        '<th>Pos</th>',
-        '<th>Team</th>'
-      ];
-      keys.forEach(function(key) {
-        header.push('<th data-market="' + key + '">' + (COVERAGE_MARKET_LABELS[key] || key) + '</th>');
-      });
-      header.push('<th>Total</th>');
-      var bodyRows = filtered.map(function(row) {
-        var markets = row && row.markets || {};
-        var total = 0;
-        var vitalSet = new Set();
-        (Array.isArray(row && row.vital_markets) ? row.vital_markets : []).forEach(function(k){ vitalSet.add(String(k)); });
-        var minorSet = new Set();
-        (Array.isArray(row && row.minor_markets) ? row.minor_markets : []).forEach(function(k){ minorSet.add(String(k)); });
-        var cells = keys.map(function(key) {
-          var keyStr = String(key);
-          var count = parseInt(markets[key] || 0, 10) || 0;
-          total += count;
-          var colors = coverageColor(count, maxCount || count || 1);
-          var importanceClass = '';
-          var importanceTag = '';
-          if (vitalSet.has(keyStr)) { importanceClass = ' cov-vital'; importanceTag = ' [vital]'; }
-          else if (minorSet.has(keyStr)) { importanceClass = ' cov-minor'; importanceTag = ' [secondary]'; }
-          var titleTxt = (COVERAGE_MARKET_LABELS[key] || key) + ': ' + count + ' book' + (count === 1 ? '' : 's') + importanceTag;
-          return '<td class="coverage-cell' + importanceClass + '" data-market="' + key + '" title="' + titleTxt + '" style="background:' + colors.bg + '; color:' + colors.fg + ';">' + count + '</td>';
-        });
-        var rowClasses = ['coverage-row'];
-        if (row && row.incomplete) { rowClasses.push('coverage-row-incomplete'); }
-        if (vitalSet.size) { rowClasses.push('coverage-row-vital'); }
-        return '<tr class="' + rowClasses.join(' ') + '"><td title="' + (row && row.team || '') + '">' + (row && row.name || '-') + '</td><td>' + (row && row.pos || '-') + '</td><td>' + (row && row.team || '-') + '</td>' + cells.join('') + '<td>' + total + '</td></tr>';
-      });
-      var tableHtml = [
-        '<table class="coverage-table">',
-          '<thead><tr>' + header.join('') + '</tr></thead>',
-          '<tbody>' + bodyRows.join('') + '</tbody>',
-        '</table>'
-      ].join('');
-      wrap.innerHTML = tableHtml;
-      var tableEl = wrap.querySelector('table');
-      if (tableEl && typeof enableTableSort === 'function') { enableTableSort(tableEl); }
-    }
-
-    function fetchWeek(w) {
-      var wrap = body.querySelector('#coverageTableWrap');
-      if (!wrap) { return; }
-      setActiveWeek(w);
-      updateTitle(w);
-      if (cache[w]) {
-        render(w);
-        try { updateRateLimitDisplays(cache[w] || {}); } catch (err) { /* ignore */ }
-        try { history.replaceState({ detailsOpen: true, modal: 'book-coverage', week: w }, '', '#details'); } catch (err) { /* ignore */ }
-        return;
-      }
-      wrap.innerHTML = '<div class="status"><span class="spinner"></span> Loading coverage...</div>';
-      var params = {
-        ...identityParams(),
-        week: w,
-        mode: (typeof getDataMode === 'function' ? getDataMode() : 'auto'),
-        model: (typeof getModel === 'function' ? getModel() : 'const')
-      };
-      fetchJSON(apiUrl('/book-coverage', params)).then(function(res) {
-        if (!res || !res.ok) {
-          wrap.innerHTML = '<div class="status">Failed to load coverage.</div>';
-          return;
-        }
-        cache[w] = res.data || {};
-        try { updateRateLimitDisplays(res.data || {}); } catch (err) { /* ignore */ }
-        render(w);
-        try { history.replaceState({ detailsOpen: true, modal: 'book-coverage', week: w }, '', '#details'); } catch (err) { /* ignore */ }
-      }).catch(function(err) {
-        console.error('[coverage] fetch error', err);
-        wrap.innerHTML = '<div class="status">Failed to load coverage.</div>';
-      });
-    }
-
-    weekButtons.forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var targetWeek = btn.getAttribute('data-week') || 'this';
-        if (targetWeek === currentWeek) { return; }
-        currentWeek = targetWeek;
-        fetchWeek(currentWeek);
-      });
-    });
-
-    if (searchInput) {
-      searchInput.addEventListener('input', function() {
-        render(currentWeek);
-      });
-    }
-
-    setActiveWeek(currentWeek);
-    updateTitle(currentWeek);
-    fetchWeek(currentWeek);
-    try { history.replaceState({ detailsOpen: true, modal: 'book-coverage', week: currentWeek }, '', '#details'); } catch (err) { /* ignore */ }
-  } catch (err) {
-    console.error('[coverage] render error', err);
-    try { hideDetails(); } catch (_) { /* ignore */ }
-  }
-}
-
 function _formatISOToLocal(iso) {
   try {
     var d = new Date(iso);
@@ -652,115 +126,6 @@ function _formatISOToLocal(iso) {
 
 function _weekdayKey(iso) {
   try { var d = new Date(iso); return d.toLocaleDateString([], { weekday: 'long' }); } catch (e) { return ''; }
-}
-
-function _attachFpVisualHandlers(root) {
-  try {
-    var container = root || document;
-    (container.querySelectorAll ? container.querySelectorAll('.fp-visual') : []).forEach(function(box){
-      var svg = box.querySelector('svg'); if(!svg) return;
-      var hoverX = svg.querySelector('.hover-x');
-      var hoverDot = svg.querySelector('.hover-dot');
-      var tip = box.querySelector('.fp-tooltip');
-      var minX = parseFloat(box.getAttribute('data-min')||'0');
-      var maxX = parseFloat(box.getAttribute('data-max')||'1');
-      var PAD = parseFloat(box.getAttribute('data-pad')||'6');
-      var W = parseFloat(box.getAttribute('data-w')||'600');
-      var H = parseFloat(box.getAttribute('data-h')||'120');
-      var floor = parseFloat(box.getAttribute('data-floor')||'0');
-      var mid = parseFloat(box.getAttribute('data-mid')||'0');
-      var ceil = parseFloat(box.getAttribute('data-ceil')||'0');
-      var z85 = 1.036; var sigR = Math.max(0.1, Math.abs(ceil - mid) / z85); var sigL = Math.max(0.1, Math.abs(mid - floor) / z85);
-      function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
-      function yScale(y){ return H - PAD - y * (H - 2*PAD); }
-      function pdf(x){ var s = (x >= mid ? sigR : sigL); return Math.exp(-0.5 * Math.pow((x - mid) / s, 2)); }
-      var maxY = pdf(mid) || 1;
-      // Range selection state
-      var selStart = null, selEnd = null;
-      // Add a shaded range path
-      var rangePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      rangePath.setAttribute('class', 'range-area');
-      rangePath.setAttribute('fill', 'rgba(34,197,94,0.18)');
-      rangePath.setAttribute('stroke', '#22c55e');
-      rangePath.setAttribute('stroke-width', '1');
-      svg.appendChild(rangePath);
-      // Readout element under legend
-      var readout = document.createElement('div');
-      readout.className = 'range-readout';
-      readout.style.display = 'none';
-      box.appendChild(readout);
-      function _formatPct(p){ try { return (p*100).toFixed(1) + '%'; } catch(e){ return '0.0%'; } }
-      function _integral(a, b, steps){
-        var n = Math.max(10, steps||400);
-        var dx = (b - a) / n;
-        var area = 0;
-        var prev = pdf(a);
-        for (var i=1;i<=n;i++){
-          var x = a + i*dx;
-          var cur = pdf(x);
-          area += 0.5 * (prev + cur) * dx;
-          prev = cur;
-        }
-        return Math.max(0, area);
-      }
-      function _updateRangeVisual(){
-        if (selStart == null || selEnd == null) { rangePath.setAttribute('d',''); readout.style.display='none'; return; }
-        var a = Math.max(minX, Math.min(selStart, selEnd));
-        var b = Math.min(maxX, Math.max(selStart, selEnd));
-        if (!(b > a)) { rangePath.setAttribute('d',''); readout.style.display='none'; return; }
-        // Build area path between [a,b]
-        var N = 100; var d = '';
-        for (var i=0;i<=N;i++){
-          var x = a + (b - a)*i/N;
-          var y = (pdf(x)/(maxY||1))*1; // normalized to [0,1]
-          var X = xScale(x).toFixed(1), Y = yScale(y).toFixed(1);
-          d += (i ? ' L ' : 'M ') + X + ',' + Y;
-        }
-        d += ' L ' + xScale(b).toFixed(1) + ',' + yScale(0).toFixed(1);
-        d += ' L ' + xScale(a).toFixed(1) + ',' + yScale(0).toFixed(1) + ' Z';
-        rangePath.setAttribute('d', d);
-        // Compute probability via area ratio
-        var total = _integral(minX, maxX, 800);
-        var part = _integral(a, b, 400);
-        var pct = (total > 0 ? (part/total) : 0);
-        readout.innerHTML = 'Range <span class="val"></span> Â· Chance <span class="val">' + _formatPct(pct) + '</span> <span class="clear" role="button" tabindex="0">Clear</span>';
-        readout.innerHTML = 'Range <span class="val">' + a.toFixed(2) + '–' + b.toFixed(2) + ' FP</span> · Chance <span class="val">' + _formatPct(pct) + '</span> <span class="clear" role="button" tabindex="0">Clear</span>';
-        readout.style.display = '';
-        try {
-          var clr = readout.querySelector('.clear');
-          if (clr) clr.onclick = function(){ selStart = null; selEnd = null; _updateRangeVisual(); };
-        } catch(e){}
-      }
-      function onMove(evt){
-        var rect = svg.getBoundingClientRect();
-        var localX = Math.min(W-PAD, Math.max(PAD, (evt.clientX - rect.left) * (W/rect.width)));
-        var xVal = minX + (localX - PAD)*(maxX-minX)/(W-2*PAD);
-        var yNorm = (pdf(xVal)/(maxY||1)); var yPx = yScale(yNorm);
-        if (hoverX){ hoverX.setAttribute('x1', localX); hoverX.setAttribute('x2', localX); hoverX.style.display='block'; }
-        if (hoverDot){ hoverDot.setAttribute('cx', localX); hoverDot.setAttribute('cy', yPx); hoverDot.style.display='block'; }
-        if (tip){ tip.style.display='block'; var bx = box.getBoundingClientRect(); tip.style.left = (evt.clientX - bx.left + 8) + 'px'; tip.style.top = (evt.clientY - bx.top - 8) + 'px'; tip.textContent = 'FP: ' + xVal.toFixed(2) + ' pts, Density: ' + yNorm.toFixed(3); }
-      }
-      function onEnter(){ if (hoverX) hoverX.style.display='block'; if (hoverDot) hoverDot.style.display='block'; if (tip) tip.style.display='block'; }
-      function onLeave(){ if (hoverX) hoverX.style.display='none'; if (hoverDot) hoverDot.style.display='none'; if (tip) tip.style.display='none'; }
-      function onClick(evt){
-        var rect = svg.getBoundingClientRect();
-        var localX = Math.min(W-PAD, Math.max(PAD, (evt.clientX - rect.left) * (W/rect.width)));
-        var xVal = minX + (localX - PAD)*(maxX-minX)/(W-2*PAD);
-        if (selStart == null || (selStart != null && selEnd != null)) {
-          selStart = xVal; selEnd = null; _updateRangeVisual();
-        } else {
-          selEnd = xVal; _updateRangeVisual();
-        }
-      }
-      svg.addEventListener('mousemove', onMove);
-      svg.addEventListener('mouseenter', onEnter);
-      svg.addEventListener('mouseleave', onLeave);
-      svg.addEventListener('click', onClick);
-      try { box.addEventListener('click', function(ev){ if (ev.target && ev.target.tagName && ev.target.tagName.toLowerCase() !== 'svg') onClick(ev); }); } catch(e){}
-      // Fallback: clicks on overlays inside the visual
-      try { box.addEventListener('click', function(ev){ if (ev.target && ev.target.tagName && ev.target.tagName.toLowerCase() !== 'svg') onClick(ev); }); } catch(e){}
-    });
-  } catch (e) { /* ignore */ }
 }
 
 function _prettyMarketLabel(key) {
@@ -809,7 +174,7 @@ function renderMarketBlock(key, payload) {
   }).join('');
   var table = '<table><thead><tr><th>Book</th><th>Over Odds</th><th>Over Pt</th><th>Under Odds</th><th>Under Pt</th></tr></thead><tbody>' + rows + '</tbody></table>';
   var fp = payload || {};
-  var fpStrip = '<div id="imp_' + safeKey + '" class="impact-strip hidden">FP impact Ã¢â‚¬â€ Floor: <strong>' + _fmt(fp.fp_floor) + '</strong> Ã‚Â· Mid: <strong>' + _fmt(fp.fp_mid) + '</strong> Ã‚Â· Ceiling: <strong>' + _fmt(fp.fp_ceiling) + '</strong></div>';
+  var fpStrip = '<div id="imp_' + safeKey + '" class="impact-strip hidden">FP impact — Floor: <strong>' + _fmt(fp.fp_floor) + '</strong> · Mid: <strong>' + _fmt(fp.fp_mid) + '</strong> · Ceiling: <strong>' + _fmt(fp.fp_ceiling) + '</strong></div>';
   return '<div class="market">' + header + fpStrip + '<div id="mk_' + safeKey + '" class="market-details hidden">' + table + '</div></div>';
 }
 
@@ -840,14 +205,12 @@ async function openPlayerDetails(name, week, opts) {
     week: week,
     name: name,
     region: 'us,us2',
-    mode: getDataMode(),
-    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
+    mode: getDataMode()
   });
   var projUrl = apiUrl('/projections', {
     ...identityParams(),
     week: week,
-    mode: getDataMode(),
-    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
+    mode: getDataMode()
   });
   try {
     var players = [];
@@ -882,7 +245,7 @@ async function openPlayerDetails(name, week, opts) {
 
   var head = '<div class="player-head">'
     + '<div class="player-name">' + _escapeHtml(p.name || name) + '</div>'
-    + '<div class="player-meta">' + _escapeHtml(p.pos || '') + ' Ã‚Â· ' + _escapeHtml(p.team || '') + '</div>'
+    + '<div class="player-meta">' + _escapeHtml(p.pos || '') + ' · ' + _escapeHtml(p.team || '') + '</div>'
     + '</div>';
   var predicted = ''
     + '<div class="details-section">'
@@ -891,17 +254,6 @@ async function openPlayerDetails(name, week, opts) {
         +     '<div class="card floor"><div class="label">Floor</div><div class="value">' + _fmt(floor) + '</div></div>'
         +     '<div class="card mid"><div class="label">Mid</div><div class="value">' + _fmt(mid) + '</div></div>'
         +     '<div class="card ceiling"><div class="label">Ceiling</div><div class="value">' + _fmt(ceiling) + '</div></div>'
-      +   '</div>'
-      +   '<div class="btn-row" style="margin-top:8px">'
-      +     '<label class="muted">Model: '
-      +       '<select id="pdModelSel">'
-      +         '<option value="const">Constantini</option>'
-      +         '<option value="puelz">Puelz</option>'
-      +         '<option value="angelini">Angelini</option>'
-      +         '<option value="baseline">Baseline</option>'
-      +       '</select>'
-      +     '</label>'
-      +     '<button id="pdApplyModelBtn" class="secondary">Apply Model</button>'
       +   '</div>'
       + '</div>'
     + '<div class="details-section">' + _renderFpVisual(floor, mid, ceiling) + '</div>'
@@ -971,26 +323,6 @@ async function openPlayerDetails(name, week, opts) {
       btn.addEventListener('click', function(e){ e.stopPropagation(); _openDebugMathOverlay(data); });
     }
   } catch (e) { /* ignore */ }
-  // Hook up model apply button: sets global model and refreshes this popup
-  try {
-    var ms = document.getElementById('modelSelect') || null;
-    var mf = document.getElementById('modelSelectFloating') || null;
-    var pdSel = document.getElementById('pdModelSel');
-    var current = (mf && mf.value) || (ms && ms.value) || 'const';
-    if (pdSel) pdSel.value = current;
-    var apply = document.getElementById('pdApplyModelBtn');
-    if (apply) apply.addEventListener('click', async function(){
-      try {
-        var chosen = (pdSel && pdSel.value) || 'const';
-        if (ms) ms.value = chosen; if (mf) mf.value = chosen;
-        try { if (typeof saveSettings === 'function') saveSettings(); } catch (e) {}
-        // Refresh this popup under the new model
-        await openPlayerDetails(p.name || name, week, { noHistory: true });
-        // Optionally refresh header data in the background
-        try { if (typeof refreshAll === 'function') refreshAll(); } catch (e) {}
-      } catch (e) {}
-    });
-  } catch (e) { /* ignore */ }
   try {
     var hdr = document.querySelector('.details-header');
     if (hdr && !hdr.querySelector('#detailsBack')) {
@@ -998,7 +330,7 @@ async function openPlayerDetails(name, week, opts) {
       bk.id = 'detailsBack';
       bk.className = 'back-btn';
       bk.setAttribute('aria-label','Back');
-      bk.textContent = 'Ã¢â€ Â Back';
+      bk.textContent = '← Back';
       bk.addEventListener('click', function(e){ e.stopPropagation(); try { history.back(); } catch(_) { hideDetails(); } });
       hdr.insertBefore(bk, hdr.firstChild);
     }
@@ -1012,7 +344,7 @@ function _openDebugMathOverlay(data) {
   try {
     var ov = document.getElementById('debugOverlay'); var body = document.getElementById('debugBody'); var ttl = document.getElementById('debugTitle');
     if (!ov || !body) return;
-    if (ttl) ttl.textContent = (data && data.player && data.player.name ? (data.player.name + ' Â· Debug Math') : 'Debug Math');
+    if (ttl) ttl.textContent = (data && data.player && data.player.name ? (data.player.name + ' · Debug Math') : 'Debug Math');
     ov.classList.remove('hidden');
     var back = document.getElementById('debugBack'); if (back) back.onclick = function(){ _renderDebugStatList(data); };
     var close = document.getElementById('debugClose'); if (close) close.onclick = function(){ ov.classList.add('hidden'); };
@@ -1035,8 +367,8 @@ function _renderDebugStatList(data) {
     var mean = means[k]; if (mean==null && markets[k]) mean = markets[k].mean_stat;
     var pm = (dm.per_market && dm.per_market[k]) || {};
     var midFp = pm.fp_mid; var mult = pm.multiplier;
-    var info = 'mean ' + _fmtNum(mean,2) + (mult!=null? (' Â· FP mid ' + _fmtNum(midFp,2)) : '');
-    return '<div class="dbg-stat" data-mkey="'+_escapeHtml(k)+'"><div class="left">'+nice+'</div><div class="right">'+info+' â–¸</div></div>';
+    var info = 'mean ' + _fmtNum(mean,2) + (mult!=null? (' · FP mid ' + _fmtNum(midFp,2)) : '');
+    return '<div class="dbg-stat" data-mkey="'+_escapeHtml(k)+'"><div class="left">'+nice+'</div><div class="right">'+info+' ▸</div></div>';
   }).join('');
   var html = [
     '<div class="details-section">',
@@ -1057,16 +389,6 @@ function _renderDebugStatDetail(data, mkey) {
   var markets = data && data.markets || {}; var entry = markets[mkey] || {};
   var nice = _prettyMarketLabel(mkey);
   var summ = entry.summary || {};
-  // Compare controls (Model A = current global, Model B selectable)
-  var currentModel = (document.getElementById('modelSelectFloating') && document.getElementById('modelSelectFloating').value) || (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const';
-  var cmpControls = '<div class="btn-row"><label class="muted">Compare vs: <select id="cmpModelSel"><option value="">(None)</option><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select></label><button id="cmpApplyBtn" class="secondary">Use This Model</button></div>';
-  var modelCheckboxes = '<div class="btn-row">'
-    + '<span class="muted">Show models:</span> '
-    + '<label class="muted"><input type="checkbox" class="mdlChk" value="const" checked> Constantini</label>'
-    + '<label class="muted"><input type="checkbox" class="mdlChk" value="puelz"> Puelz</label>'
-    + '<label class="muted"><input type="checkbox" class="mdlChk" value="angelini"> Angelini</label>'
-    + '<label class="muted"><input type="checkbox" class="mdlChk" value="baseline"> Baseline</label>'
-    + '</div>';
   // Collect base + alternate book points
   function _gatherBookPoints(key){
     var e = markets[key] || {}; var out=[];
@@ -1123,13 +445,7 @@ function _renderDebugStatDetail(data, mkey) {
   var booksTbl = '<table><thead><tr><th>Book</th><th>Over</th><th>Over Pt</th><th>Under</th><th>Under Pt</th><th>Imp(Over)</th><th>Imp(Under)</th><th>p_over(norm)</th></tr></thead><tbody>'+ (bookRows||'') +'</tbody></table>';
   var html = [
     '<div class="details-section">',
-      '<div class="section-title">Model</div>',
-      '<div>Active: <strong>'+_escapeHtml(String(currentModel||''))+'</strong></div>',
-      cmpControls,
-    '</div>',
-    '<div class="details-section">',
       '<div class="section-title">', _escapeHtml(nice), '</div>',
-      modelCheckboxes,
       statGraph,
       '<div class="muted">Aggregated from bookmaker lines (click Back to choose another stat)</div>',
       agg,
@@ -1141,177 +457,8 @@ function _renderDebugStatDetail(data, mkey) {
   ].join('');
   body.innerHTML = html;
   try { _attachStatVisualHandlers(document.getElementById('debugBody')); } catch (e) {}
-  try {
-    var sel = document.getElementById('cmpModelSel');
-    if (sel) sel.addEventListener('change', async function(){
-      var modelB = (sel && sel.value) || '';
-      var host = document.getElementById('statGraphHost');
-      if (!host) return;
-      if (!modelB) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); try { _attachStatVisualHandlers(host); } catch (e) {} return; }
-      try {
-        var st = (history && history.state) || {};
-        var oddsUrlB = apiUrl('/player/odds', {
-          ...identityParams(),
-          week: (st && st.week) || 'this',
-          name: (data && data.player && data.player.name) || '',
-          region: 'us,us2',
-          mode: getDataMode(),
-          model: modelB
-        });
-        var respB = await fetchJSON(oddsUrlB);
-        if (!respB.ok) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); return; }
-        var perB = ((respB.data||{}).debug_math||{}).per_market || {}; var mB = perB[mkey] || {};
-        host.innerHTML = _renderStatGraphCompare(nice, baseKey, m, mB, (summ && summ.avg_threshold), points, modelB);
-        try { _attachStatVisualHandlers(host); } catch (e) {}
-      } catch (e) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); }
-    });
-    // Apply comparison model globally and refresh
-    var applyBtn = document.getElementById('cmpApplyBtn');
-    if (applyBtn) applyBtn.addEventListener('click', async function(){
-      try {
-        var modelB = (sel && sel.value) || '';
-        if (!modelB) return;
-        var ms = document.getElementById('modelSelect');
-        var mf = document.getElementById('modelSelectFloating');
-        if (ms) ms.value = modelB; if (mf) mf.value = modelB;
-        try { if (typeof saveSettings === 'function') saveSettings(); } catch (e) {}
-        // Close debug overlay and refresh Player Details under new model
-        try { var ov = document.getElementById('debugOverlay'); if (ov) ov.classList.add('hidden'); } catch (e) {}
-        await openPlayerDetails((data && data.player && data.player.name) || '', (history && history.state && history.state.week) || 'this', { noHistory: true });
-        try { if (typeof refreshAll === 'function') refreshAll(); } catch (e) {}
-      } catch (e) {}
-    });
-    // Multi-model checkboxes overlay
-    var mdlChecks = Array.prototype.slice.call(document.querySelectorAll('.mdlChk'));
-    var mdlCache = {};
-    var activeLabelColor = { const: '#60a5fa', puelz: '#f59e0b', angelini: '#22c55e', baseline: '#ef4444' };
-    function _fetchModelStat(modelKey){
-      return new Promise(async function(resolve){
-        if (mdlCache[modelKey]) { resolve(mdlCache[modelKey]); return; }
-        try {
-          var st = (history && history.state) || {};
-          var oddsUrl = apiUrl('/player/odds', {
-            ...identityParams(),
-            week: (st && st.week) || 'this',
-            name: (data && data.player && data.player.name) || '',
-            region: 'us,us2',
-            mode: getDataMode(),
-            model: modelKey
-          });
-          var r = await fetchJSON(oddsUrl);
-          var pm = ((r.data||{}).debug_math||{}).per_market || {};
-          var mX = pm[mkey] || {};
-          mdlCache[modelKey] = mX;
-          resolve(mX);
-        } catch (e) { resolve({}); }
-      });
-    }
-    function _updateMulti(){
-      var host = document.getElementById('statGraphHost'); if (!host) return;
-      var selected = mdlChecks.filter(function(c){ return c && c.checked; }).map(function(c){ return c.value; });
-      if (!selected.length) { host.innerHTML = _renderStatGraph(nice, baseKey, m, (summ && summ.avg_threshold), points); return; }
-      Promise.all(selected.map(_fetchModelStat)).then(function(all){
-        var map = {}; for (var i=0;i<selected.length;i++){ map[selected[i]] = all[i] || {}; }
-        host.innerHTML = _renderStatGraphMulti(nice, baseKey, map, (summ && summ.avg_threshold), points, activeLabelColor);
-        try { _attachStatVisualHandlers(host); } catch (e) {}
-      });
-    }
-    mdlChecks.forEach(function(ch){ ch.addEventListener('change', _updateMulti); });
-  } catch (e) {}
 }
 
-// Render a two-model overlay of the stat graph (Model A: active; Model B: selected)
-function _renderStatGraphCompare(title, baseKey, mA, mB, summaryThreshold, bookPoints, labelB) {
-  try {
-    function buildOne(m) {
-      var mean = Number(m.mean||0);
-      var q15 = Number(m.q15||0), q85 = Number(m.q85||0);
-      var sigma = Number(m.sigma||0.000001);
-      return { mean, q15, q85, sigma };
-    }
-    var A = buildOne(mA), B = buildOne(mB);
-    // Compute axis range from both
-    var minX = 0;
-    var maxX = Math.max(A.mean, A.q85||0, B.mean, B.q85||0, summaryThreshold||0, (bookPoints||[]).reduce(function(mx,p){ return Math.max(mx, Number(p.point||0)); }, 0));
-    if (!(maxX > 0)) maxX = 1;
-    maxX = maxX * 1.2;
-    var W = 600, H = 140, PAD = 14;
-    function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
-    function yScale(y){ return H - PAD - y * (H - 2*PAD); }
-    function pathFor(m){ var N=80, pts=[], maxY=0; function pdf(x){ return Math.exp(-0.5*Math.pow((x-m.mean)/(m.sigma||1e-6),2)); } for (var i=0;i<=N;i++){ var x=minX+(maxX-minX)*i/N; var y=pdf(x); if (y>maxY) maxY=y; pts.push([x,y]); } var d=pts.map(function(p,i){ var X=xScale(p[0]).toFixed(1),Y=yScale((p[1]/(maxY||1))*1).toFixed(1); return (i?'L':'M')+X+','+Y; }).join(''); return d + ' L ' + xScale(maxX).toFixed(1) + ',' + yScale(0) + ' L ' + xScale(minX).toFixed(1) + ',' + yScale(0) + ' Z'; }
-    function vline(x, cls){ return '<line class="marker '+cls+'" x1="'+x+'" y1="'+yScale(0)+'" x2="'+x+'" y2="'+yScale(1)+'" />'; }
-    var grid = (function(){ var out=''; for (var gi=1; gi<=5; gi++){ var xv=minX+(maxX-minX)*gi/6; out += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; } return out; })();
-    var mk = [];
-    if (summaryThreshold!=null) mk.push(vline(xScale(Number(summaryThreshold)), 'summary'));
-    var bookMarks = (bookPoints||[]).map(function(p){ return vline(xScale(p.point), 'book'); });
-    var svg = [
-      '<div class="stat-visual" data-min="', minX, '" data-max="', maxX, '" data-pad="', PAD, '" data-w="', W, '" data-h="', H, '" data-mean="', A.mean, '" data-sigma="', A.sigma, '" data-mean-b="', B.mean, '" data-sigma-b="', B.sigma, '">',
-        '<div class="vis-title">', _escapeHtml(title), ' (stat, compare)</div>',
-        '<div class="svg-wrap"><svg viewBox="0 0 ', W, ' ', H, '" preserveAspectRatio="none">',
-          grid,
-          '<line class="axis" x1="', xScale(minX), '" y1="', yScale(0), '" x2="', xScale(maxX), '" y2="', yScale(0), '" />',
-          '<path class="curve" d="', pathFor(A), '" />',
-          '<path class="curve2" d="', pathFor(B), '" />',
-          vline(xScale(A.q15), 'q15'), vline(xScale(A.mean), 'mean'), vline(xScale(A.q85), 'q85'),
-          vline(xScale(B.q15), 'q15 m2'), vline(xScale(B.mean), 'mean m2'), vline(xScale(B.q85), 'q85 m2'),
-          bookMarks.join(''),
-          '<line class="hover-x" x1="0" y1="', yScale(1), '" x2="0" y2="', yScale(0), '" style="display:none" />',
-          '<circle class="hover-dot" cx="0" cy="0" r="3" style="display:none" />',
-        '</svg></div>',
-        '<div class="legend">',
-          '<span><span class="dot q15"></span>A: Q15/Mean/Q85</span>',
-          '<span><span class="dot" style="background:#f472b6"></span>B: ', _escapeHtml(String(labelB||'model B')), '</span>',
-          (summaryThreshold!=null? '<span><span class="dot summary"></span>Summary T</span>' : ''),
-          (bookPoints && bookPoints.length? '<span><span class="dot book"></span>Book lines</span>' : ''),
-        '</div>',
-        '<div class="fp-tooltip" style="display:none; left:0; top:0;">x: 0, density: 0</div>',
-      '</div>'
-    ].join('');
-    return svg;
-  } catch (e) { return _renderStatGraph(title, baseKey, mA, summaryThreshold, bookPoints); }
-}
-
-// Multi-model overlay renderer (modelsMap: key -> per-market m)
-function _renderStatGraphMulti(title, baseKey, modelsMap, summaryThreshold, bookPoints, colorMap) {
-  try {
-    var keys = Object.keys(modelsMap || {});
-    // Compute bounds across models
-    var minX = 0;
-    var maxX = 1;
-    keys.forEach(function(k){ var m=modelsMap[k]||{}; var mx=Math.max(Number(m.mean||0), Number(m.q85||0)); if (mx > maxX) maxX = mx; });
-    if (summaryThreshold!=null && Number(summaryThreshold) > maxX) maxX = Number(summaryThreshold);
-    if (bookPoints && bookPoints.length){ bookPoints.forEach(function(p){ var v=Number(p.point||0); if (v>maxX) maxX=v; }); }
-    if (!(maxX > 0)) maxX = 1;
-    maxX = maxX * 1.2;
-    var W=600,H=140,PAD=14;
-    function xScale(x){ return PAD + (x - minX) * (W - 2*PAD) / (maxX - minX); }
-    function yScale(y){ return H - PAD - y * (H - 2*PAD); }
-    function pathFor(m){ var N=100, pts=[], maxY=0; var mean=Number(m.mean||0); var sigma=Number(m.sigma||0.000001); function pdf(x){ return Math.exp(-0.5*Math.pow((x-mean)/(sigma||1e-6),2)); } for (var i=0;i<=N;i++){ var x=minX+(maxX-minX)*i/N; var y=pdf(x); if (y>maxY) maxY=y; pts.push([x,y]); } var d=pts.map(function(p,i){ var X=xScale(p[0]).toFixed(1),Y=yScale((p[1]/(maxY||1))*1).toFixed(1); return (i?'L':'M')+X+','+Y; }).join(''); return d + ' L ' + xScale(maxX).toFixed(1) + ',' + yScale(0) + ' L ' + xScale(minX).toFixed(1) + ',' + yScale(0) + ' Z'; }
-    function vline(x, cls){ return '<line class="marker '+cls+'" x1="'+x+'" y1="'+yScale(0)+'" x2="'+x+'" y2="'+yScale(1)+'" />'; }
-    var grid = (function(){ var out=''; for (var gi=1; gi<=5; gi++){ var xv=minX+(maxX-minX)*gi/6; out += '<line class="grid" x1="'+xScale(xv)+'" y1="'+yScale(0)+'" x2="'+xScale(xv)+'" y2="'+yScale(1)+'" />'; } return out; })();
-    var mk = [];
-    if (summaryThreshold!=null) mk.push(vline(xScale(Number(summaryThreshold)), 'summary'));
-    var bookMarks = (bookPoints||[]).map(function(p){ return vline(xScale(p.point), 'book'); });
-    var legendParts = [];
-    var curves = keys.map(function(k){ var m=modelsMap[k]||{}; var color=(colorMap&&colorMap[k])||'#888'; legendParts.push('<span><span class="dot" style="background:'+color+'"></span>'+k+'</span>'); return '<path class="curve-line" data-model="'+k+'" data-mean="'+Number(m.mean||0)+'" data-sigma="'+Number(m.sigma||0.000001)+'" stroke="'+color+'" fill="rgba(0,0,0,0.0)" d="'+pathFor(m)+'" />'; });
-    var svg = [
-      '<div class="stat-visual">',
-        '<div class="vis-title">', _escapeHtml(title), ' (stat, multi-model)</div>',
-        '<div class="svg-wrap"><svg viewBox="0 0 ', W, ' ', H, '" preserveAspectRatio="none">',
-          grid,
-          '<line class="axis" x1="', xScale(minX), '" y1="', yScale(0), '" x2="', xScale(maxX), '" y2="', yScale(0), '" />',
-          curves.join(''),
-          mk.join(''),
-          bookMarks.join(''),
-        '</svg></div>',
-        '<div class="legend">', legendParts.join(' '), (summaryThreshold!=null? ' <span><span class="dot summary"></span>Summary T</span>':''), (bookPoints && bookPoints.length? ' <span><span class="dot book"></span>Book lines</span>':''), '</div>',
-      '</div>'
-    ].join('');
-    return svg;
-  } catch (e) { return ''; }
-}
-
-// Render a stat-specific PDF with markers for thresholds and book points
 function _renderStatGraph(title, baseKey, m, summaryThreshold, bookPoints) {
   try {
     var mean = Number(m.mean||0);
@@ -1413,9 +560,9 @@ async function openDefenseDetails(defense, week) {
     var rows = (g.books||[]).map(function(b){
       return '<tr>'
         + '<td>' + (b.book||'') + '</td>'
-        + '<td>' + (b.total_point!=null?_fmt(b.total_point):'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â') + '</td>'
-        + '<td>' + (b.opponent_spread!=null?_fmt(b.opponent_spread):'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â') + '</td>'
-        + '<td>' + (b.opponent_implied!=null?_fmt(b.opponent_implied):'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â') + '</td>'
+        + '<td>' + (b.total_point!=null?_fmt(b.total_point):'—') + '</td>'
+        + '<td>' + (b.opponent_spread!=null?_fmt(b.opponent_spread):'—') + '</td>'
+        + '<td>' + (b.opponent_implied!=null?_fmt(b.opponent_implied):'—') + '</td>'
         + '</tr>';
     }).join('');
     var table = '<table><thead><tr><th>Book</th><th>Total</th><th>Opp Spread</th><th>Opp Implied</th></tr></thead><tbody>' + rows + '</tbody></table>';
@@ -1474,8 +621,8 @@ function renderRawOddsSection(raw) {
             var outcomes = Array.isArray(mkt.outcomes) ? mkt.outcomes : [];
             var rows = outcomes.map(function(o){
               var name = _escapeHtml(o.name);
-              var price = (o.price!=null? _escapeHtml(o.price) : (o.odds!=null? _escapeHtml(o.odds): 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â'));
-              var point = (o.point!=null? _escapeHtml(o.point) : 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â');
+              var price = (o.price!=null? _escapeHtml(o.price) : (o.odds!=null? _escapeHtml(o.odds): '—'));
+              var point = (o.point!=null? _escapeHtml(o.point) : '—');
               var other = {};
               Object.keys(o||{}).forEach(function(k){ if (['name','price','odds','point'].indexOf(k)===-1) other[k]=o[k]; });
               var otherStr = (Object.keys(other).length? _escapeHtml(JSON.stringify(other)) : '');
@@ -1558,9 +705,6 @@ document.addEventListener('DOMContentLoaded', function(){
     window.addEventListener('popstate', function(ev){
       var st = ev.state || {};
       if (st && st.modal === 'player') { try { openPlayerDetails(st.name, st.week || 'this', { noHistory: true }); return; } catch(_) {}
-      }
-      if (st && st.modal === 'compare') { try { openCompareCurves(st.week || 'this', { noHistory: true }); return; } catch(_) {}
-      if (st && st.modal === 'book-coverage') { try { openBookCoverage(st.week || 'this'); return; } catch(_) {} }
       }
       var overlay = document.getElementById('detailsOverlay');
       if (overlay && !overlay.classList.contains('hidden')) hideDetails();
@@ -1702,7 +846,7 @@ function _attachStatVisualHandlers(root) {
         if (!(b>a)){ rangePath.setAttribute('d',''); if(readout) readout.style.display='none'; return; }
         var N=100, d=''; for(var i=0;i<=N;i++){ var x=a+(b-a)*i/N; var y=(pdfFor(c.mean,c.sigma,x)/(maxY||1))*1; var X=xScale(x).toFixed(1), Y=yScale(y).toFixed(1); d += (i?' L ':'M ')+X+','+Y; } d += ' L '+xScale(b).toFixed(1)+','+yScale(0).toFixed(1); d += ' L '+xScale(a).toFixed(1)+','+yScale(0).toFixed(1)+' Z'; rangePath.setAttribute('d', d);
         var total=_integral(c.mean,c.sigma,minX,maxX,800); var part=_integral(c.mean,c.sigma,a,b,400); var pct=(total>0?(part/total):0);
-        if(readout){ readout.innerHTML='Model <span class="val">'+locked+'</span> Â· Range <span class="val"></span> Â· Chance <span class="val">'+_formatPct(pct)+'</span> <span class="clear" role="button" tabindex="0">Clear</span>'; readout.style.display=''; var clr=readout.querySelector('.clear'); if(clr) clr.onclick=function(){ selStart=null; selEnd=null; locked=null; _updateRange(); }; }
+        if(readout){ readout.innerHTML='Model <span class="val">'+locked+'</span> · Range <span class="val"></span> · Chance <span class="val">'+_formatPct(pct)+'</span> <span class="clear" role="button" tabindex="0">Clear</span>'; readout.style.display=''; var clr=readout.querySelector('.clear'); if(clr) clr.onclick=function(){ selStart=null; selEnd=null; locked=null; _updateRange(); }; }
       }
       function onMove(evt){
         var rect = svg.getBoundingClientRect();

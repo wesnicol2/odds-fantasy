@@ -1,7 +1,9 @@
 import unittest
+from typing import ClassVar
 
 from oddsfantasy import range_model
 from oddsfantasy.lineup import build_lineup
+from oddsfantasy.predicted_stats import predict_stats_for_player
 from oddsfantasy.prob_models import poisson_quantile
 
 # A fairly standard Sleeper-style scoring dict, points-allowed portion only.
@@ -96,6 +98,44 @@ class MarketQuantilesFallbackShapeTest(unittest.TestCase):
         )
         self.assertIn(q15, (0.0, 1.0))
         self.assertIn(q85, (0.0, 1.0))
+
+
+class AlternateLadderPayloadTest(unittest.TestCase):
+    """An alternate ladder in the odds must not take down the older models.
+
+    The aggregator stores `*_alternate` markets as {"alts": {...}} with no
+    single over/under pair, and the planner does request those markets. The
+    single-line models have no use for a ladder, but they must skip it rather
+    than raise -- this used to be a KeyError that surfaced as a 500 on
+    /projections for any player with an alternate market posted.
+    """
+
+    ODDS: ClassVar[dict] = {
+        "bookA": {
+            "player_rush_yds": {
+                "over": {"odds": 1.87, "point": 74.5},
+                "under": {"odds": 1.95, "point": 74.5},
+            },
+            "player_rush_yds_alternate": {
+                "alts": {
+                    "over": [{"odds": 1.22, "point": 40}, {"odds": 2.45, "point": 90}],
+                    "under": [{"odds": 4.3, "point": 40}, {"odds": 1.57, "point": 90}],
+                }
+            },
+        }
+    }
+
+    def test_predicted_stats_skips_the_ladder(self):
+        stats = predict_stats_for_player(self.ODDS)
+        self.assertIn("player_rush_yds", stats)
+        self.assertNotIn("player_rush_yds_alternate", stats)
+
+    def test_every_model_handles_it(self):
+        for model in ("baseline", "const", "puelz", "angelini", "market"):
+            floor, mid, ceiling, _ = range_model.compute_fantasy_range_model(
+                self.ODDS, {}, {"rush_yd": 0.1}, model=model
+            )
+            self.assertLessEqual(floor, ceiling, msg=model)
 
 
 class BuildLineupDefenseSlotTest(unittest.TestCase):

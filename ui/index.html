@@ -18,8 +18,8 @@
     </div>
   </header>
 
-  <!-- Settings popover: data mode, probability model, and the username/season
-       fallback identity path (only relevant if you skip league setup). -->
+  <!-- Settings popover: cache mode, plus the username/season fallback identity
+       path (only relevant if you skip league setup). -->
   <div id="settingsPanel" class="settings-panel hidden">
     <label>
       <span>Data</span>
@@ -27,15 +27,6 @@
         <option value="auto" selected>Auto (TTL cache)</option>
         <option value="cache">Cache only</option>
         <option value="fresh">Force fresh</option>
-      </select>
-    </label>
-    <label>
-      <span>Model</span>
-      <select id="modelSelect">
-        <option value="const" selected>Constantini</option>
-        <option value="puelz">Puelz</option>
-        <option value="angelini">Angelini</option>
-        <option value="baseline">Baseline</option>
       </select>
     </label>
     <div class="advanced-fallback">
@@ -56,18 +47,15 @@
 
   <main>
     <div class="btn-row mode-switch">
-      <button id="modeDraftBtn" class="toggle-btn" data-mode="draft">Draft Board</button>
-      <button id="modeWeeklyBtn" class="toggle-btn toggle-active" data-mode="weekly">Weekly</button>
+      <button id="modePredraftBtn" class="toggle-btn" data-mode="predraft">Pre-Draft</button>
+      <button id="modeSeasonBtn" class="toggle-btn toggle-active" data-mode="season">In-Season</button>
     </div>
 
-    <section id="panel-draft" class="hidden">
-      <p class="status">Every active QB/RB/WR/TE on a team playing the
-      selected week -- not scoped to your roster. "Week 1"/"Week 2" are
-      anchored to the earliest games in the odds feed, not today's date. A
-      single week's market-implied outlook, not a season-long projection.</p>
+    <!-- Pre-draft: every draftable player on the slate, ranked, for breaking
+         ties between players you rate similarly. Per-game market read -- see
+         the note in the panel for why there is no season total here. -->
+    <section id="panel-predraft" class="hidden">
       <div class="btn-row">
-        <button data-week="this" class="toggle-btn week-toggle toggle-active">Week 1</button>
-        <button data-week="next" class="toggle-btn week-toggle">Week 2</button>
         <select id="draftPosFilter">
           <option value="">All positions</option>
           <option value="QB">QB</option>
@@ -75,11 +63,13 @@
           <option value="WR">WR</option>
           <option value="TE">TE</option>
         </select>
+        <button data-week="this" class="toggle-btn week-toggle toggle-active">Week 1</button>
+        <button data-week="next" class="toggle-btn week-toggle">Week 2</button>
       </div>
       <div id="draft-board" class="results"></div>
     </section>
 
-    <section id="panel-weekly">
+    <section id="panel-season">
       <div class="btn-row">
         <button data-week="this" class="toggle-btn week-toggle toggle-active">This Week</button>
         <button data-week="next" class="toggle-btn week-toggle">Next Week</button>
@@ -96,28 +86,8 @@
       </div>
       <div id="weekly-results" class="results"></div>
     </section>
-
-    <div class="btn-row">
-      <button id="btnToggleAdvanced" type="button">Show Advanced Tools</button>
-    </div>
-    <section id="panel-advanced" class="hidden">
-      <h2>Advanced</h2>
-      <div class="btn-row">
-        <button id="btnBookCoverage">Book Coverage</button>
-        <button data-week="this" class="btn-compare-curves">Compare Curves (This Week)</button>
-        <button data-week="next" class="btn-compare-curves">Compare Curves (Next Week)</button>
-      </div>
-      <div class="btn-row">
-        <button id="btnProjThis">Raw Projections (This Week)</button>
-        <button id="btnProjNext">Raw Projections (Next Week)</button>
-      </div>
-      <pre id="projectionsDebug" class="debug"></pre>
-    </section>
   </main>
 
-  <footer>
-    <span id="rateLimit" class="status"></span>
-  </footer>
 
   <!-- League/team setup overlay -->
   <div id="leagueSetupOverlay" class="overlay hidden">
@@ -166,6 +136,7 @@
     <div class="overlay-box details-box">
       <div class="details-header">
         <div id="detailsTitle" class="details-title">Details</div>
+        <button id="detailsClose" class="close-btn" aria-label="Close">✕</button>
       </div>
       <div id="detailsBody" class="details-body"></div>
     </div>
@@ -182,7 +153,13 @@
       <div id="debugBody" class="details-body"></div>
     </div>
   </div>
-<script src="/ui/script.js"></script>
+  <!-- Always-visible build stamp: which commit this instance is actually
+       running. Populated from /health by script.js. -->
+  <footer id="buildFooter" class="build-footer">
+    <span id="buildText" class="build-text">build …</span>
+  </footer>
+
+  <script src="/ui/script.js"></script>
   <script src="/ui/prob-curve.js"></script>
   <script src="/ui/details.js"></script>
 </body>

@@ -30,6 +30,10 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Stamp build time
+        id: stamp
+        run: echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -48,5 +52,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Stamped into the image and surfaced by /health, so the UI footer
+          # can say exactly which commit is running on Test or Production.
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            GIT_BRANCH=${{ github.ref_name }}
+            IMAGE_TAG=${{ inputs.image_tag }}
+            BUILT_AT=${{ steps.stamp.outputs.built_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

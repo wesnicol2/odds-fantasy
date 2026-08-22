@@ -167,7 +167,7 @@ def compute_projections(
     region: str = "us",
     fresh: bool = False,
     cache_mode: str = "auto",
-    model: str = "const",
+    model: str = "market",
     league_id: str | None = None,
     roster_id: int | None = None,
 ) -> dict:
@@ -614,7 +614,7 @@ def compute_draft_board(
     region: str = "us",
     fresh: bool = False,
     cache_mode: str = "auto",
-    model: str = "const",
+    model: str = "market",
     positions: list[str] | None = None,
     league_id: str | None = None,
     roster_id: int | None = None,
@@ -722,7 +722,7 @@ def compute_book_coverage(
     region: str = "us",
     fresh: bool = False,
     cache_mode: str = "auto",
-    model: str = "const",
+    model: str = "market",
     league_id: str | None = None,
     roster_id: int | None = None,
 ) -> dict:
@@ -1011,7 +1011,7 @@ def build_dashboard(
     weeks: str = "both",  # 'this' | 'next' | 'both'
     def_scope: str = "owned",  # 'owned' | 'available' | 'both'
     include_players: bool = True,
-    model: str = "const",
+    model: str = "market",
     league_id: str | None = None,
     roster_id: int | None = None,
 ) -> dict:
