@@ -1,0 +1,178 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="pvlJrsDFVENUNid63UoN">
+    <mxGraphModel dx="2118" dy="1635" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RB1 (1 remaining)" vertex="1">
+          <mxGeometry height="60" width="120" x="240" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="WR1 (3 remaining)" vertex="1">
+          <mxGeometry height="60" width="120" x="947" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RB2 (2 remaining)" vertex="1">
+          <mxGeometry height="60" width="120" x="240" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-10" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RANKED&lt;div&gt;PLAYERS&lt;/div&gt;" vertex="1">
+          <mxGeometry height="1200" width="120" x="-10" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-11" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;aspect=fixed;" value="RB" vertex="1">
+          <mxGeometry height="80" width="80" x="270" y="-180" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-12" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;aspect=fixed;" value="WR" vertex="1">
+          <mxGeometry height="80" width="80" x="987" y="-180" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-13" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RB3 (5 remaining)" vertex="1">
+          <mxGeometry height="60" width="120" x="240" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-14" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RB3&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&amp;nbsp;(4&amp;nbsp;&lt;/span&gt;remaining&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="240" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-20" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="QB1 (6 remaining)" vertex="1">
+          <mxGeometry height="60" width="120" x="760" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-21" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="TE1 (8 overall)" vertex="1">
+          <mxGeometry height="60" width="120" x="520" y="830" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-22" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RB2 (7 remaining)" vertex="1">
+          <mxGeometry height="60" width="120" x="947" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-25" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="380" y="1000" as="sourcePoint" />
+            <mxPoint x="380" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-26" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="290" y="1000" as="sourcePoint" />
+            <mxPoint x="290" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-27" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="570" y="1000" as="sourcePoint" />
+            <mxPoint x="570" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-28" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="1022" y="1000" as="sourcePoint" />
+            <mxPoint x="1022" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-29" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="WR12 (30 overall)" vertex="1">
+          <mxGeometry height="60" width="120" x="960" y="1030" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-30" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RB20 (32 remaining)" vertex="1">
+          <mxGeometry height="60" width="120" x="253" y="1190" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-31" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="RB19&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&amp;nbsp;(31 overall)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="253" y="1120" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-32" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="End at 32 because that is the total number of picks left in this checkpoint. Theoretically it should show every option even if all others are drafted first&amp;nbsp;" vertex="1">
+          <mxGeometry height="40" width="580" x="160" y="1270" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-33" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;NEEDS&lt;/b&gt;&lt;div&gt;(one box for each player that is REQUIRED in this checkpoint&lt;/div&gt;&lt;div&gt;for this exaple: we&#39;re seeing the end of the draft where we need at least 4 RBs, 5 WR, 1QB and 1TE.&lt;/div&gt;&lt;div&gt;In this situation, we still need one more RB and one more TE. QB is weaker overall and therefore is sorted a little higher than WR on the columns sorting&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="330" x="-190" y="-15" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-35" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;aspect=fixed;" value="QB" vertex="1">
+          <mxGeometry height="80" width="80" x="765" y="-180" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-37" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;aspect=fixed;" value="TE" vertex="1">
+          <mxGeometry height="80" width="80" x="547.5" y="-170" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-38" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="1192" y="1000" as="sourcePoint" />
+            <mxPoint x="1192" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-39" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="1102" y="1000" as="sourcePoint" />
+            <mxPoint x="1102" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-40" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="794" y="1000" as="sourcePoint" />
+            <mxPoint x="794" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-41" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="870" y="1000" as="sourcePoint" />
+            <mxPoint x="870" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-46" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="500" y="1000" as="sourcePoint" />
+            <mxPoint x="500" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-47" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="940" y="1000" as="sourcePoint" />
+            <mxPoint x="940" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-48" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="430" y="990" as="sourcePoint" />
+            <mxPoint x="430" y="920" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-49" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="660" y="1000" as="sourcePoint" />
+            <mxPoint x="660" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-50" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="Position with the most needs is moved all&amp;nbsp; the way to the left - if all needs are met, the weakest position is moved to the left" vertex="1">
+          <mxGeometry height="30" width="355" x="410" y="-230" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-51" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="1st RB drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="207.5" y="-90" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-54" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="2nd RB drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="207.5" y="-35" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-55" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="3rd RB drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="207.5" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-56" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="1st WR drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="942.5" y="-90" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-57" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="5th WR drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="940" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-58" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="4th WR&amp;nbsp;&amp;nbsp;drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="942.5" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-59" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="2nd WR drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="942.5" y="-35" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-60" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="3rd WR drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="942.5" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-61" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;" value="DOTTED LINE FOR POSITIONS WHICH AREN&#39;T REQUIRED IN THIS CHECKPOINT OR ARE ALREADY FUFILLED FOR THIS CHECKPOINT" vertex="1">
+          <mxGeometry height="90" width="225" x="930" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-62" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="NEED TO DRAFT RB&lt;div&gt;(this visual box should help show the missing RB spot on the roster)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="50" width="205" x="205" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-64" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="NEED TO DRAFT TE&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;(this visual box should help show the missing RB spot on the roster)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="50" width="205" x="485" y="-55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-65" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="1st QB drafted" vertex="1">
+          <mxGeometry height="50" width="205" x="710" y="-55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZKEAz0sFbWCkWhe-I1pX-66" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;" value="DOTTED LINE FOR POSITIONS WHICH AREN&#39;T REQUIRED IN THIS CHECKPOINT OR ARE ALREADY FUFILLED FOR THIS CHECKPOINT" vertex="1">
+          <mxGeometry height="90" width="225" x="700" y="15" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

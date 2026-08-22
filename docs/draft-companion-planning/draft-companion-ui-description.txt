@@ -1,0 +1,27 @@
+- UI will be a grid which shows each position RB, WR, QB, TE as a column
+
+ROW ORDER
+- 1st row will show position name
+- 2nd-7th rows will show already drafted players in that position (first drafted are in the highest rows) (There should be a player in each column here if there has been at least one player of that position drafted)
+- solid defining line between already drafted (above) and being drafted (below)
+- 8th-10th row - Spots needed to draft before this checkpoint ends
+- 11th + row - shows undrafted players ranked. Each row will only have one player, so each row represents one rank of un drafted player
+- note on row ordering for the undrafted players: We should match the Sleeper ADP for ranking (stretch goal make ranking configurable)
+- note on number of undrafted players to show: If there are 15 picks until the end of this checkpoint (the user's pick in the round where the checkpoint ends), then 15 players should be shown
+
+
+COLUMN ORDER
+- Rows will be re-ranked dynamically where top needs are furthest to the left. If all needs are met for the checkpoint, then the weakest overall position based on already drafted players will be moved furthest to the left
+
+
+
+CELLS 
+- Each player cell should make it obvious 1) Player Name 2) Position (color coordinated) 3) Team (with logo) and 4) Picture
+- Highlight players based on the following criteria (color, bolding, etc... we will decide how each property is highlighted later)
+    - Team synergy (Once a WR from a specifc team is drafted, that team's QB should be positivly highlighted. The WR from the same team should be negatively highlighted)
+        - TODO: What other team synergys do we want to highlight? 
+    - Highlight RB handcuffs (probably with handcuff icon)
+    - bye week protection (negatively highlight players who have matching bye weeks to your existing players at that same position)
+    - STRETCH GOAL: TODO: identify "new player situations" such a`s "NEW COACH" or "NEW QB" or "STARTER LEFT TEAM". Create an extensive list of these which we can easily identify
+
+
