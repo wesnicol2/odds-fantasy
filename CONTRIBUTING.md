@@ -6,23 +6,27 @@ next season) doesn't re-derive it, and the repo doesn't quietly rot again.
 
 ## Environments
 
-Three environments, each pinned to its own GHCR tag:
+Two environments, each pinned to its own GHCR tag:
 
-| Env | Purpose     | Branch      | GHCR tag  | Container on home server |
-| --- | ----------- | ----------- | --------- | ------------------------ |
-| E1  | Development | `dev/*`     | `:e1`     | `odds-fantasy-e1`        |
-| E2  | Test        | `feature/*` | `:e2`     | `odds-fantasy-e2`        |
-| E3  | Production  | `main`      | `:latest` | `odds-fantasy`           |
+| Env        | Branch      | GHCR tag  | Container on home server |
+| ---------- | ----------- | --------- | ------------------------ |
+| Test       | `feature/*` | `:test`   | `odds-fantasy-test`      |
+| Production | `main`      | `:latest` | `odds-fantasy`           |
 
 Delivery is **pull-based**: CI never reaches into the home server. It pushes the
 branch-appropriate tag to GHCR; Watchtower on the server polls each container's
 tag and recreates it on a new digest. Promotion is a merge, never a manual image
 copy.
 
-> **E1 is last-push-wins.** There is one `:e1` tag, shared by every `dev/*`
-> branch, so two active dev branches will overwrite each other's E1 deploy and
-> the container ends up running whichever pushed last. Only one dev branch
-> should expect to own E1 at a time.
+> **`dev/*` branches deploy nowhere.** They still get full CI — lint and tests
+> run on every push — but they derive no image tag, so nothing is published and
+> no container moves. Verification against a running app happens on Test, after
+> the `dev/*` → `feature/*` merge.
+
+> **Test is last-merge-wins.** There is one `:test` tag, shared by every
+> `feature/*` branch, so two feature branches in flight will overwrite each
+> other's Test deploy and the container ends up running whichever merged last.
+> Only one feature branch should expect to own Test at a time.
 
 ## Branching model
 
@@ -30,22 +34,23 @@ Strict promotion, always: `dev/*` → `feature/*` → `main`. There is no shortc
 for small changes — a one-line fix takes the same path as a season rewrite.
 
 - **`dev/<kebab-case>`** — one logical change, cut from the `feature/` branch it
-  belongs to. All code enters the repo here. Every commit publishes `:e1` → E1.
+  belongs to. All code enters the repo here. Every push runs lint and tests;
+  nothing is published and nothing deploys.
 - **`feature/<kebab-case>`** — an initiative-sized body of work (e.g.
   `feature/season-2026-readiness`), cut from the tip of `main` so its diff
   against `main` is exactly "what this initiative changed." Never committed to
-  directly; it only receives merges from `dev/*` branches already validated on
-  E1. Any merge publishes `:e2` → E2.
+  directly; it only receives merges from `dev/*` branches whose CI is green.
+  Any merge publishes `:test` → Test.
 - **`main`** — the default branch, always deployable. Merges require a review
-  from the repo owner. A merge publishes `:latest` → E3, so treat it as a
-  production deploy, not a checkpoint.
+  from the repo owner. A merge publishes `:latest` → Production, so treat it as
+  a production deploy, not a checkpoint.
 
 ```
   dev/cleanup ──┐
   dev/ci ───────┼──► feature/season-2026-readiness ──► main
   dev/draft ────┘
-      :e1                      :e2                     :latest
-      E1 (dev)                 E2 (test)               E3 (prod)
+   (CI only,               :test                    :latest
+    no deploy)             Test                     Production
 ```
 
 Naming: `feature/kebab-case-name`, `dev/kebab-case-name`. No other prefixes.
@@ -56,14 +61,17 @@ Naming: `feature/kebab-case-name`, `dev/kebab-case-name`. No other prefixes.
    for this work yet, cut the `feature/` branch from `main` first.
 2. Make the change. Run `ruff check`, `ruff format --check`, and
    `python -m pytest tests/` locally before pushing.
-3. Push. Every commit auto-deploys to **E1** — verify the change there.
-4. Open a PR `dev/*` → its feature branch. Merging auto-deploys to **E2**. Delete
-   the `dev/` branch as soon as it is merged.
-5. Exercise E2 against live data for at least one real session. Unit tests catch
-   regressions in the math; they don't catch "the lineup looks wrong" or "this
-   endpoint times out against real odds data."
+3. Push. CI runs lint and tests; nothing deploys from a `dev/` branch. A red
+   check here is the signal to fix before going further.
+4. Open a PR `dev/*` → its feature branch. Merging publishes `:test` and
+   auto-deploys to **Test**. Delete the `dev/` branch as soon as it is merged.
+5. Exercise Test against live data for at least one real session. This is the
+   only place a change is seen running before production, so it is not
+   optional. Unit tests catch regressions in the math; they don't catch "the
+   lineup looks wrong" or "this endpoint times out against real odds data."
 6. Open a PR `feature/*` → `main` and get a review from the repo owner. Merging
-   auto-deploys to **E3**. Delete the `feature/` branch as soon as it is merged.
+   publishes `:latest` and auto-deploys to **Production**. Delete the `feature/`
+   branch as soon as it is merged.
 
 ## CI/CD pipeline
 
@@ -79,9 +87,9 @@ image tag from `github.ref`, then calls three stages in sequence:
    cache), then `python -m pytest tests/`.
 3. **`publish.yml`** — `docker/setup-buildx-action@v3`, `docker/login-action@v3`,
    `docker/metadata-action@v5`, `docker/build-push-action@v6`. Pushes to GHCR
-   under the derived tag (`dev/**` → `:e1`, `feature/**` → `:e2`, `main` →
-   `:latest`). Gated on lint and test passing, and skipped for pull requests —
-   the merge is what deploys, not the PR.
+   under the derived tag (`feature/**` → `:test`, `main` → `:latest`; `dev/**`
+   derives no tag and so publishes nothing). Gated on lint and test passing,
+   and skipped for pull requests — the merge is what deploys, not the PR.
 
 **A red check is a hard stop**, not a "merge anyway and fix later."
 
@@ -142,9 +150,9 @@ default outcome when a solo project has no rule against it. So:
   nothing the repo doesn't have — it just clutters the branch list and invites
   someone (or some assistant) to add commits to a branch whose work already
   shipped. The GitHub merge screen offers a **Delete branch** button; use it
-  there and it never gets forgotten. Merged `dev/` branches matter most: E1 is
-  one shared `:e1` tag, so a stale dev branch someone pushes to will overwrite
-  whatever is deployed there.
+  there and it never gets forgotten. Merged `feature/` branches matter most:
+  Test is one shared `:test` tag, so a stale feature branch that receives
+  another merge will overwrite whatever is deployed there.
 
 ## Odds API quota awareness
 

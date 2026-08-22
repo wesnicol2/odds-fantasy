@@ -17,9 +17,10 @@ concurrency:
 
 jobs:
   # Maps branch -> environment tag. See CONTRIBUTING.md "Environments".
-  #   dev/**     -> :e1  (E1, shared by every dev branch: last push wins)
-  #   feature/** -> :e2  (E2)
-  #   main       -> :latest (E3, production)
+  #   feature/** -> :test    (Test)
+  #   main       -> :latest  (Production)
+  # dev/** derives no tag on purpose: the publish job is gated on a non-empty
+  # tag, so dev branches get lint and test but deploy nowhere.
   tag:
     runs-on: ubuntu-latest
     outputs:
@@ -30,8 +31,7 @@ jobs:
         run: |
           case "${{ github.ref }}" in
             refs/heads/main)       tag=latest ;;
-            refs/heads/feature/*)  tag=e2 ;;
-            refs/heads/dev/*)      tag=e1 ;;
+            refs/heads/feature/*)  tag=test ;;
             *)                     tag= ;;
           esac
           echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
