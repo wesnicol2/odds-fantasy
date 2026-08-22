@@ -29,13 +29,17 @@ systematically overstates every event. `predicted_stats.implied_probability`
 converts American odds to a probability, and `aggregator.py` de-vigs per book
 when both sides of a market are present, normalising over/under to sum to 1.
 
-De-vig **per book, then average across books** — not the other way around. Books
-carry different margins, so averaging raw implied probabilities across books
-blends their vig into the result in a way you can't back out afterwards. There
-is a known wart here: `aggregator.py` averages the per-book de-vigged
-probabilities, and an average of averages isn't strictly correct when books have
-different numbers of markets. It's fine for a first pass and hasn't been worth
-fixing.
+De-vig **per book, then combine across books** — not the other way around. Books
+carry different margins, so combining raw implied probabilities across books
+blends their vig into the result in a way you can't back out afterwards.
+
+The combine step is a **median** of the per-book de-vigged probabilities
+(`aggregator.py`), not a mean. The median is the robustness: a single stale book
+that hasn't repriced for an injury or weather can't drag the consensus, and no
+per-book weights or outlier rules are needed on top of it. Note the residual
+naming debt — `MarketSummary` still calls the fields `avg_over_prob`,
+`avg_under_prob` and `avg_threshold` from when this was a mean, and the values
+they hold are medians.
 
 ### One line is not a distribution, so pick a shape
 
@@ -61,6 +65,26 @@ understates ceilings for exactly the boom/bust receivers where the ceiling is
 the whole reason you'd start them.
 
 Floor/mid/ceiling are the 15th/50th/85th percentiles, not min/expected/max.
+
+### As-built here, target in `docs/fantasy-projection-methodology.md`
+
+This section describes **what the code does today**. `docs/fantasy-projection-methodology.md`
+describes the **target method** — derived from first principles, independent of
+any code, and explicitly "the reference the implementation is measured against."
+The two are meant to differ; a reader hitting one without the other is the
+problem, so the current gaps are worth naming:
+
+| | As built (this file) | Target (methodology doc) |
+| --- | --- | --- |
+| CDF anchors | one (threshold, probability) pair per market; `*_alternate` ladders skipped for quota | the full alternate ladder, interpolated (PCHIP) between anchors |
+| Count stats | Poisson fit to the single CDF point | difference the cumulative lines (`§4`); Poisson/NB only where lines are sparse |
+| Floor / ceiling | 15th / 85th percentiles | 10th / 90th (`§5`) |
+| Bonus thresholds | yardage thresholds hardcoded in `odds_details.py`; only the point *amounts* come from Sleeper | thresholds and amounts both configuration (`§2.4`) |
+| Aggregation | per-stat only; no player-level joint model | player-level sum, with cross-stat correlation an open question (`§2.5`) |
+
+Cross-book median de-vigging is the one place they already agree. Closing any of
+the rest is a code change, not a doc change — the doc is the spec, so update it
+first if the target itself should move.
 
 ### Alternate lines are deliberately not used by default
 

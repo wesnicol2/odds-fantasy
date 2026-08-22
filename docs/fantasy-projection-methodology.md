@@ -4,6 +4,13 @@
 
 **Status:** v0.9 — living document. Market-translation-only and scoring-as-configuration principles established; method is ruleset-agnostic and PPR-ready; rushing/receiving/passing yards, receptions, touchdowns, and interceptions done; player aggregation and DEF / K next.
 
+**Relationship to `AGENTS.md`.** This document is the *target*: what the model
+should do, argued from the market up. `AGENTS.md` records what the code does
+*today* and why, including where it falls short of this document. When the two
+disagree, this one describes the destination and `AGENTS.md` describes the
+current position — see its "As-built here, target in
+`docs/fantasy-projection-methodology.md`" table for the live gap list.
+
 **What the model produces.** A full fantasy-points *probability distribution* per player — the whole curve, not just a mean — because every downstream use (floor/ceiling, matchup leverage, lineup win-probability) needs the distribution. The method is **ruleset-agnostic**: scoring rules, PPR, bonuses, and league format are all configuration, and any specific league is just one instance (this project's is summarized in §2.4 and used in the worked examples).
 
 **This project's goal (a usage lens, not part of the method).** The league this project runs in pays only for a top-3 finish — a tournament objective — so when *using* the curve (§5) we lean especially on the right tail (ceiling). This shapes how the distribution is read, not how it is built.
