@@ -1,0 +1,44 @@
+- Draft companion
+    - Will keep up with draft and suggest players at each point. 
+    - Need to define clear draft plan DONE (see below)
+    - Auto update with top suggestions for each round depending on team construction + my preferences
+    - Simplify my choices by highlighting the following:
+        - synergy with existing team
+        - upside possibility (strong handcuffs, players with new, better coaches, players with new, better teammates)
+            - We should statically identify the upside of every single player. Automated upside would be a stretch goal.
+        - Show season long curve comparison between top 5 players or so based on season long props from odds api (stretch goal)
+            
+
+Minimum viable product: A auto updating UI (no interaction needed from user) which shows top picks based on draft plan. Players should be highlighted with different colors based on how many draft plan criteria they have
+
+DRAFT PLAN: 
+Rounds 1–3
+Secure 2–3 studs at RB/WR (≥1 of each). Lean RB
+Minimums by end of R3: RB ≥1, WR ≥1
+
+
+Rounds 4–6
+Take elite QB/TE only if:
+Stack synergy is available, OR
+They’re last-of-tier (top 3 QB/TE). TODO: Identify top 3 QB/TEs
+Otherwise: keep hammering RB/WR.
+Minimums by end of R6: RB ≥2, WR ≥2, QB ≥0, TE ≥0
+
+
+Rounds 7–9
+Fill in TE if you don't have one yet 
+Prioritize best available RB/WR value. (lean WR) 
+Do not overpay for QB/TE depth yet.
+Minimums by end of R9: RB ≥3, WR ≥4
+
+
+
+
+Rounds 10–14
+Stack QB or TE if you don’t already have both yet.
+High-upside RB backups
+Exactly one WR dart (rookie/role-shift in strong offense), 
+Optional: add one upside QB or TE.
+Minimums by end of R14: RB ≥4, WR ≥5, QB ≥1, TE ≥1
+Round 15 – maybe Defense
+TODO: Identify top defenses for week 1 by implied total
