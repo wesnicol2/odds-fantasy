@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from statistics import median
+from statistics import NormalDist, median
 
 from .prob_models import (
     _fit_lognormal_from_two_points,
@@ -58,6 +58,19 @@ _EPS = 1e-6
 # How many integer buckets above the highest *fitted* count anchor we are
 # willing to enumerate when a sparse ladder forces a parametric fill.
 _MAX_COUNT = 12
+
+# A tail is fitted through the two outermost anchors, which only pins a shape
+# if those anchors actually differ in probability. Two books quoting nearly the
+# same price at slightly different lines say almost nothing about the slope,
+# and fitting to them produces an absurd tail, so the fit walks inward for a
+# pair separated by at least this much probability. This is a numerical
+# stability floor, not a modelling knob -- it changes which anchors the fit
+# uses, never what the anchors say.
+_MIN_TAIL_F_GAP = 0.02
+
+# Shape assumption of last resort, used only where the market determines no
+# width at all: the spread the pre-existing single-line model falls back to.
+_ASSUMED_CV = 0.25
 
 
 def american_to_probability(odds: float | int | None) -> float | None:
@@ -263,6 +276,35 @@ def _pchip_eval(xs: list[float], ys: list[float], x: float) -> float:
     )
 
 
+def _assumed_width_fit(x: float, cdf_at_x: float) -> tuple[float, float] | None:
+    """Lognormal through one point, with its width assumed rather than fitted.
+
+    Reached only where the anchors determine no width: a single posted
+    threshold, or outermost anchors too close in probability to pin a slope.
+    """
+    if x <= 0:
+        return None
+    sigma = math.sqrt(math.log(1.0 + _ASSUMED_CV**2))
+    z = NormalDist().inv_cdf(min(max(cdf_at_x, _EPS), 1.0 - _EPS))
+    return math.log(x) - sigma * z, sigma
+
+
+def _tail_fit(xs: list[float], cdf_ys: list[float], upper: bool) -> tuple[float, float] | None:
+    """Fit the lognormal that continues the curve past the outermost anchor."""
+    n = len(xs)
+    end = n - 1 if upper else 0
+    inward = range(n - 2, -1, -1) if upper else range(1, n)
+    for j in inward:
+        if abs(cdf_ys[j] - cdf_ys[end]) < _MIN_TAIL_F_GAP:
+            continue
+        fit = _fit_lognormal_from_two_points(
+            max(xs[j], _EPS), cdf_ys[j], max(xs[end], _EPS), cdf_ys[end]
+        )
+        if fit and fit[1] > 0:
+            return fit
+    return _assumed_width_fit(xs[end], cdf_ys[end])
+
+
 class ContinuousDistribution:
     """A yardage-type distribution: PCHIP between anchors, lognormal tails (§2.3).
 
@@ -278,12 +320,8 @@ class ContinuousDistribution:
             raise ValueError("ContinuousDistribution needs at least two anchors")
         self.xs = [float(a.threshold) for a in anchors]
         self.cdf_ys = [min(max(1.0 - float(a.survival), 0.0), 1.0) for a in anchors]
-        self._lower_fit = _fit_lognormal_from_two_points(
-            max(self.xs[0], _EPS), self.cdf_ys[0], max(self.xs[1], _EPS), self.cdf_ys[1]
-        )
-        self._upper_fit = _fit_lognormal_from_two_points(
-            max(self.xs[-2], _EPS), self.cdf_ys[-2], max(self.xs[-1], _EPS), self.cdf_ys[-1]
-        )
+        self._lower_fit = _tail_fit(self.xs, self.cdf_ys, upper=False)
+        self._upper_fit = _tail_fit(self.xs, self.cdf_ys, upper=True)
 
     def quantile(self, u: float) -> float:
         u = min(max(u, _EPS), 1.0 - _EPS)
@@ -465,12 +503,6 @@ def is_continuous_market(market_key: str) -> bool:
     return key in CONTINUOUS_MARKETS or key.endswith("_yds")
 
 
-# Shape assumption of last resort for a continuous market with a single
-# anchor: the spread the pre-existing single-line model falls back to when the
-# posted price is a coin flip and carries no information about width.
-_SINGLE_ANCHOR_CV = 0.25
-
-
 def _single_anchor_distribution(anchor: Anchor) -> ContinuousDistribution | None:
     """Continuous distribution from one lonely anchor.
 
@@ -492,10 +524,12 @@ def _single_anchor_distribution(anchor: Anchor) -> ContinuousDistribution | None
     survival = min(max(float(anchor.survival), _EPS), 1.0 - _EPS)
     median_estimate = threshold * (1.0 + (2.0 * survival - 1.0) * 0.5)
     if median_estimate <= 0 or abs(median_estimate - threshold) < 1e-6:
-        # Coin-flip line: median sits on the threshold and the width has to be
-        # assumed. Moment-match a lognormal to a spread of a quarter of the line.
-        sigma = math.sqrt(math.log(1.0 + _SINGLE_ANCHOR_CV**2))
-        mu = math.log(threshold)
+        # Coin-flip line: the median sits on the threshold and the width has to
+        # be assumed outright.
+        fit = _assumed_width_fit(threshold, 1.0 - survival)
+        if fit is None:
+            return None
+        mu, sigma = fit
         lower = Anchor(threshold=_lognormal_quantile(mu, sigma, 0.25), survival=0.75)
         upper = Anchor(threshold=_lognormal_quantile(mu, sigma, 0.75), survival=0.25)
         return ContinuousDistribution([lower, upper])
@@ -523,6 +557,14 @@ def build_distribution(
     if not is_continuous_market(market_key):
         return None
 
+    if len({round(a.survival, 9) for a in anchors}) == 1:
+        # Isotonic flattened every anchor to the same probability -- books
+        # disagreeing about which way the line leans, which after pooling is
+        # one point of information, not several. Treat it as one anchor rather
+        # than fitting a shape to a flat segment.
+        return _single_anchor_distribution(
+            Anchor(threshold=median(a.threshold for a in anchors), survival=anchors[0].survival)
+        )
     if len(anchors) >= 2:
         return ContinuousDistribution(anchors)
     return _single_anchor_distribution(anchors[0])

@@ -226,6 +226,52 @@ class SingleAnchorFallbackTest(unittest.TestCase):
         self.assertEqual(len(anchors), 2)
 
 
+class NoisyMarketTest(unittest.TestCase):
+    """Books contradicting each other must not produce an absurd curve.
+
+    Both cases here are the same failure in different clothes: the outermost
+    anchors carry no usable slope, so a lognormal fitted straight through them
+    is meaningless. Left unguarded the first produced a 51-yard floor and a
+    ceiling pinned to the top anchor for a 261-yard passer.
+    """
+
+    def test_books_disagreeing_about_the_lean_collapse_to_one_anchor(self):
+        # Book A prices the *higher* line as the likelier over -- inconsistent,
+        # so isotonic flattens both to the same probability.
+        books = {
+            "a": {"player_pass_yds": two_way(264.5, -112, -108)},
+            "b": {"player_pass_yds": two_way(258.5, -105, -115)},
+        }
+        anchors = collect_anchors(books, "player_pass_yds")
+        self.assertEqual(len({round(a.survival, 9) for a in anchors}), 1)
+
+        dist = build_distribution(books, "player_pass_yds")
+        floor, median, ceiling = (dist.quantile(q) for q in (0.10, 0.50, 0.90))
+        self.assertAlmostEqual(median, 261.0, delta=8.0)
+        self.assertGreater(floor, 0.5 * median)
+        self.assertLess(ceiling, 2.0 * median)
+        self.assertGreater(ceiling, 264.5)
+
+    def test_tail_fit_walks_inward_past_near_tied_anchors(self):
+        # The top two rungs are priced almost identically; the tail has to be
+        # fitted from a pair that actually differs, not from those two.
+        book = {
+            "player_rush_yds": two_way(74.5, -115, -105),
+            "player_rush_yds_alternate": alt_ladder(
+                [(40, -450, 330), (100, 205, -265), (105, 210, -270)]
+            ),
+        }
+        dist = build_distribution({"b": book}, "player_rush_yds")
+        ceiling = dist.quantile(0.90)
+        self.assertGreater(ceiling, 105.0)
+        self.assertLess(ceiling, 300.0)
+
+    def test_the_doc_ladder_is_unaffected_by_the_guards(self):
+        dist = build_distribution({"bookA": DOC_RUSH_YDS_BOOK}, "player_rush_yds")
+        self.assertAlmostEqual(dist.quantile(0.50), 75.9, delta=1.5)
+        self.assertAlmostEqual(dist.quantile(0.90), 131.0, delta=6.0)
+
+
 class LevelForThresholdTest(unittest.TestCase):
     def test_anytime_market_posts_no_point(self):
         # The anytime-TD market carries no point at all; it is P(>=1).

@@ -138,6 +138,16 @@ Two smaller judgement calls, both places the doc stops short:
   next section, and stops doing so the moment a second distinct threshold shows
   up anywhere in the feed — which multiple books usually supply on their own,
   since they rarely post the identical line.
+- **Anchors that carry no slope.** Two books posting nearly the same price at
+  slightly different lines say almost nothing about how fast the curve falls,
+  and a lognormal fitted straight through them is meaningless — this produced a
+  51-yard floor and a ceiling pinned to the top line for a 261-yard passer
+  before it was guarded. So the tail fit walks inward for a pair actually
+  separated in probability, and when isotonic flattens *every* anchor to one
+  value (books disagreeing about which way the line leans) the market has given
+  one point of information, not several, and it is treated as a single anchor.
+  Neither guard changes what an anchor says; they change which anchors a tail
+  is fitted through.
 
 The older models (`const`, `puelz`, `angelini`, `baseline`) are still
 selectable via `?model=`, so the two approaches can be compared on the same
