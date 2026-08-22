@@ -17,6 +17,7 @@ from .config import STAT_MARKET_MAPPING_SLEEPER
 from .planner import plan_relevant_games_and_markets
 from .predicted_stats import predict_stats_for_player
 from .range_model import PRIMARY_MARKET_WHITELIST
+from .scoring import ScoringConfig
 from .services import (
     NO_GAMES_SCHEDULED_MESSAGE,
     _fetch_odds,
@@ -47,7 +48,7 @@ def get_player_odds_details(
     region: str = "us",
     name: str = "",
     cache_mode: str = "auto",
-    model: str = "const",
+    model: str = "market",
     league_id: str | None = None,
     roster_id: int | None = None,
 ) -> dict:
@@ -71,6 +72,10 @@ def get_player_odds_details(
     # Roster & planning (to get scoring rules and player mapping)
     roster = _resolve_identity(username, season, league_id, roster_id)
     scoring_rules = roster.get("scoring_rules", {}) if roster else {}
+    # Values, per-reception value and bonus (threshold, amount) pairs all come
+    # from the league's settings -- see scoring.py. Nothing about the ruleset
+    # is spelled out in this file.
+    scoring = ScoringConfig.from_settings(scoring_rules)
     plan_all = plan_relevant_games_and_markets(
         roster,
         ((this_start, this_end), (next_start, next_end)),
@@ -119,13 +124,8 @@ def get_player_odds_details(
     # Compute rough impact score = abs(mean * multiplier)
     impacts: dict[str, float] = {}
     for mkey, mean_val in mean_stats.items():
-        rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
-        mult = 0.0
-        try:
-            if rule and (rule in scoring_rules):
-                mult = float(scoring_rules[rule])
-        except Exception:
-            mult = 0.0
+        stat_scoring = scoring.for_market(mkey)
+        mult = stat_scoring.per_unit if stat_scoring else 0.0
         impacts[mkey] = abs((mean_val or 0.0) * (mult or 0.0))
     order = sorted(impacts.keys(), key=lambda k: impacts[k], reverse=True)
     primary = order[:5]
@@ -147,18 +147,18 @@ def get_player_odds_details(
         per_market_ranges = {}
 
     def _fp_triplet_for_market(mkey: str) -> tuple[float, float, float]:
+        """Fantasy points at this market's floor/mid/ceiling stat values.
+
+        Scored with the league's real scoring function, bonuses included, so a
+        ceiling that clears a yardage threshold shows the jump rather than the
+        straight-line value.
+        """
         try:
             rng = per_market_ranges.get(mkey)
-            if rng is None:
+            stat_scoring = scoring.for_market(mkey)
+            if rng is None or stat_scoring is None:
                 return 0.0, 0.0, 0.0
-            q10, q50, q90 = rng
-            rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
-            if not rule or rule not in scoring_rules:
-                return 0.0, 0.0, 0.0
-            mult = float(scoring_rules.get(rule, 0.0) or 0.0)
-            if mkey == "player_pass_interceptions":
-                mult = -abs(mult)
-            return round(q10 * mult, 2), round(q50 * mult, 2), round(q90 * mult, 2)
+            return tuple(round(stat_scoring.points_for(float(q)), 2) for q in rng)
         except Exception:
             return 0.0, 0.0, 0.0
 
@@ -264,10 +264,9 @@ def get_player_odds_details(
                 else (None, None, None, False)
             )
             # FP contributions for this market
-            rule = STAT_MARKET_MAPPING_SLEEPER.get(mkey)
-            mult = float(scoring_rules.get(rule, 0.0) or 0.0) if rule else 0.0
-            if mkey == "player_pass_interceptions":
-                mult = -abs(mult)
+            stat_scoring = scoring.for_market(mkey)
+            rule = stat_scoring.rule_key if stat_scoring else None
+            mult = stat_scoring.per_unit if stat_scoring else 0.0
             fp_floor = round((q15 or 0.0) * mult, 4) if q15 is not None else None
             fp_mid = round((q50 or 0.0) * mult, 4) if q50 is not None else None
             fp_ceil = round((q85 or 0.0) * mult, 4) if q85 is not None else None
@@ -290,67 +289,26 @@ def get_player_odds_details(
                 "fp_ceil": fp_ceil,
             }
 
-        # Yardage bonuses at each level
-        def _bonus_pass(y: float) -> float:
-            try:
-                if y is None:
-                    return 0.0
-                if y >= 400 and ("bonus_pass_yd_400" in scoring_rules):
-                    return float(scoring_rules["bonus_pass_yd_400"]) or 0.0
-                if y >= 300 and ("bonus_pass_yd_300" in scoring_rules):
-                    return float(scoring_rules["bonus_pass_yd_300"]) or 0.0
-            except Exception:
-                return 0.0
-            return 0.0
+        # Yardage bonuses at each level. Thresholds and amounts both come
+        # from the league config (scoring.py); this file names neither.
+        def _bonus_at(qidx: int) -> float:
+            total = 0.0
+            for mkey, stat_scoring in scoring.by_market.items():
+                if not stat_scoring.bonuses:
+                    continue
+                rng = per_market_ranges.get(mkey)
+                if not rng:
+                    continue
+                try:
+                    value = float(rng[qidx])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                total += sum(
+                    amount for threshold, amount in stat_scoring.bonuses if value >= threshold
+                )
+            return total
 
-        def _bonus_rush(y: float) -> float:
-            try:
-                if y is None:
-                    return 0.0
-                if y >= 200 and ("bonus_rush_yd_200" in scoring_rules):
-                    return float(scoring_rules["bonus_rush_yd_200"]) or 0.0
-                if y >= 100 and ("bonus_rush_yd_100" in scoring_rules):
-                    return float(scoring_rules["bonus_rush_yd_100"]) or 0.0
-            except Exception:
-                return 0.0
-            return 0.0
-
-        def _bonus_rec(y: float) -> float:
-            try:
-                if y is None:
-                    return 0.0
-                if y >= 200 and ("bonus_rec_yd_200" in scoring_rules):
-                    return float(scoring_rules["bonus_rec_yd_200"]) or 0.0
-                if y >= 100 and ("bonus_rec_yd_100" in scoring_rules):
-                    return float(scoring_rules["bonus_rec_yd_100"]) or 0.0
-            except Exception:
-                return 0.0
-            return 0.0
-
-        def _get_stat(qidx: int, key: str) -> float | None:
-            rng = per_market_ranges.get(key)
-            if not rng:
-                return None
-            try:
-                return float(rng[qidx])
-            except Exception:
-                return None
-
-        b_floor = (
-            (_bonus_rec(_get_stat(0, "player_reception_yds")) or 0.0)
-            + (_bonus_rush(_get_stat(0, "player_rush_yds")) or 0.0)
-            + (_bonus_pass(_get_stat(0, "player_pass_yds")) or 0.0)
-        )
-        b_mid = (
-            (_bonus_rec(_get_stat(1, "player_reception_yds")) or 0.0)
-            + (_bonus_rush(_get_stat(1, "player_rush_yds")) or 0.0)
-            + (_bonus_pass(_get_stat(1, "player_pass_yds")) or 0.0)
-        )
-        b_ceil = (
-            (_bonus_rec(_get_stat(2, "player_reception_yds")) or 0.0)
-            + (_bonus_rush(_get_stat(2, "player_rush_yds")) or 0.0)
-            + (_bonus_pass(_get_stat(2, "player_pass_yds")) or 0.0)
-        )
+        b_floor, b_mid, b_ceil = _bonus_at(0), _bonus_at(1), _bonus_at(2)
 
         debug_math = {
             "scoring_rules": scoring_rules,

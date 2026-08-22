@@ -351,7 +351,7 @@ function getDataMode() {
 
 function getModel() {
   const el = $('modelSelect');
-  return (el && el.value) ? el.value : 'const';
+  return (el && el.value) ? el.value : 'market';
 }
 
 // A player/lineup row is "incomplete" when the backend had no odds coverage

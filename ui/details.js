@@ -210,7 +210,7 @@ function _renderFpVisual(floor, mid, ceil) {
 function openCompareCurves(week) {
   try {
     showDetails('Compare Curves', '<div class="status"><span class="spinner"></span> Loading curves...</div>');
-  var projUrl = apiUrl('/projections', { ...identityParams(), week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const')) });
+  var projUrl = apiUrl('/projections', { ...identityParams(), week: week, mode: getDataMode(), model: (typeof getModel==='function'? getModel() : ((document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'market')) });
     fetchJSON(projUrl).then(function(res){
       if (!res.ok) { hideDetails(); alert('Failed to load projections'); return; }
       var all = (res.data && res.data.players) || [];
@@ -253,19 +253,19 @@ function openCompareCurves(week) {
         + '<input id="cmpSearch" class="cmp-search" type="text" placeholder="Search players" />'
         + '<label class="muted"><input id="cmpShowPinned" type="checkbox" /> Show selected only</label>'
         + '<span class="muted" style="margin-left:10px;">Model:</span> '
-        + '<select id="cmpModelGlobal"><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select>'
+        + '<select id="cmpModelGlobal"><option value="market">Market (methodology)</option><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select>'
         + '<button id="cmpApplyGlobal" class="secondary" style="margin-left:6px;">Apply</button>'
         + '</div>';
       var grid = controls + '<div class="compare-grid"><div class="compare-list" id="cmpList"></div><div class="compare-graph"><svg id="cmpSvg" viewBox="0 0 800 360" preserveAspectRatio="none"></svg><div class="compare-legend">Hover a player to highlight; click to lock highlight.</div></div></div>';
       var body = document.getElementById('detailsBody');
       body.innerHTML = tabsHtml + grid + '<div class="details-section" id="cmpLineup" style="display:none"></div>';
       function _renderTargetPills(){ try{ var pills=body.querySelectorAll('.target-pill'); pills.forEach(function(btn){ var t=btn.getAttribute('data-target'); btn.classList.toggle('pill-active', String(t)===String(curTarget)); }); }catch(e){} }
-      try { var mg = document.getElementById('cmpModelGlobal'); if (mg) mg.value = (typeof getModel==='function'? getModel() : 'const'); } catch (e) {}
+      try { var mg = document.getElementById('cmpModelGlobal'); if (mg) mg.value = (typeof getModel==='function'? getModel() : 'market'); } catch (e) {}
       try {
         var apply = document.getElementById('cmpApplyGlobal');
         if (apply) apply.addEventListener('click', function(){
           try {
-            var mg = document.getElementById('cmpModelGlobal'); var chosen = (mg && mg.value) || 'const';
+            var mg = document.getElementById('cmpModelGlobal'); var chosen = (mg && mg.value) || 'market';
             var ms = document.getElementById('modelSelect'); var mf = document.getElementById('modelSelectFloating');
             if (ms) ms.value = chosen; if (mf) mf.value = chosen;
             try { if (typeof saveSettings==='function') saveSettings(); } catch(e){}
@@ -600,7 +600,7 @@ function openBookCoverage(initialWeek) {
         ...identityParams(),
         week: w,
         mode: (typeof getDataMode === 'function' ? getDataMode() : 'auto'),
-        model: (typeof getModel === 'function' ? getModel() : 'const')
+        model: (typeof getModel === 'function' ? getModel() : 'market')
       };
       fetchJSON(apiUrl('/book-coverage', params)).then(function(res) {
         if (!res || !res.ok) {
@@ -841,13 +841,13 @@ async function openPlayerDetails(name, week, opts) {
     name: name,
     region: 'us,us2',
     mode: getDataMode(),
-    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
+    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'market'
   });
   var projUrl = apiUrl('/projections', {
     ...identityParams(),
     week: week,
     mode: getDataMode(),
-    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const'
+    model: (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'market'
   });
   try {
     var players = [];
@@ -895,6 +895,7 @@ async function openPlayerDetails(name, week, opts) {
       +   '<div class="btn-row" style="margin-top:8px">'
       +     '<label class="muted">Model: '
       +       '<select id="pdModelSel">'
+      +         '<option value="market">Market (methodology)</option>'
       +         '<option value="const">Constantini</option>'
       +         '<option value="puelz">Puelz</option>'
       +         '<option value="angelini">Angelini</option>'
@@ -976,12 +977,12 @@ async function openPlayerDetails(name, week, opts) {
     var ms = document.getElementById('modelSelect') || null;
     var mf = document.getElementById('modelSelectFloating') || null;
     var pdSel = document.getElementById('pdModelSel');
-    var current = (mf && mf.value) || (ms && ms.value) || 'const';
+    var current = (mf && mf.value) || (ms && ms.value) || 'market';
     if (pdSel) pdSel.value = current;
     var apply = document.getElementById('pdApplyModelBtn');
     if (apply) apply.addEventListener('click', async function(){
       try {
-        var chosen = (pdSel && pdSel.value) || 'const';
+        var chosen = (pdSel && pdSel.value) || 'market';
         if (ms) ms.value = chosen; if (mf) mf.value = chosen;
         try { if (typeof saveSettings === 'function') saveSettings(); } catch (e) {}
         // Refresh this popup under the new model
@@ -1058,11 +1059,12 @@ function _renderDebugStatDetail(data, mkey) {
   var nice = _prettyMarketLabel(mkey);
   var summ = entry.summary || {};
   // Compare controls (Model A = current global, Model B selectable)
-  var currentModel = (document.getElementById('modelSelectFloating') && document.getElementById('modelSelectFloating').value) || (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'const';
-  var cmpControls = '<div class="btn-row"><label class="muted">Compare vs: <select id="cmpModelSel"><option value="">(None)</option><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select></label><button id="cmpApplyBtn" class="secondary">Use This Model</button></div>';
+  var currentModel = (document.getElementById('modelSelectFloating') && document.getElementById('modelSelectFloating').value) || (document.getElementById('modelSelect') && document.getElementById('modelSelect').value) || 'market';
+  var cmpControls = '<div class="btn-row"><label class="muted">Compare vs: <select id="cmpModelSel"><option value="">(None)</option><option value="market">Market (methodology)</option><option value="const">Constantini</option><option value="puelz">Puelz</option><option value="angelini">Angelini</option><option value="baseline">Baseline</option></select></label><button id="cmpApplyBtn" class="secondary">Use This Model</button></div>';
   var modelCheckboxes = '<div class="btn-row">'
     + '<span class="muted">Show models:</span> '
-    + '<label class="muted"><input type="checkbox" class="mdlChk" value="const" checked> Constantini</label>'
+    + '<label class="muted"><input type="checkbox" class="mdlChk" value="market" checked> Market</label>'
+    + '<label class="muted"><input type="checkbox" class="mdlChk" value="const"> Constantini</label>'
     + '<label class="muted"><input type="checkbox" class="mdlChk" value="puelz"> Puelz</label>'
     + '<label class="muted"><input type="checkbox" class="mdlChk" value="angelini"> Angelini</label>'
     + '<label class="muted"><input type="checkbox" class="mdlChk" value="baseline"> Baseline</label>'
@@ -1184,7 +1186,7 @@ function _renderDebugStatDetail(data, mkey) {
     // Multi-model checkboxes overlay
     var mdlChecks = Array.prototype.slice.call(document.querySelectorAll('.mdlChk'));
     var mdlCache = {};
-    var activeLabelColor = { const: '#60a5fa', puelz: '#f59e0b', angelini: '#22c55e', baseline: '#ef4444' };
+    var activeLabelColor = { market: '#a78bfa', const: '#60a5fa', puelz: '#f59e0b', angelini: '#22c55e', baseline: '#ef4444' };
     function _fetchModelStat(modelKey){
       return new Promise(async function(resolve){
         if (mdlCache[modelKey]) { resolve(mdlCache[modelKey]); return; }
