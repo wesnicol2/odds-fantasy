@@ -309,10 +309,10 @@ class ContinuousDistribution:
     """A yardage-type distribution: PCHIP between anchors, lognormal tails (§2.3).
 
     The tails are where the ceiling lives, so beyond the outermost anchors the
-    curve continues as a lognormal fitted to the two anchors on that end --
-    positive and right-skewed, which is the shape a yardage market has. The
-    near-zero lower tail gets no special handling: if the market gives a bad
-    game weight, it is already in the ladder.
+    curve continues as a lognormal fitted to the anchors on that end (see
+    :func:`_tail_fit`) -- positive and right-skewed, which is the shape a
+    yardage market has. The near-zero lower tail gets no special handling: if
+    the market gives a bad game weight, it is already in the ladder.
     """
 
     def __init__(self, anchors: list[Anchor]):
@@ -328,7 +328,9 @@ class ContinuousDistribution:
         if u < self.cdf_ys[0]:
             if self._lower_fit:
                 mu, sigma = self._lower_fit
-                return max(0.0, _lognormal_quantile(mu, sigma, u))
+                # Capped at the anchor so the tail can never cross into the
+                # interpolated region and break monotonicity.
+                return max(0.0, min(self.xs[0], _lognormal_quantile(mu, sigma, u)))
             # No usable fit: fall back to a straight line down to zero.
             span = self.cdf_ys[0] or 1.0
             return max(0.0, self.xs[0] * (u / span))

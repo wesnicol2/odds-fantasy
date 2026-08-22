@@ -174,9 +174,11 @@ class ContinuousDistributionTest(unittest.TestCase):
         self.assertAlmostEqual(self.dist.sf(200), 0.007, delta=0.01)
 
     def test_quantiles_are_monotone_and_non_negative(self):
+        # Across the whole curve, tails included: a tail fitted from anchors
+        # further in must not cross back over the anchor it starts at.
         previous = -1.0
-        for i in range(1, 100):
-            value = self.dist.quantile(i / 100.0)
+        for i in range(1, 1000):
+            value = self.dist.quantile(i / 1000.0)
             self.assertGreaterEqual(value, 0.0)
             self.assertGreaterEqual(value, previous)
             previous = value
