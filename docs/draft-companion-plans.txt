@@ -11,6 +11,11 @@
 
 Minimum viable product: A auto updating UI (no interaction needed from user) which shows top picks based on draft plan. Players should be highlighted with different colors based on how many draft plan criteria they have
 
+STRETCH GOALS: 
+    - calculate predicted Wins Above Replacement (WAR) for every player and rank based on that
+    - Show season long curve comparison between top 5 players or so based on season long props from odds api (stretch goal)
+
+
 DRAFT PLAN: 
 Rounds 1–3
 Secure 2–3 studs at RB/WR (≥1 of each). Lean RB
@@ -42,3 +47,17 @@ Optional: add one upside QB or TE.
 Minimums by end of R14: RB ≥4, WR ≥5, QB ≥1, TE ≥1
 Round 15 – maybe Defense
 TODO: Identify top defenses for week 1 by implied total
+
+
+
+
+
+
+
+INITIAL DESIGN:
+User Experience: 
+- This app is running on a second screen during the draft.
+- Before the first pick - the app displays the top 12 choices for the players first pick (12 because that is the number of teams in the draft)
+
+- Before the second pick - displays top 12 choices for players 2nd pick based on draft plan needs
+etc... 
