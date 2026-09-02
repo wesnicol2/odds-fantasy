@@ -10,6 +10,7 @@ on:
       - "dev/**"
       - "feature/**"
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -28,14 +29,16 @@ jobs:
     steps:
       - name: Derive image tag from ref
         id: derive
+        env:
+          REF: ${{ github.ref }}
         run: |
-          case "${{ github.ref }}" in
+          case "$REF" in
             refs/heads/main)       tag=latest ;;
             refs/heads/feature/*)  tag=test ;;
             *)                     tag= ;;
           esac
           echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "ref=${{ github.ref }} -> tag=${tag:-<none>}"
+          echo "ref=$REF -> tag=${tag:-<none>}"
 
   lint:
     uses: ./.github/workflows/lint.yml
@@ -50,4 +53,6 @@ jobs:
     uses: ./.github/workflows/publish.yml
     with:
       image_tag: ${{ needs.tag.outputs.image_tag }}
-    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
