@@ -1,6 +1,7 @@
 """Player-level projection: scoring sampled stat distributions into one FP curve."""
 
 import unittest
+from itertools import pairwise
 
 from oddsfantasy.projection import DEFAULT_DRAWS, percentile, project_player, survival_curve
 from oddsfantasy.scoring import ScoringConfig
@@ -25,10 +26,7 @@ class PercentileTest(unittest.TestCase):
         self.assertEqual(len(curve), 4)
         self.assertEqual(curve[0]["survival"], 1.0)
         self.assertTrue(
-            all(
-                a["survival"] >= b["survival"]
-                for a, b in zip(curve, curve[1:], strict=True)
-            )
+            all(a["survival"] >= b["survival"] for a, b in pairwise(curve))
         )
 
 

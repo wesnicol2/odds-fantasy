@@ -1,6 +1,6 @@
 """Normalize Odds API event payloads into per-player, per-book market lines.
 
-No projection math lives here. The methodology engine consumes the raw book
+No projection math lives here.  The methodology engine consumes the raw book
 lines directly, de-vigs each book, and builds consensus anchors itself.
 """
 
@@ -27,18 +27,11 @@ def _classify_side(name: str) -> str | None:
     return None
 
 
-def aggregate_players_from_event(
-    event_odds: object, target_player_aliases: set[str]
-) -> dict[str, dict]:
+def aggregate_players_from_event(event_odds: object, target_player_aliases: set[str]) -> dict[str, dict]:
     """Return ``alias -> bookmaker -> market -> raw sides`` for one event."""
     aliases = target_player_aliases or set()
     norm_alias_map = {_norm_name(alias): alias for alias in aliases}
-    if isinstance(event_odds, dict):
-        events = [event_odds]
-    elif isinstance(event_odds, list):
-        events = event_odds
-    else:
-        events = []
+    events = [event_odds] if isinstance(event_odds, dict) else event_odds if isinstance(event_odds, list) else []
     output: dict[str, dict] = {}
 
     for event in events:
@@ -59,11 +52,7 @@ def aggregate_players_from_event(
                     description = outcome.get("description")
                     if not description:
                         continue
-                    alias = (
-                        description
-                        if description in aliases
-                        else norm_alias_map.get(_norm_name(description))
-                    )
+                    alias = description if description in aliases else norm_alias_map.get(_norm_name(description))
                     if alias is None:
                         continue
                     side = _classify_side(outcome.get("name")) or "over"
@@ -79,16 +68,10 @@ def aggregate_players_from_event(
                     market_out = output.setdefault(alias, {}).setdefault(book_key, {})
                     if alternate:
                         market_out[market_key] = {
-                            "alts": {
-                                "over": list(sides["over"]),
-                                "under": list(sides["under"]),
-                            }
+                            "alts": {"over": list(sides["over"]), "under": list(sides["under"])}
                         }
                     else:
-                        market_out[market_key] = {
-                            "over": sides["over"],
-                            "under": sides["under"],
-                        }
+                        market_out[market_key] = {"over": sides["over"], "under": sides["under"]}
 
     return output
 

@@ -117,9 +117,7 @@ def application(environ, start_response):
             username = q("username")
             if not username:
                 return _json_response(
-                    start_response,
-                    "400 Bad Request",
-                    {"error": "username_required"},
+                    start_response, "400 Bad Request", {"error": "username_required"}
                 )
             data = resolve_user_leagues(username, q("season", DEFAULT_SEASON))
             status = "404 Not Found" if data.get("error") else "200 OK"
@@ -129,9 +127,7 @@ def application(environ, start_response):
             league_id = q("league_id")
             if not league_id:
                 return _json_response(
-                    start_response,
-                    "400 Bad Request",
-                    {"error": "league_id_required"},
+                    start_response, "400 Bad Request", {"error": "league_id_required"}
                 )
             data = resolve_league(league_id)
             status = "404 Not Found" if data.get("error") else "200 OK"
@@ -169,9 +165,7 @@ def application(environ, start_response):
             return _json_response(start_response, "200 OK", data)
 
         return _json_response(
-            start_response,
-            "404 Not Found",
-            {"error": "not_found", "path": path},
+            start_response, "404 Not Found", {"error": "not_found", "path": path}
         )
     except Exception as exc:
         if _debug_enabled():
@@ -222,17 +216,11 @@ def main():
                 try:
                     with urllib.request.urlopen(url, timeout=2) as response:
                         if getattr(response, "status", 200) == 200:
-                            print(
-                                f"[api] READY on http://{args.host}:{args.port}",
-                                flush=True,
-                            )
+                            print(f"[api] READY on http://{args.host}:{args.port}", flush=True)
                             return
                 except Exception:
                     time.sleep(0.2)
-            print(
-                f"[api] READY on http://{args.host}:{args.port} (health pending)",
-                flush=True,
-            )
+            print(f"[api] READY on http://{args.host}:{args.port} (health pending)", flush=True)
 
         threading.Thread(target=probe_ready, daemon=True).start()
         httpd.serve_forever()

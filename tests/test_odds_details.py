@@ -1,4 +1,4 @@
-import unittest
+from unittest import TestCase, main
 from unittest.mock import patch
 
 from oddsfantasy.odds_details import get_player_odds_details
@@ -38,7 +38,7 @@ CONTEXT = {
 }
 
 
-class PlayerDetailsTest(unittest.TestCase):
+class PlayerDetailsTest(TestCase):
     @patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
     def test_detail_uses_same_canonical_projection_and_source_lines(self, _mock_context):
         result = get_player_odds_details(
@@ -68,4 +68,4 @@ class PlayerDetailsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

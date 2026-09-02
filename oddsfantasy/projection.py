@@ -12,7 +12,12 @@ import bisect
 import random
 from dataclasses import dataclass, field
 
-from .market_math import CountDistribution, build_distribution, is_continuous_market, is_count_market
+from .market_math import (
+    CountDistribution,
+    build_distribution,
+    is_continuous_market,
+    is_count_market,
+)
 from .scoring import ScoringConfig
 
 DEFAULT_DRAWS = 4000
