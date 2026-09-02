@@ -1,5 +1,5 @@
 from itertools import pairwise
-from unittest import TestCase, mock  # noqa: I001
+from unittest import TestCase, mock
 
 from oddsfantasy.odds_details import get_player_odds_details
 
