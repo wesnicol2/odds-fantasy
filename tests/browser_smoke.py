@@ -27,6 +27,17 @@ CURVE_B = [
     {"x": 18, "survival": 0.50},
     {"x": 28, "survival": 0.10},
 ]
+RUSH_GRAPH = {
+    "kind": "bucket",
+    "bucket_width": 5.0,
+    "points": [
+        {"x": 40, "probability": 0.03},
+        {"x": 60, "probability": 0.08},
+        {"x": 80, "probability": 0.12},
+        {"x": 100, "probability": 0.07},
+        {"x": 120, "probability": 0.02},
+    ],
+}
 
 
 def fulfill_json(route: Route, payload: dict, status: int = 200) -> None:
@@ -81,15 +92,20 @@ def api_fixture(route: Route) -> None:
         )
         return
     if parsed.path == "/player/odds":
+        name = query.get("name", ["Alpha Runner"])[0]
+        pos = "WR" if name == "Beta Receiver" else "RB"
+        team = "Miami Dolphins" if pos == "WR" else "Buffalo Bills"
+        curve = CURVE_B if pos == "WR" else CURVE_A
         fulfill_json(
             route,
             {
-                "player": {"name": "Alpha Runner", "pos": "RB", "team": "Buffalo Bills"},
-                "projection": {"floor": 10, "mid": 17, "ceiling": 25, "curve": CURVE_A},
+                "player": {"name": name, "pos": pos, "team": team},
+                "projection": {"floor": 10, "mid": 17, "ceiling": 25, "curve": curve},
                 "markets": {
                     "player_rush_yds": {
                         "stat_range": [45, 75, 115],
                         "expected_points": 7.5,
+                        "graph": RUSH_GRAPH,
                         "anchors": [{"threshold": 74.5, "survival": 0.51}],
                         "lines": [
                             {
@@ -199,9 +215,16 @@ def main() -> None:
         )
         assert display_probabilities["low"] < display_probabilities["middle"]
 
-        page.get_by_role("button", name="Compare curves").click()
-        page.get_by_text("1-point bucket centered on x", exact=False).wait_for()
-        page.get_by_text("Probability near x", exact=True).wait_for()
+        page.get_by_role("button", name="Graphs").click()
+        page.locator("#graphExplorer").wait_for()
+        page.locator(".graph-filter-panel").wait_for()
+        page.locator('[data-graph-metric="player_rush_yds"]').wait_for()
+        assert page.locator("#graphMetricList .graph-metric-btn").count() >= 2
+        page.get_by_role("button", name="Next graph").click()
+        assert page.locator("#graphTitle").inner_text() == "Rushing yards"
+        page.get_by_text("Probability at x", exact=True).wait_for()
+        page.locator('[data-graph-position="WR"]').uncheck()
+        assert "Beta Receiver" not in page.locator("#graphChartArea").inner_text()
         page.locator("#compareClose").click()
 
         page.get_by_role("button", name="Alpha Runner").click()
