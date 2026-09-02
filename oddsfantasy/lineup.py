@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 
 DEFAULT_STARTERS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "DEF"]
 SLOT_ELIGIBILITY: dict[str, set[str]] = {
@@ -52,17 +52,17 @@ def build_best_lineup(
         raise ValueError("target must be floor, mid, or ceiling")
 
     candidates = [dict(player) for player in players]
-    for defense in defenses or []:
-        candidates.append(
-            {
-                "name": defense.get("defense"),
-                "pos": "DEF",
-                "team": defense.get("defense"),
-                "floor": defense.get("floor"),
-                "mid": defense.get("mid"),
-                "ceiling": defense.get("ceiling"),
-            }
-        )
+    candidates.extend(
+        {
+            "name": defense.get("defense"),
+            "pos": "DEF",
+            "team": defense.get("defense"),
+            "floor": defense.get("floor"),
+            "mid": defense.get("mid"),
+            "ceiling": defense.get("ceiling"),
+        }
+        for defense in defenses or []
+    )
 
     modeled_slots, unmodeled_slots = _starter_slots(roster_positions)
     eligible_by_slot: list[list[int]] = []
@@ -76,7 +76,7 @@ def build_best_lineup(
             ]
         )
 
-    @lru_cache(maxsize=None)
+    @cache
     def solve(slot_index: int, used_mask: int) -> tuple[float, tuple[int | None, ...]]:
         if slot_index >= len(modeled_slots):
             return 0.0, ()
