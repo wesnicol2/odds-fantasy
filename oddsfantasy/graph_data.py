@@ -52,7 +52,6 @@ def distribution_graph(distribution: object, market_key: str) -> dict:
     xs = {lower + i * step for i in range(CONTINUOUS_GRAPH_POINTS)}
     xs.update(value for value in fitted_xs if lower <= value <= upper)
     points = [
-        {"x": round(x, 2), "probability": round(float(sf(x)), 6)}
-        for x in sorted(xs)
+        {"x": round(x, 2), "probability": round(float(sf(x)), 6)} for x in sorted(xs)
     ]
     return {"kind": "survival", "points": points}
