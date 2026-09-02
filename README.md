@@ -5,9 +5,11 @@ Odds Fantasy turns sportsbook markets into fantasy-football decision support for
 The app has four focused views:
 
 - **Player report** — Floor / Mid / Ceiling for every projected QB, RB, WR and TE.
-- **Player details** — the exact sportsbook lines and consensus probability anchors that created that player's curve.
+- **Graphs** — compare roster probability distributions for fantasy points and the underlying modeled stats, with player/position filters.
 - **Defenses** — every NFL defense ranked by its opponent's implied team total, with league ownership shown.
 - **Best lineup** — optimize your modeled starters for Floor, Mid, or Ceiling.
+
+Clicking a player also opens the exact sportsbook lines and consensus probability anchors that created that player's projection.
 
 ## What the player numbers mean
 
@@ -17,7 +19,7 @@ The projection engine reconstructs a distribution for each priced stat from book
 - **Mid** — 50th percentile fantasy points
 - **Ceiling** — 90th percentile fantasy points
 
-The player detail view and **Compare curves** are presentation-only views of that same backend curve. Their y-axis shows the probability of finishing within a one-point bucket centered on each x-value (`x ± 0.5 FP`), so unlikely low and high scores appear near the bottom while the most likely scoring range rises. Floor / Mid / Ceiling and all projection calculations are unchanged; there is no second browser-side projection model.
+Graphing is presentation-only. The fantasy-points graph shows the probability of finishing within a one-point bucket centered on each x-value (`x ± 0.5 FP`). Stat graphs use the same already-fitted backend distributions that feed the projection: count markets show exact integer probabilities and continuous markets show fixed-width probability buckets. None of these graph views changes Floor / Mid / Ceiling or creates a second projection model in the browser.
 
 A player with no usable priced markets shows dashes. Missing one optional market does not hide an otherwise valid projection.
 
@@ -25,7 +27,7 @@ A player with no usable priced markets shows dashes. Missing one optional market
 
 1. Select your Sleeper username, league and team.
 2. Choose **This week** or **Next week**.
-3. In **Player report**, click a player for source lines or use **Compare curves** for all roster curves on one graph.
+3. In **Player report**, click a player for source lines or open **Graphs**. The graph explorer has a left filter panel for graph type, position and player, plus Previous/Next controls to cycle through available metrics.
 4. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken.
 5. In **Best lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.
 
@@ -71,11 +73,12 @@ Feature/main CI additionally builds the Docker image and runs a Chromium smoke t
 - `oddsfantasy/aggregator.py` — normalizes raw per-book market data.
 - `oddsfantasy/market_math.py` — de-vigging and stat-distribution reconstruction.
 - `oddsfantasy/projection.py` — canonical fantasy-points sampling/curve.
+- `oddsfantasy/graph_data.py` — display-only probability points from canonical fitted stat distributions.
 - `oddsfantasy/scoring.py` — Sleeper scoring-rule translation.
-- `oddsfantasy/odds_details.py` — source-line player drill-down.
+- `oddsfantasy/odds_details.py` — source-line player drill-down and stat graph payloads.
 - `oddsfantasy/defense.py` — implied-team-total and points-allowed DEF math.
 - `oddsfantasy/lineup.py` — pure starter-slot optimizer.
-- `ui/` — report, curves, defenses and best-lineup views.
+- `ui/` — report, graph explorer, player details, defenses and best-lineup views.
 - `tests/` — unit/integration tests plus the browser smoke script.
 
 ## Deployment
