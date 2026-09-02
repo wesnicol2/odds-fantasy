@@ -231,25 +231,27 @@ def main() -> None:
         assert page.locator("#graphMetricList .graph-metric-btn").count() >= 2
         page.get_by_role("button", name="Next graph").click()
         assert page.locator("#graphTitle").inner_text() == "Rushing yards"
-        page.get_by_text("x = rushing yards threshold", exact=False).wait_for()
-        page.get_by_text("Probability at or above threshold", exact=True).wait_for()
-        page.get_by_text("consensus fair probability", exact=True).wait_for()
-        assert page.locator(".graph-consensus-marker").count() >= 2
-        assert page.locator(".graph-source-tick").count() >= 2
-        page.get_by_role("button", name="Explain betting lines").click()
-        page.get_by_text("Why this curve has this shape", exact=True).wait_for()
-        page.get_by_text("Consensus anchors", exact=True).wait_for()
-        page.get_by_text("Exact sportsbook lines", exact=True).wait_for()
-        page.get_by_text("draftkings", exact=True).wait_for()
-        page.get_by_text("fanduel", exact=True).wait_for()
+        graph_area = page.locator("#graphChartArea")
+        graph_area.get_by_text("x = rushing yards threshold", exact=False).wait_for()
+        graph_area.get_by_text("Probability at or above threshold", exact=True).wait_for()
+        graph_area.get_by_text("consensus fair probability", exact=True).wait_for()
+        assert graph_area.locator(".graph-consensus-marker").count() >= 2
+        assert graph_area.locator(".graph-source-tick").count() >= 2
+        graph_area.get_by_role("button", name="Explain betting lines").click()
+        graph_area.get_by_text("Why this curve has this shape", exact=True).wait_for()
+        graph_area.get_by_text("Consensus anchors", exact=True).wait_for()
+        graph_area.get_by_text("Exact sportsbook lines", exact=True).wait_for()
+        graph_area.get_by_text("draftkings", exact=True).wait_for()
+        graph_area.get_by_text("fanduel", exact=True).wait_for()
         page.locator('[data-graph-position="WR"]').uncheck()
-        assert "Beta Receiver" not in page.locator("#graphChartArea").inner_text()
+        assert "Beta Receiver" not in graph_area.inner_text()
         page.locator("#compareClose").click()
 
         page.get_by_role("button", name="Alpha Runner").click()
-        page.get_by_text("Sportsbook lines used").wait_for()
-        page.get_by_text("projection calculations are unchanged", exact=False).wait_for()
-        page.get_by_text("draftkings", exact=True).wait_for()
+        details_body = page.locator("#detailsBody")
+        details_body.get_by_text("Sportsbook lines used").wait_for()
+        details_body.get_by_text("projection calculations are unchanged", exact=False).wait_for()
+        details_body.get_by_text("draftkings", exact=True).wait_for()
         page.locator("#detailsClose").click()
 
         page.get_by_role("button", name="Defenses").click()
