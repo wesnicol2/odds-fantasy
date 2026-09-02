@@ -19,7 +19,9 @@ jobs:
       - name: Ruff format check
         uses: astral-sh/ruff-action@v3
         with:
-          args: format --check
+          # Temporary diagnostic: print the exact formatter diff so it can be
+          # applied through the GitHub connector, then this returns to --check.
+          args: format --diff
 
       - name: Set up Python
         uses: actions/setup-python@v5
