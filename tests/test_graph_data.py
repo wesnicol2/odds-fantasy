@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 from oddsfantasy.graph_data import distribution_graph
 from oddsfantasy.market_math import CountDistribution
 
@@ -26,6 +28,6 @@ def test_yardage_graph_is_smooth_fitted_survival_curve():
     assert graph["kind"] == "survival"
     assert len(graph["points"]) == 101
     probabilities = [point["probability"] for point in graph["points"]]
-    assert all(left >= right for left, right in zip(probabilities, probabilities[1:], strict=False))
+    assert all(left >= right for left, right in pairwise(probabilities))
     midpoint = min(graph["points"], key=lambda point: abs(point["x"] - 50.0))
     assert abs(midpoint["probability"] - 0.5) < 0.02
