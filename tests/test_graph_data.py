@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 from oddsfantasy.graph_data import distribution_graph
 from oddsfantasy.market_math import CountDistribution
 
@@ -29,4 +31,4 @@ def test_yardage_graph_is_smooth_display_only_survival_curve():
     probabilities = [point["probability"] for point in graph["points"]]
     assert probabilities[0] == 1.0
     assert probabilities[-1] == 0.005
-    assert all(left >= right for left, right in zip(probabilities, probabilities[1:], strict=True))
+    assert all(left >= right for left, right in pairwise(probabilities))
