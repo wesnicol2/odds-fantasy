@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from . import ratelimit
+from .graph_data import distribution_graph
 from .market_math import collect_anchors
 from .projection import project_player, survival_curve
 from .services import NO_GAMES_SCHEDULED_MESSAGE, _load_week_context
@@ -125,6 +126,7 @@ def get_player_odds_details(
         markets[market_key] = {
             "stat_range": [round(value, 2) for value in stat.stat_range],
             "expected_points": round(stat.expected_points, 3),
+            "graph": distribution_graph(stat.distribution, market_key),
             "anchors": [
                 {
                     "threshold": round(anchor.threshold, 2),
