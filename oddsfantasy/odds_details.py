@@ -28,11 +28,7 @@ def _line_rows(by_book: dict, market_key: str) -> list[dict]:
             over = main.get("over") or {}
             under = main.get("under") or {}
             if over or under:
-                point = (
-                    over.get("point")
-                    if over.get("point") is not None
-                    else under.get("point")
-                )
+                point = over.get("point") if over.get("point") is not None else under.get("point")
                 rows.append(
                     {
                         "book": book_key,

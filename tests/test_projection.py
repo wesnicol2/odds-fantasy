@@ -25,9 +25,7 @@ class PercentileTest(unittest.TestCase):
         curve = survival_curve([0.0, 1.0, 2.0, 3.0], points=4)
         self.assertEqual(len(curve), 4)
         self.assertEqual(curve[0]["survival"], 1.0)
-        self.assertTrue(
-            all(a["survival"] >= b["survival"] for a, b in pairwise(curve))
-        )
+        self.assertTrue(all(a["survival"] >= b["survival"] for a, b in pairwise(curve)))
 
 
 class ContinuousStatProjectionTest(unittest.TestCase):

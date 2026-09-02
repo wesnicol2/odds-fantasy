@@ -27,11 +27,19 @@ def _classify_side(name: str) -> str | None:
     return None
 
 
-def aggregate_players_from_event(event_odds: object, target_player_aliases: set[str]) -> dict[str, dict]:
+def aggregate_players_from_event(
+    event_odds: object, target_player_aliases: set[str]
+) -> dict[str, dict]:
     """Return ``alias -> bookmaker -> market -> raw sides`` for one event."""
     aliases = target_player_aliases or set()
     norm_alias_map = {_norm_name(alias): alias for alias in aliases}
-    events = [event_odds] if isinstance(event_odds, dict) else event_odds if isinstance(event_odds, list) else []
+    events = (
+        [event_odds]
+        if isinstance(event_odds, dict)
+        else event_odds
+        if isinstance(event_odds, list)
+        else []
+    )
     output: dict[str, dict] = {}
 
     for event in events:
@@ -52,7 +60,11 @@ def aggregate_players_from_event(event_odds: object, target_player_aliases: set[
                     description = outcome.get("description")
                     if not description:
                         continue
-                    alias = description if description in aliases else norm_alias_map.get(_norm_name(description))
+                    alias = (
+                        description
+                        if description in aliases
+                        else norm_alias_map.get(_norm_name(description))
+                    )
                     if alias is None:
                         continue
                     side = _classify_side(outcome.get("name")) or "over"

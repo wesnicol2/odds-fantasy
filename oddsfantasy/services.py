@@ -269,9 +269,7 @@ def compute_projections(
         )
 
     rows.sort(
-        key=lambda row: (
-            row["mid"] if isinstance(row.get("mid"), (int, float)) else float("-inf")
-        ),
+        key=lambda row: row["mid"] if isinstance(row.get("mid"), (int, float)) else float("-inf"),
         reverse=True,
     )
     payload = {

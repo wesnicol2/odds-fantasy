@@ -164,9 +164,7 @@ def application(environ, start_response):
             )
             return _json_response(start_response, "200 OK", data)
 
-        return _json_response(
-            start_response, "404 Not Found", {"error": "not_found", "path": path}
-        )
+        return _json_response(start_response, "404 Not Found", {"error": "not_found", "path": path})
     except Exception as exc:
         if _debug_enabled():
             traceback.print_exc()

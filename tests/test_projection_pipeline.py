@@ -110,9 +110,7 @@ class ProjectionPipelineTest(unittest.TestCase):
         )
 
     def test_projected_player_has_ordered_numbers_and_curve(self):
-        player = next(
-            row for row in self._run()["players"] if row["name"] == "James Cook"
-        )
+        player = next(row for row in self._run()["players"] if row["name"] == "James Cook")
         self.assertTrue(player["has_projection"])
         self.assertLess(player["floor"], player["mid"])
         self.assertLess(player["mid"], player["ceiling"])
@@ -123,18 +121,14 @@ class ProjectionPipelineTest(unittest.TestCase):
         )
 
     def test_no_lines_does_not_fabricate_zero_projection(self):
-        player = next(
-            row for row in self._run()["players"] if row["name"] == "Bye Week WR"
-        )
+        player = next(row for row in self._run()["players"] if row["name"] == "Bye Week WR")
         self.assertFalse(player["has_projection"])
         self.assertIsNone(player["floor"])
         self.assertIsNone(player["mid"])
         self.assertIsNone(player["ceiling"])
 
     def test_partial_markets_still_report_valid_projection(self):
-        player = next(
-            row for row in self._run()["players"] if row["name"] == "James Cook"
-        )
+        player = next(row for row in self._run()["players"] if row["name"] == "James Cook")
         self.assertTrue(player["has_projection"])
         self.assertIsNotNone(player["mid"])
 

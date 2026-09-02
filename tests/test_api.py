@@ -40,9 +40,7 @@ class ApiTestCase(unittest.TestCase):
     def test_projections_passes_explicit_identity(self, mock_projection):
         mock_projection.return_value = {
             "week": "this",
-            "players": [
-                {"name": "Test Player", "floor": 10, "mid": 15, "ceiling": 20}
-            ],
+            "players": [{"name": "Test Player", "floor": 10, "mid": 15, "ceiling": 20}],
             "ratelimit": "ok",
         }
         status, _, payload = wsgi_get("/projections?league_id=L1&roster_id=7&week=this")
@@ -58,9 +56,7 @@ class ApiTestCase(unittest.TestCase):
             "projection": {"floor": 10, "mid": 15, "ceiling": 20, "curve": []},
             "markets": {},
         }
-        status, _, payload = wsgi_get(
-            "/player/odds?league_id=L1&roster_id=7&name=Test+Player"
-        )
+        status, _, payload = wsgi_get("/player/odds?league_id=L1&roster_id=7&name=Test+Player")
         self.assertTrue(status.startswith("200"))
         self.assertEqual(payload["projection"]["mid"], 15)
         self.assertEqual(mock_details.call_args.kwargs["league_id"], "L1")
