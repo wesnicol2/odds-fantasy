@@ -71,12 +71,12 @@ def percentile(sorted_values: list[float], q: float) -> float:
     return sorted_values[lower] * (1.0 - fraction) + sorted_values[upper] * fraction
 
 
-def survival_curve(samples: list[float], points: int = 61) -> list[dict[str, float]]:
-    """Compact ``P(FP >= x)`` curve from the exact projection samples.
+def survival_curve(samples: list[float], points: int = DEFAULT_DRAWS) -> list[dict[str, float]]:
+    """Display ``P(FP >= x)`` from the exact projection samples.
 
-    The UI needs dozens of points, not all 4,000 Monte Carlo samples.  This
-    downsampling is display-only: floor/mid/ceiling continue to come from the
-    complete sample set.
+    The default display resolution matches the 4,000 Monte Carlo draws so the
+    graph does not manufacture local shape by differencing a coarse curve.
+    Floor/mid/ceiling still come from the complete sample set exactly as before.
     """
     if not samples:
         return []

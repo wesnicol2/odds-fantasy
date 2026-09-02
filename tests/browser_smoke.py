@@ -207,26 +207,21 @@ def main() -> None:
         page.locator("#playerReport").get_by_text("Alpha Runner", exact=True).wait_for()
         assert page.get_by_text("17.00", exact=True).count() >= 1
 
-        display_probabilities = page.evaluate(
-            """() => {
-              const curve = [
-                {x: 0, survival: 1.0},
-                {x: 10, survival: 0.85},
-                {x: 20, survival: 0.50},
-                {x: 30, survival: 0.10},
-              ];
-              const points = scoreProbabilityCurve(curve);
-              return {
-                low: points.find(point => point.x === 1)?.probability,
-                middle: points.find(point => point.x === 15)?.probability,
-              };
-            }"""
-        )
-        assert display_probabilities["low"] < display_probabilities["middle"]
-
         page.get_by_role("button", name="Graphs").click()
         page.locator("#graphExplorer").wait_for()
         page.locator(".graph-filter-panel").wait_for()
+        graph_area = page.locator("#graphChartArea")
+        fantasy_subtitle = page.locator("#graphSubtitle").inner_text()
+        assert "x = fantasy point threshold" in fantasy_subtitle
+        assert "y = probability of scoring at least x" in fantasy_subtitle
+        graph_area.get_by_text("full 4,000 projection samples", exact=False).wait_for()
+        graph_area.get_by_text("Probability of scoring at least x", exact=True).wait_for()
+        assert graph_area.locator(".fp-range-guide").count() >= 6
+        assert graph_area.locator(".fp-range-marker").count() >= 6
+        assert "Floor 10.00" in graph_area.inner_text()
+        assert "Mid 17.00" in graph_area.inner_text()
+        assert "Ceiling 25.00" in graph_area.inner_text()
+
         page.locator('[data-graph-metric="player_rush_yds"]').wait_for()
         assert page.locator("#graphMetricList .graph-metric-btn").count() >= 2
         page.get_by_role("button", name="Next graph").click()
@@ -234,7 +229,6 @@ def main() -> None:
         subtitle = page.locator("#graphSubtitle").inner_text()
         assert "x = rushing yards threshold" in subtitle
         assert "y = probability at or above threshold" in subtitle
-        graph_area = page.locator("#graphChartArea")
         graph_area.get_by_text("Probability at or above threshold", exact=True).wait_for()
         graph_area.get_by_text("consensus fair probability", exact=True).wait_for()
         assert graph_area.locator(".graph-consensus-marker").count() >= 2
