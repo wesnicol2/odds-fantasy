@@ -182,12 +182,31 @@ def main() -> None:
         page.locator("#playerReport").get_by_text("Alpha Runner", exact=True).wait_for()
         assert page.get_by_text("17.00", exact=True).count() >= 1
 
+        display_probabilities = page.evaluate(
+            """() => {
+              const curve = [
+                {x: 0, survival: 1.0},
+                {x: 10, survival: 0.85},
+                {x: 20, survival: 0.50},
+                {x: 30, survival: 0.10},
+              ];
+              const points = scoreProbabilityCurve(curve);
+              return {
+                low: points.find(point => point.x === 1)?.probability,
+                middle: points.find(point => point.x === 15)?.probability,
+              };
+            }"""
+        )
+        assert display_probabilities["low"] < display_probabilities["middle"]
+
         page.get_by_role("button", name="Compare curves").click()
-        page.get_by_text("P(fantasy points ≥ x)").wait_for()
+        page.get_by_text("1-point bucket centered on x", exact=False).wait_for()
+        page.get_by_text("Probability near x", exact=True).wait_for()
         page.locator("#compareClose").click()
 
         page.get_by_role("button", name="Alpha Runner").click()
         page.get_by_text("Sportsbook lines used").wait_for()
+        page.get_by_text("projection calculations are unchanged", exact=False).wait_for()
         page.get_by_text("draftkings", exact=True).wait_for()
         page.locator("#detailsClose").click()
 
