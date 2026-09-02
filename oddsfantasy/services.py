@@ -321,7 +321,9 @@ def _defense_ownership_map(
         rosters = sleeper_api.get_league_rosters(resolved_league_id) or []
         users = sleeper_api.get_league_users(resolved_league_id) or []
         display_by_owner = {
-            user.get("user_id"): (user.get("display_name") or user.get("username") or user.get("user_id"))
+            user.get("user_id"): (
+                user.get("display_name") or user.get("username") or user.get("user_id")
+            )
             for user in users
         }
         if roster_id is not None:
