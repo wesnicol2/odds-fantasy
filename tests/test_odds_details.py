@@ -54,6 +54,9 @@ class PlayerDetailsTest(TestCase):
         self.assertEqual(len(rush["lines"]), 3)
         self.assertTrue(any(row["source"] == "alternate" for row in rush["lines"]))
         self.assertGreaterEqual(len(rush["anchors"]), 2)
+        self.assertEqual(rush["graph"]["kind"], "bucket")
+        self.assertEqual(rush["graph"]["bucket_width"], 5.0)
+        self.assertGreater(len(rush["graph"]["points"]), 5)
 
     @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
     def test_name_normalization_matches_suffixes(self, _mock_context):
