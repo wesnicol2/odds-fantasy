@@ -1,4 +1,4 @@
-from unittest import TestCase, main
+from unittest import TestCase
 from unittest.mock import patch
 
 from oddsfantasy.odds_details import get_player_odds_details
@@ -65,7 +65,3 @@ class PlayerDetailsTest(TestCase):
             name="James Cook Jr.",
         )
         self.assertEqual(result["player"]["name"], "James Cook")
-
-
-if __name__ == "__main__":
-    main()
