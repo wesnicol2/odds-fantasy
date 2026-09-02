@@ -105,6 +105,10 @@ def api_fixture(route: Route) -> None:
                         "stat_range": [45, 75, 115],
                         "expected_points": 7.5,
                         "graph": RUSH_GRAPH,
+                        "line_points": [
+                            {"book": "draftkings", "threshold": 64.5, "survival": 0.66},
+                            {"book": "fanduel", "threshold": 84.5, "survival": 0.41},
+                        ],
                         "anchors": [
                             {"threshold": 64.5, "survival": 0.68},
                             {"threshold": 84.5, "survival": 0.39},
@@ -116,6 +120,7 @@ def api_fixture(route: Route) -> None:
                                 "point": 64.5,
                                 "over_odds": 1.91,
                                 "under_odds": 1.91,
+                                "fair_over": 0.66,
                             },
                             {
                                 "book": "fanduel",
@@ -123,6 +128,7 @@ def api_fixture(route: Route) -> None:
                                 "point": 84.5,
                                 "over_odds": 2.10,
                                 "under_odds": 1.72,
+                                "fair_over": 0.41,
                             },
                         ],
                     }
@@ -234,12 +240,15 @@ def main() -> None:
         page.get_by_text("x = rushing yards threshold", exact=False).wait_for()
         page.get_by_text("Probability at or above threshold", exact=True).wait_for()
         page.get_by_text("consensus fair probability", exact=True).wait_for()
+        page.get_by_text("individual book fair probability", exact=True).wait_for()
         assert page.locator(".graph-consensus-marker").count() >= 2
         assert page.locator(".graph-source-tick").count() >= 2
+        assert page.locator(".graph-book-probability-point").count() >= 2
         page.get_by_role("button", name="Explain betting lines").click()
         page.get_by_text("Why this curve has this shape", exact=True).wait_for()
         page.get_by_text("Consensus anchors", exact=True).wait_for()
         page.get_by_text("Exact sportsbook lines", exact=True).wait_for()
+        page.locator(".graph-evidence-panel").get_by_text("Fair P(over)", exact=True).first.wait_for()
         page.get_by_text("draftkings", exact=True).wait_for()
         page.get_by_text("fanduel", exact=True).wait_for()
         page.locator('[data-graph-position="WR"]').uncheck()
