@@ -58,6 +58,7 @@ jobs:
     uses: ./.github/workflows/publish.yml
     with:
       image_tag: ${{ needs.tag.outputs.image_tag }}
+    secrets: inherit
     permissions:
       contents: read
       packages: write
