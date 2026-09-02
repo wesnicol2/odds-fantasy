@@ -26,7 +26,9 @@ def fair_line_points(per_bookmaker_odds: dict, market_key: str) -> list[dict]:
     return points
 
 
-def fair_probability_lookup(per_bookmaker_odds: dict, market_key: str) -> dict[tuple[str, float], float]:
+def fair_probability_lookup(
+    per_bookmaker_odds: dict, market_key: str
+) -> dict[tuple[str, float], float]:
     """Index fair line probabilities for joining to raw source-line rows."""
     return {
         (point["book"], float(point["threshold"])): float(point["survival"])
