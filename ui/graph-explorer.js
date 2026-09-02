@@ -221,7 +221,7 @@ function cycleExplorerMetric(explorer, direction) {
   setExplorerMetric(explorer, explorer.metrics[next]);
 }
 
-async function fetchGraphDatails(player, week) {
+async function fetchGraphDetails(player, week) {
   const key = `${week}|${player.name}`;
   if (graphDetailCache.has(key)) return graphDetailCache.get(key);
   const request = fetchJSON(apiUrl('/player/odds', {
