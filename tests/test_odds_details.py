@@ -1,5 +1,4 @@
-from unittest import TestCase
-from unittest.mock import patch
+from unittest import TestCase, mock
 
 from oddsfantasy.odds_details import get_player_odds_details
 
@@ -39,7 +38,7 @@ CONTEXT = {
 
 
 class PlayerDetailsTest(TestCase):
-    @patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
+    @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
     def test_detail_uses_same_canonical_projection_and_source_lines(self, _mock_context):
         result = get_player_odds_details(
             username="u",
@@ -56,7 +55,7 @@ class PlayerDetailsTest(TestCase):
         self.assertTrue(any(row["source"] == "alternate" for row in rush["lines"]))
         self.assertGreaterEqual(len(rush["anchors"]), 2)
 
-    @patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
+    @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
     def test_name_normalization_matches_suffixes(self, _mock_context):
         result = get_player_odds_details(
             username="u",
