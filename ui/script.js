@@ -1,6 +1,10 @@
 const state = {
   week: 'this',
+  section: 'players',
+  lineupTarget: 'mid',
   reports: { this: null, next: null },
+  defenses: { this: null, next: null },
+  lineups: {},
   inflight: 0,
 };
 
@@ -60,6 +64,11 @@ function formatRateLimit(payload) {
   return `Odds API ${remaining}/${total} remaining`;
 }
 function fmt(value) { return value == null ? '—' : Number(value).toFixed(2); }
+function clearDataCaches() {
+  state.reports = { this: null, next: null };
+  state.defenses = { this: null, next: null };
+  state.lineups = {};
+}
 
 function renderPlayerReport(payload) {
   const players = Array.isArray(payload?.players) ? payload.players : [];
@@ -88,7 +97,7 @@ function renderPlayerReport(payload) {
     <thead><tr><th>Player</th><th>Pos</th><th>Team</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
-  $('btnCompareCurves').disabled = players.filter(p => p.curve?.length).length < 2;
+  $('btnCompareCurves').disabled = players.filter(player => player.curve?.length).length < 2;
 }
 
 async function refreshReport({ force = false } = {}) {
@@ -99,8 +108,9 @@ async function refreshReport({ force = false } = {}) {
   }
   $('reportStatus').textContent = 'Loading sportsbook lines…';
   $('playerReport').innerHTML = '<div class="loading"><span class="spinner"></span> Building projections…</div>';
-  const mode = getDataMode();
-  const { ok, data } = await fetchJSON(apiUrl('/projections', { ...identityParams(), week, mode }));
+  const { ok, data } = await fetchJSON(apiUrl('/projections', {
+    ...identityParams(), week, mode: getDataMode(),
+  }));
   if (!ok) {
     $('reportStatus').textContent = 'Could not load projections.';
     $('playerReport').innerHTML = '<div class="empty">Request failed.</div>';
@@ -108,6 +118,121 @@ async function refreshReport({ force = false } = {}) {
   }
   state.reports[week] = data;
   renderPlayerReport(data);
+}
+
+function defenseStatus(defense) {
+  if (defense.owned_by_current) return '<span class="ownership yours">Yours</span>';
+  if (defense.taken) {
+    return `<span class="ownership taken">Taken${defense.owner ? ` · ${escapeHtml(defense.owner)}` : ''}</span>`;
+  }
+  return '<span class="ownership available">Available</span>';
+}
+function renderDefenses(payload) {
+  const defenses = Array.isArray(payload?.defenses) ? payload.defenses : [];
+  $('defenseStatus').textContent = payload?.message || payload?.note || '';
+  $('rlHeader').textContent = formatRateLimit(payload);
+  if (!defenses.length) {
+    $('defenseReport').innerHTML = '<div class="empty">No defense matchups available.</div>';
+    return;
+  }
+  const rows = defenses.map(defense => `<tr class="${defense.implied_total == null ? 'no-projection' : ''}">
+    <td><strong>${escapeHtml(defense.abbr || defense.defense || '')}</strong><span class="row-note">${escapeHtml(defense.defense || '')}</span></td>
+    <td>${escapeHtml(defense.opponent || '')}</td>
+    <td class="number mid-value">${fmt(defense.implied_total)}</td>
+    <td class="number">${defense.book_count || 0}</td>
+    <td>${defenseStatus(defense)}</td>
+  </tr>`).join('');
+  $('defenseReport').innerHTML = `<table class="report-table">
+    <thead><tr><th>Defense</th><th>Opponent</th><th>Opponent implied total</th><th>Books</th><th>Status</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+async function refreshDefenses({ force = false } = {}) {
+  const week = state.week;
+  if (!force && state.defenses[week]) {
+    renderDefenses(state.defenses[week]);
+    return;
+  }
+  $('defenseStatus').textContent = 'Loading spread and total markets…';
+  $('defenseReport').innerHTML = '<div class="loading"><span class="spinner"></span> Ranking defenses…</div>';
+  const { ok, data } = await fetchJSON(apiUrl('/defenses', {
+    ...identityParams(), week, mode: getDataMode(),
+  }));
+  if (!ok) {
+    $('defenseStatus').textContent = 'Could not load defenses.';
+    $('defenseReport').innerHTML = '<div class="empty">Request failed.</div>';
+    return;
+  }
+  state.defenses[week] = data;
+  renderDefenses(data);
+}
+
+function renderBestLineup(payload) {
+  const rows = Array.isArray(payload?.lineup) ? payload.lineup : [];
+  $('rlHeader').textContent = formatRateLimit(payload);
+  const notices = [];
+  if (payload?.unmodeled_slots?.length) {
+    notices.push(`Not modeled: ${payload.unmodeled_slots.join(', ')}.`);
+  }
+  if (payload?.unfilled_slots?.length) {
+    notices.push(`No priced option for: ${payload.unfilled_slots.join(', ')}.`);
+  }
+  if (payload?.defense_note) notices.push(payload.defense_note);
+  $('lineupStatus').textContent = notices.join(' ');
+  if (!rows.length) {
+    $('lineupReport').innerHTML = '<div class="empty">No modeled lineup can be built for this week.</div>';
+    return;
+  }
+  const body = rows.map(row => `<tr>
+    <td><strong>${escapeHtml(row.slot || '')}</strong></td>
+    <td>${escapeHtml(row.name || '')}</td>
+    <td>${escapeHtml(row.pos || '')}</td>
+    <td>${escapeHtml(row.team || '')}</td>
+    <td class="number selected-value">${fmt(row.points)}</td>
+    <td class="number">${fmt(row.floor)}</td>
+    <td class="number">${fmt(row.mid)}</td>
+    <td class="number">${fmt(row.ceiling)}</td>
+  </tr>`).join('');
+  $('lineupReport').innerHTML = `<div class="lineup-total">Projected ${escapeHtml(payload.target || '')}: <strong>${fmt(payload.total_points)}</strong></div>
+    <table class="report-table">
+      <thead><tr><th>Slot</th><th>Player</th><th>Pos</th><th>Team</th><th>Selected</th><th>Floor</th><th>Mid</th><th>Ceiling</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+async function refreshBestLineup({ force = false } = {}) {
+  const key = `${state.week}:${state.lineupTarget}`;
+  if (!force && state.lineups[key]) {
+    renderBestLineup(state.lineups[key]);
+    return;
+  }
+  $('lineupStatus').textContent = 'Optimizing your modeled starter slots…';
+  $('lineupReport').innerHTML = '<div class="loading"><span class="spinner"></span> Building best lineup…</div>';
+  const { ok, data } = await fetchJSON(apiUrl('/best-lineup', {
+    ...identityParams(), week: state.week, target: state.lineupTarget, mode: getDataMode(),
+  }));
+  if (!ok) {
+    $('lineupStatus').textContent = 'Could not build lineup.';
+    $('lineupReport').innerHTML = '<div class="empty">Request failed.</div>';
+    return;
+  }
+  state.lineups[key] = data;
+  renderBestLineup(data);
+}
+
+async function loadCurrentSection({ force = false } = {}) {
+  if (state.section === 'defenses') return refreshDefenses({ force });
+  if (state.section === 'lineup') return refreshBestLineup({ force });
+  return refreshReport({ force });
+}
+function showSection(section) {
+  state.section = section;
+  $('playersSection').classList.toggle('hidden', section !== 'players');
+  $('defensesSection').classList.toggle('hidden', section !== 'defenses');
+  $('lineupSection').classList.toggle('hidden', section !== 'lineup');
+  $('btnCompareCurves').classList.toggle('hidden', section !== 'players');
+  document.querySelectorAll('.section-toggle').forEach(button => {
+    button.classList.toggle('active', button.dataset.section === section);
+  });
 }
 
 function curvePath(curve, xScale, yScale) {
@@ -208,9 +333,9 @@ async function submitTeam() {
   if (!rosterId) { $('leagueTeamError').textContent = 'Choose your team.'; return; }
   setCookie('roster_id', rosterId);
   hideLeagueSetup();
-  state.reports = { this: null, next: null };
+  clearDataCaches();
   await updateLeagueIndicator();
-  await refreshReport({ force: true });
+  await loadCurrentSection({ force: true });
 }
 async function updateLeagueIndicator() {
   const leagueId = getCookie('league_id');
@@ -225,7 +350,7 @@ async function updateLeagueIndicator() {
 async function initLeague() {
   if (getCookie('league_id') && getCookie('roster_id')) {
     await updateLeagueIndicator();
-    await refreshReport();
+    await loadCurrentSection();
     return;
   }
   showLeagueSetup('user');
@@ -239,10 +364,19 @@ async function loadBuildStamp() {
 }
 
 function bindEvents() {
+  document.querySelectorAll('.section-toggle').forEach(button => button.addEventListener('click', async () => {
+    showSection(button.dataset.section);
+    await loadCurrentSection();
+  }));
   document.querySelectorAll('.week-toggle').forEach(button => button.addEventListener('click', async () => {
     state.week = button.dataset.week;
     document.querySelectorAll('.week-toggle').forEach(item => item.classList.toggle('active', item === button));
-    await refreshReport();
+    await loadCurrentSection();
+  }));
+  document.querySelectorAll('.range-toggle').forEach(button => button.addEventListener('click', async () => {
+    state.lineupTarget = button.dataset.range;
+    document.querySelectorAll('.range-toggle').forEach(item => item.classList.toggle('active', item === button));
+    await refreshBestLineup();
   }));
   $('btnCompareCurves').addEventListener('click', openCompareCurves);
   $('compareClose').addEventListener('click', () => $('compareOverlay').classList.add('hidden'));
@@ -250,11 +384,11 @@ function bindEvents() {
   $('btnChangeLeague').addEventListener('click', () => {
     deleteCookie('league_id'); deleteCookie('roster_id');
     $('leagueIndicator').classList.add('hidden');
-    state.reports = { this: null, next: null };
+    clearDataCaches();
     showLeagueSetup('user');
   });
   $('btnSettings').addEventListener('click', () => $('settingsPanel').classList.toggle('hidden'));
-  $('dataModeSelect').addEventListener('change', () => { state.reports = { this: null, next: null }; });
+  $('dataModeSelect').addEventListener('change', () => clearDataCaches());
   $('leagueSetupClose').addEventListener('click', hideLeagueSetup);
   $('leagueUserContinue').addEventListener('click', submitUsername);
   $('leagueLeagueContinue').addEventListener('click', submitLeague);
@@ -277,6 +411,7 @@ function bindEvents() {
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  showSection('players');
   loadBuildStamp();
   initLeague();
 });

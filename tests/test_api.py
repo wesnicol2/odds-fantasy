@@ -49,6 +49,36 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(mock_projection.call_args.kwargs["league_id"], "L1")
         self.assertEqual(mock_projection.call_args.kwargs["roster_id"], 7)
 
+    @patch("oddsfantasy.api.list_defenses")
+    def test_defenses_endpoint(self, mock_defenses):
+        mock_defenses.return_value = {
+            "week": "next",
+            "defenses": [{"defense": "Buffalo Bills", "implied_total": 17.5}],
+        }
+        status, _, payload = wsgi_get("/defenses?league_id=L1&roster_id=7&week=next")
+        self.assertTrue(status.startswith("200"))
+        self.assertEqual(payload["defenses"][0]["implied_total"], 17.5)
+        self.assertEqual(mock_defenses.call_args.kwargs["week"], "next")
+
+    @patch("oddsfantasy.api.compute_best_lineup")
+    def test_best_lineup_endpoint(self, mock_lineup):
+        mock_lineup.return_value = {
+            "target": "ceiling",
+            "lineup": [{"slot": "QB", "name": "Test QB", "points": 25}],
+            "total_points": 25,
+        }
+        status, _, payload = wsgi_get(
+            "/best-lineup?league_id=L1&roster_id=7&week=this&target=ceiling"
+        )
+        self.assertTrue(status.startswith("200"))
+        self.assertEqual(payload["target"], "ceiling")
+        self.assertEqual(mock_lineup.call_args.kwargs["target"], "ceiling")
+
+    def test_best_lineup_rejects_unknown_target(self):
+        status, _, payload = wsgi_get("/best-lineup?target=average")
+        self.assertTrue(status.startswith("400"))
+        self.assertEqual(payload["error"], "target_must_be_floor_mid_or_ceiling")
+
     @patch("oddsfantasy.api.odds_details.get_player_odds_details")
     def test_player_details(self, mock_details):
         mock_details.return_value = {
@@ -88,13 +118,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(payload["teams"][0]["roster_id"], 1)
 
     def test_removed_legacy_endpoint_is_not_found(self):
-        for path in (
-            "/lineup",
-            "/defenses",
-            "/draft-board",
-            "/dashboard",
-            "/book-coverage",
-        ):
+        for path in ("/lineup", "/draft-board", "/dashboard", "/book-coverage"):
             status, _, _ = wsgi_get(path)
             self.assertTrue(status.startswith("404"), path)
 

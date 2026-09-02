@@ -27,6 +27,7 @@ h1, h2, h3, h4 { margin-top: 0; }
 main { width: min(1180px, calc(100% - 32px)); margin: 28px auto 70px; }
 .report-shell { background: #0f172a; border: 1px solid #1e293b; border-radius: 14px; padding: 18px; }
 .report-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.toolbar-groups { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .segmented { display: inline-flex; border: 1px solid #334155; border-radius: 9px; overflow: hidden; }
 .segmented button { border: 0; border-radius: 0; }
 .segmented button.active { background: #2563eb; color: white; }
@@ -37,7 +38,7 @@ main { width: min(1180px, calc(100% - 32px)); margin: 28px auto 70px; }
 th { text-align: left; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
 th, td { padding: 11px 10px; border-bottom: 1px solid #1e293b; }
 .report-table tbody tr:hover { background: #111c31; }
-.mid-value { font-weight: 700; color: #f8fafc; }
+.mid-value, .selected-value { font-weight: 700; color: #f8fafc; }
 .player-link { border: 0; background: transparent; padding: 0; color: #93c5fd; text-decoration: underline; text-underline-offset: 3px; }
 .player-link:hover { background: transparent !important; color: white; }
 .no-projection { opacity: .72; }
@@ -45,6 +46,14 @@ th, td { padding: 11px 10px; border-bottom: 1px solid #1e293b; }
 .empty, .loading { padding: 24px 8px; color: #94a3b8; text-align: center; }
 .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid #475569; border-top-color: #e2e8f0; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.lineup-controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.lineup-total { margin: 6px 0 10px; color: #cbd5e1; }
+.lineup-total strong { color: #f8fafc; font-size: 20px; }
+.ownership { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 12px; white-space: nowrap; }
+.ownership.available { background: rgba(34,197,94,.12); color: #86efac; }
+.ownership.yours { background: rgba(59,130,246,.16); color: #93c5fd; }
+.ownership.taken { background: rgba(148,163,184,.12); color: #cbd5e1; }
 
 .overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(2, 6, 23, .78); }
 .modal { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow: hidden; background: #0f172a; border: 1px solid #334155; border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.5); }
@@ -90,6 +99,10 @@ th, td { padding: 11px 10px; border-bottom: 1px solid #1e293b; }
   main { width: min(100% - 16px, 1180px); margin-top: 12px; }
   .report-shell { padding: 12px; }
   .report-toolbar, .market-heading { align-items: stretch; flex-direction: column; }
+  .toolbar-groups { align-items: stretch; flex-direction: column; }
+  .segmented { width: 100%; }
+  .segmented button { flex: 1; }
+  .lineup-controls { align-items: stretch; flex-direction: column; }
   .projection-cards { grid-template-columns: 1fr; }
   .market-grid { grid-template-columns: 1fr; }
   .form-row { flex-direction: column; }

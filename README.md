@@ -1,31 +1,37 @@
 # Odds Fantasy
 
-Odds Fantasy turns sportsbook player props into fantasy-football probability distributions for a Sleeper roster.
+Odds Fantasy turns sportsbook markets into fantasy-football decision support for a selected Sleeper roster.
 
-The app intentionally has one job: show **Floor / Mid / Ceiling** for every QB, RB, WR and TE on the selected roster, then let you inspect the sportsbook lines that created any player's curve.
+The app has four focused views:
 
-## What the numbers mean
+- **Player report** — Floor / Mid / Ceiling for every projected QB, RB, WR and TE.
+- **Player details** — the exact sportsbook lines and consensus probability anchors that created that player's curve.
+- **Defenses** — every NFL defense ranked by its opponent's implied team total, with league ownership shown.
+- **Best lineup** — optimize your modeled starters for Floor, Mid, or Ceiling.
 
-The projection engine reconstructs a distribution for each priced stat from bookmaker lines, applies the league's real Sleeper scoring rules, samples the stat distributions, and sums them into one fantasy-points distribution.
+## What the player numbers mean
+
+The projection engine reconstructs a distribution for each priced stat from bookmaker lines, applies the league's real Sleeper scoring rules, samples those stat distributions, and sums them into one fantasy-points distribution.
 
 - **Floor** — 10th percentile fantasy points
 - **Mid** — 50th percentile fantasy points
 - **Ceiling** — 90th percentile fantasy points
 
-The player detail view and the roster-wide **Compare curves** graph use the same backend samples as those three numbers. There is no second browser-side projection model.
+The player detail view and **Compare curves** use the same backend samples as the report. There is no second browser-side projection model.
+
+A player with no usable priced markets shows dashes. Missing one optional market does not hide an otherwise valid projection.
 
 ## Using the app
 
-1. Open the UI and select your Sleeper username, league and team.
+1. Select your Sleeper username, league and team.
 2. Choose **This week** or **Next week**.
-3. Read the roster report, sorted by Mid.
-4. Click a player to inspect:
-   - the same fantasy-points probability curve used by the report;
-   - the consensus probability anchors reconstructed from the books;
-   - every main and alternate sportsbook line that contributed to each modeled stat.
-5. Click **Compare curves** to plot every roster player's probability curve on the same axes.
+3. In **Player report**, click a player for source lines or use **Compare curves** for all roster curves on one graph.
+4. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken.
+5. In **Best lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.
 
-A player with no usable priced markets shows dashes instead of a fabricated zero. Missing one optional market does not hide an otherwise valid projection.
+Kickers are not currently projected from a trustworthy market model. If the league has a K slot, Best Lineup reports it as unmodeled rather than inventing a score.
+
+Defense Floor/Mid/Ceiling used by Best Lineup is intentionally partial: it prices the points-allowed component from the opponent implied total. Sacks, turnovers and defensive touchdowns are not modeled.
 
 ## Running locally
 
@@ -45,6 +51,8 @@ ruff format --check .
 python -m pytest tests/
 ```
 
+Feature/main CI additionally builds the Docker image and runs a Chromium smoke test against the real served UI with deterministic mocked upstream data.
+
 ## Endpoints
 
 - `GET /health`
@@ -52,22 +60,24 @@ python -m pytest tests/
 - `GET /league/resolve?league_id=`
 - `GET /projections?league_id=&roster_id=&week=this|next&mode=auto|cache|fresh`
 - `GET /player/odds?league_id=&roster_id=&week=this|next&name=`
-
-The UI is served from `/` and `/ui/*`.
+- `GET /defenses?league_id=&roster_id=&week=this|next`
+- `GET /best-lineup?league_id=&roster_id=&week=this|next&target=floor|mid|ceiling`
 
 ## Project structure
 
-- `oddsfantasy/api.py` — small WSGI API and static-file server.
-- `oddsfantasy/services.py` — shared cached week context and roster report.
-- `oddsfantasy/planner.py` — maps roster players to games and required prop markets.
-- `oddsfantasy/aggregator.py` — normalizes raw Odds API responses by player/book/market.
-- `oddsfantasy/market_math.py` — de-vigging, consensus anchors, and stat-distribution reconstruction.
-- `oddsfantasy/projection.py` — stat sampling and the canonical fantasy-points curve.
+- `oddsfantasy/api.py` — WSGI API and static-file server.
+- `oddsfantasy/services.py` — cached application data flows.
+- `oddsfantasy/planner.py` — maps roster players to games and needed prop markets.
+- `oddsfantasy/aggregator.py` — normalizes raw per-book market data.
+- `oddsfantasy/market_math.py` — de-vigging and stat-distribution reconstruction.
+- `oddsfantasy/projection.py` — canonical fantasy-points sampling/curve.
 - `oddsfantasy/scoring.py` — Sleeper scoring-rule translation.
-- `oddsfantasy/odds_details.py` — player drill-down built from the same cached source data.
-- `ui/` — the single roster report, player detail view, and all-player curve comparison.
-- `tests/` — unit and end-to-end projection tests.
+- `oddsfantasy/odds_details.py` — source-line player drill-down.
+- `oddsfantasy/defense.py` — implied-team-total and points-allowed DEF math.
+- `oddsfantasy/lineup.py` — pure starter-slot optimizer.
+- `ui/` — report, curves, defenses and best-lineup views.
+- `tests/` — unit/integration tests plus the browser smoke script.
 
 ## Deployment
 
-See `CONTRIBUTING.md`. Changes move strictly `dev/*` → `feature/*` → `main`; feature branches publish `:test` and `main` publishes `:latest` to GHCR.
+See `CONTRIBUTING.md`. Changes move strictly `dev/*` → `feature/*` → `main`.

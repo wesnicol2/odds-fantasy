@@ -25,22 +25,52 @@
     <select id="dataModeSelect">
       <option value="auto" selected>Auto (cached)</option>
       <option value="cache">Cache only</option>
-      <option value="fresh">Force fresh on next report load</option>
+      <option value="fresh">Force fresh on next load</option>
     </select>
   </div>
 
   <main>
     <section class="report-shell">
       <div class="report-toolbar">
-        <div class="segmented" aria-label="Week">
-          <button class="week-toggle active" data-week="this" type="button">This week</button>
-          <button class="week-toggle" data-week="next" type="button">Next week</button>
+        <div class="toolbar-groups">
+          <div class="segmented" aria-label="Section">
+            <button class="section-toggle active" data-section="players" type="button">Player report</button>
+            <button class="section-toggle" data-section="defenses" type="button">Defenses</button>
+            <button class="section-toggle" data-section="lineup" type="button">Best lineup</button>
+          </div>
+          <div class="segmented" aria-label="Week">
+            <button class="week-toggle active" data-week="this" type="button">This week</button>
+            <button class="week-toggle" data-week="next" type="button">Next week</button>
+          </div>
         </div>
         <button id="btnCompareCurves" type="button" disabled>Compare curves</button>
       </div>
-      <p class="report-note">Sportsbook-derived fantasy point distributions. Click a player to see the exact lines behind the curve.</p>
-      <div id="reportStatus" class="status"></div>
-      <div id="playerReport" class="results"></div>
+
+      <div id="playersSection">
+        <p class="report-note">Sportsbook-derived fantasy point distributions. Click a player to see the exact lines behind the curve.</p>
+        <div id="reportStatus" class="status"></div>
+        <div id="playerReport" class="results"></div>
+      </div>
+
+      <div id="defensesSection" class="hidden">
+        <p class="report-note">All defenses, best matchup first by the opponent's median implied team total. BYE teams sort to the bottom.</p>
+        <div id="defenseStatus" class="status"></div>
+        <div id="defenseReport" class="results"></div>
+      </div>
+
+      <div id="lineupSection" class="hidden">
+        <div class="lineup-controls">
+          <span class="subtle">Optimize for</span>
+          <div class="segmented" aria-label="Lineup range">
+            <button class="range-toggle" data-range="floor" type="button">Floor</button>
+            <button class="range-toggle active" data-range="mid" type="button">Mid</button>
+            <button class="range-toggle" data-range="ceiling" type="button">Ceiling</button>
+          </div>
+        </div>
+        <p class="report-note">Uses your actual Sleeper starter slots and only players/DEF you roster. Unsupported positions are called out rather than guessed.</p>
+        <div id="lineupStatus" class="status"></div>
+        <div id="lineupReport" class="results"></div>
+      </div>
     </section>
   </main>
 
