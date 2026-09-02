@@ -2,62 +2,59 @@
 
 from __future__ import annotations
 
-import math
-
 from .market_math import CountDistribution
 
-YARDAGE_BUCKET_WIDTH = 5.0
-DEFAULT_BUCKET_WIDTH = 1.0
 LOWER_GRAPH_QUANTILE = 0.005
 UPPER_GRAPH_QUANTILE = 0.995
-
-
-def bucket_width_for_market(market_key: str) -> float:
-    """Choose a readable display bucket without changing the fitted distribution."""
-    return YARDAGE_BUCKET_WIDTH if (market_key or "").endswith("_yds") else DEFAULT_BUCKET_WIDTH
+CONTINUOUS_GRAPH_POINTS = 121
 
 
 def distribution_graph(distribution: object, market_key: str) -> dict:
-    """Return probability-at-x display points from an already-fitted distribution.
+    """Return the fitted stat survival curve for presentation.
 
-    Count markets use their exact PMF. Continuous markets use fixed-width buckets
-    centered on x and evaluate probability mass with the distribution's own CDF.
-    This function is presentation only; it does not participate in projection
-    sampling, percentiles, means, or fantasy scoring.
+    The graph answers the same question as an over bet: for a threshold ``x``,
+    what probability does the fitted distribution assign to the player clearing
+    that threshold?  This is intentionally presentation-only and does not
+    participate in projection sampling, percentiles, means, or fantasy scoring.
     """
     if isinstance(distribution, CountDistribution):
-        values, weights = distribution.support()
-        return {
-            "kind": "exact_count",
-            "bucket_width": 1.0,
-            "points": [
-                {"x": round(float(value), 2), "probability": round(float(weight), 6)}
-                for value, weight in zip(values, weights, strict=True)
-            ],
-        }
+        counts = distribution.counts
+        if not counts:
+            return {"kind": "survival_count", "points": []}
+        maximum = max(counts)
+        points = [
+            {
+                "x": float(count),
+                "probability": round(float(distribution.sf(count)), 6),
+            }
+            for count in range(0, maximum + 1)
+        ]
+        return {"kind": "survival_count", "points": points}
 
-    cdf = getattr(distribution, "cdf", None)
+    sf = getattr(distribution, "sf", None)
     quantile = getattr(distribution, "quantile", None)
-    if not callable(cdf) or not callable(quantile):
-        return {"kind": "bucket", "bucket_width": DEFAULT_BUCKET_WIDTH, "points": []}
+    if not callable(sf) or not callable(quantile):
+        return {"kind": "survival", "points": []}
 
-    width = bucket_width_for_market(market_key)
     try:
         lower = max(0.0, float(quantile(LOWER_GRAPH_QUANTILE)))
         upper = max(lower, float(quantile(UPPER_GRAPH_QUANTILE)))
     except (TypeError, ValueError, OverflowError):
-        return {"kind": "bucket", "bucket_width": width, "points": []}
+        return {"kind": "survival", "points": []}
 
-    start = math.floor(lower / width) * width
-    end = math.ceil(upper / width) * width
-    half = width / 2.0
-    points: list[dict[str, float]] = []
-    x = start
-    while x <= end + 1e-9:
-        left = max(0.0, x - half)
-        right = x + half
-        probability = max(0.0, min(1.0, float(cdf(right)) - float(cdf(left))))
+    start = 0.0 if lower > 0.0 else lower
+    if upper <= start:
+        return {
+            "kind": "survival",
+            "points": [{"x": round(start, 2), "probability": round(float(sf(start)), 6)}],
+        }
+
+    count = CONTINUOUS_GRAPH_POINTS
+    step = (upper - start) / (count - 1)
+    points = []
+    for index in range(count):
+        x = start + index * step
+        probability = max(0.0, min(1.0, float(sf(x))))
         points.append({"x": round(x, 2), "probability": round(probability, 6)})
-        x += width
 
-    return {"kind": "bucket", "bucket_width": width, "points": points}
+    return {"kind": "survival", "points": points}
