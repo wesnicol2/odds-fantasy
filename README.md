@@ -17,7 +17,7 @@ The projection engine reconstructs a distribution for each priced stat from book
 - **Mid** — 50th percentile fantasy points
 - **Ceiling** — 90th percentile fantasy points
 
-The player detail view and **Compare curves** use the same backend samples as the report. There is no second browser-side projection model.
+The player detail view and **Compare curves** are presentation-only views of that same backend curve. Their y-axis shows the probability of finishing within a one-point bucket centered on each x-value (`x ± 0.5 FP`), so unlikely low and high scores appear near the bottom while the most likely scoring range rises. Floor / Mid / Ceiling and all projection calculations are unchanged; there is no second browser-side projection model.
 
 A player with no usable priced markets shows dashes. Missing one optional market does not hide an otherwise valid projection.
 
