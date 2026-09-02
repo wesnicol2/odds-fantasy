@@ -231,8 +231,10 @@ def main() -> None:
         assert page.locator("#graphMetricList .graph-metric-btn").count() >= 2
         page.get_by_role("button", name="Next graph").click()
         assert page.locator("#graphTitle").inner_text() == "Rushing yards"
+        subtitle = page.locator("#graphSubtitle").inner_text()
+        assert "x = rushing yards threshold" in subtitle
+        assert "y = probability at or above threshold" in subtitle
         graph_area = page.locator("#graphChartArea")
-        graph_area.get_by_text("x = rushing yards threshold", exact=False).wait_for()
         graph_area.get_by_text("Probability at or above threshold", exact=True).wait_for()
         graph_area.get_by_text("consensus fair probability", exact=True).wait_for()
         assert graph_area.locator(".graph-consensus-marker").count() >= 2
