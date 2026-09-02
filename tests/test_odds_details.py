@@ -1,3 +1,4 @@
+from itertools import pairwise
 from unittest import TestCase, mock  # noqa: I001
 
 from oddsfantasy.odds_details import get_player_odds_details
@@ -58,7 +59,7 @@ class PlayerDetailsTest(TestCase):
         points = rush["graph"]["points"]
         self.assertGreater(len(points), 20)
         probabilities = [point["probability"] for point in points]
-        self.assertTrue(all(a >= b for a, b in zip(probabilities, probabilities[1:], strict=False)))
+        self.assertTrue(all(a >= b for a, b in pairwise(probabilities)))
 
     @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
     def test_name_normalization_matches_suffixes(self, _mock_context):
