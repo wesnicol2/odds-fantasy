@@ -179,7 +179,7 @@ def main() -> None:
         page.route("**/*", api_fixture)
         page.goto(BASE_URL, wait_until="networkidle")
 
-        page.get_by_text("Alpha Runner", exact=True).wait_for()
+        page.locator("#playerReport").get_by_text("Alpha Runner", exact=True).wait_for()
         assert page.get_by_text("17.00", exact=True).count() >= 1
 
         page.get_by_role("button", name="Compare curves").click()
@@ -198,7 +198,7 @@ def main() -> None:
         assert "Available" in first_defense.inner_text()
 
         page.get_by_role("button", name="Best lineup").click()
-        page.get_by_text("Alpha Runner", exact=True).wait_for()
+        page.locator("#lineupReport").get_by_text("Alpha Runner", exact=True).wait_for()
         page.get_by_role("button", name="Ceiling").click()
         page.get_by_text("Projected ceiling:", exact=False).wait_for()
         assert "25.00" in page.locator("#lineupReport").inner_text()
