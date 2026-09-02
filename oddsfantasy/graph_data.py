@@ -2,62 +2,57 @@
 
 from __future__ import annotations
 
-import math
-
 from .market_math import CountDistribution
 
-YARDAGE_BUCKET_WIDTH = 5.0
-DEFAULT_BUCKET_WIDTH = 1.0
 LOWER_GRAPH_QUANTILE = 0.005
 UPPER_GRAPH_QUANTILE = 0.995
-
-
-def bucket_width_for_market(market_key: str) -> float:
-    """Choose a readable display bucket without changing the fitted distribution."""
-    return YARDAGE_BUCKET_WIDTH if (market_key or "").endswith("_yds") else DEFAULT_BUCKET_WIDTH
+CONTINUOUS_GRAPH_POINTS = 101
 
 
 def distribution_graph(distribution: object, market_key: str) -> dict:
-    """Return probability-at-x display points from an already-fitted distribution.
+    """Return a probability curve from an already-fitted stat distribution.
 
-    Count markets use their exact PMF. Continuous markets use fixed-width buckets
-    centered on x and evaluate probability mass with the distribution's own CDF.
-    This function is presentation only; it does not participate in projection
-    sampling, percentiles, means, or fantasy scoring.
+    The graph is deliberately a survival view rather than a PMF/density view:
+    x is a stat threshold and y is the fitted probability of reaching/exceeding
+    that threshold. That puts the sportsbook over/under anchors on the same
+    visual coordinate system as the fitted curve.
+
+    This is presentation only. It does not participate in projection sampling,
+    percentiles, means, fantasy scoring, or distribution fitting.
     """
     if isinstance(distribution, CountDistribution):
-        values, weights = distribution.support()
-        return {
-            "kind": "exact_count",
-            "bucket_width": 1.0,
-            "points": [
-                {"x": round(float(value), 2), "probability": round(float(weight), 6)}
-                for value, weight in zip(values, weights, strict=True)
-            ],
-        }
+        if not distribution.counts:
+            return {"kind": "survival_step", "points": []}
+        highest = max(distribution.counts)
+        points = [
+            {"x": float(count), "probability": round(float(distribution.sf(count)), 6)}
+            for count in range(1, highest + 1)
+        ]
+        return {"kind": "survival_step", "points": points}
 
-    cdf = getattr(distribution, "cdf", None)
+    sf = getattr(distribution, "sf", None)
     quantile = getattr(distribution, "quantile", None)
-    if not callable(cdf) or not callable(quantile):
-        return {"kind": "bucket", "bucket_width": DEFAULT_BUCKET_WIDTH, "points": []}
+    if not callable(sf) or not callable(quantile):
+        return {"kind": "survival", "points": []}
 
-    width = bucket_width_for_market(market_key)
     try:
         lower = max(0.0, float(quantile(LOWER_GRAPH_QUANTILE)))
         upper = max(lower, float(quantile(UPPER_GRAPH_QUANTILE)))
     except (TypeError, ValueError, OverflowError):
-        return {"kind": "bucket", "bucket_width": width, "points": []}
+        return {"kind": "survival", "points": []}
 
-    start = math.floor(lower / width) * width
-    end = math.ceil(upper / width) * width
-    half = width / 2.0
-    points: list[dict[str, float]] = []
-    x = start
-    while x <= end + 1e-9:
-        left = max(0.0, x - half)
-        right = x + half
-        probability = max(0.0, min(1.0, float(cdf(right)) - float(cdf(left))))
-        points.append({"x": round(x, 2), "probability": round(probability, 6)})
-        x += width
+    if upper <= lower:
+        return {
+            "kind": "survival",
+            "points": [{"x": round(lower, 2), "probability": round(float(sf(lower)), 6)}],
+        }
 
-    return {"kind": "bucket", "bucket_width": width, "points": points}
+    fitted_xs = [float(value) for value in getattr(distribution, "xs", [])]
+    step = (upper - lower) / (CONTINUOUS_GRAPH_POINTS - 1)
+    xs = {lower + i * step for i in range(CONTINUOUS_GRAPH_POINTS)}
+    xs.update(value for value in fitted_xs if lower <= value <= upper)
+    points = [
+        {"x": round(x, 2), "probability": round(float(sf(x)), 6)}
+        for x in sorted(xs)
+    ]
+    return {"kind": "survival", "points": points}
