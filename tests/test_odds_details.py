@@ -1,4 +1,4 @@
-from unittest import TestCase, mock
+from unittest import TestCase, mock  # noqa: I001
 
 from oddsfantasy.odds_details import get_player_odds_details
 
