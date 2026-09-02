@@ -13,31 +13,33 @@
   function fmt(value, digits = 2) { return value == null ? '—' : Number(value).toFixed(digits); }
 
   function playerCurveSvg(curve) {
-    if (!curve?.length) return '<div class="empty">No fantasy-points curve available.</div>';
+    const displayCurve = scoreProbabilityCurve(curve);
+    if (!displayCurve.length) return '<div class="empty">No fantasy-points curve available.</div>';
     const width = 820, height = 330, left = 58, right = 18, top = 18, bottom = 44;
-    const maxX = Math.max(...curve.map(point => Number(point.x) || 0), 1);
-    const xScale = x => left + x / maxX * (width - left - right);
-    const yScale = y => top + (1 - y) * (height - top - bottom);
-    const path = curve.map((point, index) =>
-      `${index ? 'L' : 'M'}${xScale(Number(point.x)).toFixed(1)},${yScale(Number(point.survival)).toFixed(1)}`
-    ).join(' ');
+    const minX = Math.min(...displayCurve.map(point => point.x), 0);
+    const maxX = Math.max(...displayCurve.map(point => point.x), 1);
+    const spanX = Math.max(maxX - minX, 1);
+    const yMax = niceProbabilityMax([displayCurve]);
+    const xScale = x => left + ((x - minX) / spanX) * (width - left - right);
+    const yScale = y => top + (1 - y / yMax) * (height - top - bottom);
+    const path = scoreProbabilityPath(displayCurve, xScale, yScale);
     let grid = '';
     for (let i = 0; i <= 5; i++) {
-      const xValue = maxX * i / 5;
+      const xValue = minX + spanX * i / 5;
       const x = xScale(xValue);
       grid += `<line class="chart-grid" x1="${x}" y1="${top}" x2="${x}" y2="${height-bottom}" />`;
       grid += `<text class="chart-label" x="${x}" y="${height-17}" text-anchor="middle">${xValue.toFixed(0)}</text>`;
     }
     for (let i = 0; i <= 4; i++) {
-      const p = 1 - i / 4;
-      const y = yScale(p);
+      const probability = yMax * (1 - i / 4);
+      const y = yScale(probability);
       grid += `<line class="chart-grid" x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" />`;
-      grid += `<text class="chart-label" x="${left-10}" y="${y+4}" text-anchor="end">${Math.round(p*100)}%</text>`;
+      grid += `<text class="chart-label" x="${left-10}" y="${y+4}" text-anchor="end">${formatChartProbability(probability)}</text>`;
     }
-    return `<div class="chart-wrap"><svg class="detail-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Fantasy point survival curve">
+    return `<div class="chart-wrap"><svg class="detail-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Fantasy point score probability curve">
       ${grid}<path class="primary-curve" d="${path}" />
       <text class="chart-axis-title" x="${(left + width-right)/2}" y="${height-2}" text-anchor="middle">Fantasy points</text>
-      <text class="chart-axis-title" transform="translate(14 ${(top+height-bottom)/2}) rotate(-90)" text-anchor="middle">Probability of at least x</text>
+      <text class="chart-axis-title" transform="translate(14 ${(top+height-bottom)/2}) rotate(-90)" text-anchor="middle">Probability near x</text>
     </svg></div>`;
   }
 
@@ -108,8 +110,8 @@
     $('detailsBody').innerHTML = `<div class="player-meta-block">${escapeHtml(player.team || '')}</div>
       ${cards}
       <section class="curve-section">
-        <h3>Fantasy-points probability curve</h3>
-        <p class="small-note">This is the same backend curve used for the Floor / Mid / Ceiling report—not a curve reconstructed in the browser.</p>
+        <h3>Fantasy-points score probability</h3>
+        <p class="small-note">Display only: each plotted value is the probability of finishing within x ± 0.5 fantasy points, derived from the same backend curve used for Floor / Mid / Ceiling. Projection calculations are unchanged.</p>
         ${playerCurveSvg(projection.curve)}
       </section>
       <section class="source-section">
