@@ -17,7 +17,13 @@ from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from . import odds_details, ratelimit
 from .build_info import build_info
 from .config import DEFAULT_SEASON
-from .services import compute_projections, resolve_league, resolve_user_leagues
+from .services import (
+    compute_best_lineup,
+    compute_projections,
+    list_defenses,
+    resolve_league,
+    resolve_user_leagues,
+)
 
 _DEBUG_FLAG = False
 
@@ -94,6 +100,20 @@ def application(environ, start_response):
             roster_id = None
         return league_id, roster_id
 
+    def common() -> dict:
+        league_id, roster_id = identity()
+        mode = q("mode", "auto")
+        return {
+            "username": q("username", "wesnicol"),
+            "season": q("season", DEFAULT_SEASON),
+            "week": q("week", "this"),
+            "region": q("region", "us"),
+            "fresh": q("fresh", "0") in {"1", "true", "True"} or mode == "fresh",
+            "cache_mode": mode,
+            "league_id": league_id,
+            "roster_id": roster_id,
+        }
+
     _dprint(f"[api] GET {path} qs={query}")
     try:
         if path == "/":
@@ -134,34 +154,26 @@ def application(environ, start_response):
             return _json_response(start_response, status, data)
 
         if path == "/projections":
-            league_id, roster_id = identity()
-            mode = q("mode", "auto")
-            fresh = q("fresh", "0") in {"1", "true", "True"} or mode == "fresh"
-            data = compute_projections(
-                username=q("username", "wesnicol"),
-                season=q("season", DEFAULT_SEASON),
-                week=q("week", "this"),
-                region=q("region", "us"),
-                fresh=fresh,
-                cache_mode=mode,
-                league_id=league_id,
-                roster_id=roster_id,
-            )
-            return _json_response(start_response, "200 OK", data)
+            return _json_response(start_response, "200 OK", compute_projections(**common()))
+
+        if path == "/defenses":
+            return _json_response(start_response, "200 OK", list_defenses(**common()))
+
+        if path == "/best-lineup":
+            params = common()
+            params["target"] = q("target", "mid")
+            if params["target"] not in {"floor", "mid", "ceiling"}:
+                return _json_response(
+                    start_response,
+                    "400 Bad Request",
+                    {"error": "target_must_be_floor_mid_or_ceiling"},
+                )
+            return _json_response(start_response, "200 OK", compute_best_lineup(**params))
 
         if path == "/player/odds":
-            league_id, roster_id = identity()
-            data = odds_details.get_player_odds_details(
-                username=q("username", "wesnicol"),
-                season=q("season", DEFAULT_SEASON),
-                week=q("week", "this"),
-                region=q("region", "us"),
-                name=q("name"),
-                cache_mode=q("mode", "auto"),
-                fresh=q("fresh", "0") in {"1", "true", "True"},
-                league_id=league_id,
-                roster_id=roster_id,
-            )
+            params = common()
+            params["name"] = q("name")
+            data = odds_details.get_player_odds_details(**params)
             return _json_response(start_response, "200 OK", data)
 
         return _json_response(start_response, "404 Not Found", {"error": "not_found", "path": path})
