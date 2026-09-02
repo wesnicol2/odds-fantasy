@@ -3,164 +3,107 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Odds Fantasy Dashboard</title>
+  <title>Odds Fantasy</title>
   <link rel="stylesheet" href="/ui/styles.css" />
 </head>
 <body>
-  <header>
-    <h1>Odds Fantasy</h1>
-    <div class="controls">
-      <span id="leagueIndicator" class="status hidden"></span>
-      <button id="btnChangeLeague" type="button">Change</button>
-      <span id="rlHeader" class="status"></span>
-      <span id="netSpin" class="spinner hidden" title="Network activity"></span>
-      <button id="btnSettings" type="button" aria-label="Settings" title="Settings">&#9881;</button>
+  <header class="app-header">
+    <div>
+      <h1>Odds Fantasy</h1>
+      <div id="leagueIndicator" class="subtle hidden"></div>
+    </div>
+    <div class="header-actions">
+      <span id="rlHeader" class="subtle"></span>
+      <span id="netSpin" class="spinner hidden" aria-label="Loading"></span>
+      <button id="btnChangeLeague" type="button">Change league</button>
+      <button id="btnSettings" type="button" aria-label="Settings" title="Settings">⚙</button>
     </div>
   </header>
 
-  <!-- Settings popover: cache mode, plus the username/season fallback identity
-       path (only relevant if you skip league setup). -->
   <div id="settingsPanel" class="settings-panel hidden">
-    <label>
-      <span>Data</span>
-      <select id="dataModeSelect">
-        <option value="auto" selected>Auto (TTL cache)</option>
-        <option value="cache">Cache only</option>
-        <option value="fresh">Force fresh</option>
-      </select>
-    </label>
-    <div class="advanced-fallback">
-      <button id="btnShowFallbackId" type="button">Use username/season instead of a league</button>
-      <div id="fallbackIdFields" class="hidden">
-        <label>
-          <span>Username</span>
-          <input id="username" type="text" value="wesnicol" />
-        </label>
-        <label>
-          <span>Season</span>
-          <input id="season" type="text" value="" />
-        </label>
-        <p class="status">Only used when no league is configured -- click "Change" above to switch back to league mode.</p>
-      </div>
-    </div>
+    <label for="dataModeSelect">Odds data</label>
+    <select id="dataModeSelect">
+      <option value="auto" selected>Auto (cached)</option>
+      <option value="cache">Cache only</option>
+      <option value="fresh">Force fresh on next report load</option>
+    </select>
   </div>
 
   <main>
-    <div class="btn-row mode-switch">
-      <button id="modePredraftBtn" class="toggle-btn" data-mode="predraft">Pre-Draft</button>
-      <button id="modeSeasonBtn" class="toggle-btn toggle-active" data-mode="season">In-Season</button>
-    </div>
-
-    <!-- Pre-draft: every draftable player on the slate, ranked, for breaking
-         ties between players you rate similarly. Per-game market read -- see
-         the note in the panel for why there is no season total here. -->
-    <section id="panel-predraft" class="hidden">
-      <div class="btn-row">
-        <select id="draftPosFilter">
-          <option value="">All positions</option>
-          <option value="QB">QB</option>
-          <option value="RB">RB</option>
-          <option value="WR">WR</option>
-          <option value="TE">TE</option>
-        </select>
-        <button data-week="this" class="toggle-btn week-toggle toggle-active">Week 1</button>
-        <button data-week="next" class="toggle-btn week-toggle">Week 2</button>
+    <section class="report-shell">
+      <div class="report-toolbar">
+        <div class="segmented" aria-label="Week">
+          <button class="week-toggle active" data-week="this" type="button">This week</button>
+          <button class="week-toggle" data-week="next" type="button">Next week</button>
+        </div>
+        <button id="btnCompareCurves" type="button" disabled>Compare curves</button>
       </div>
-      <div id="draft-board" class="results"></div>
-    </section>
-
-    <section id="panel-season">
-      <div class="btn-row">
-        <button data-week="this" class="toggle-btn week-toggle toggle-active">This Week</button>
-        <button data-week="next" class="toggle-btn week-toggle">Next Week</button>
-      </div>
-      <div class="btn-row">
-        <button data-view="lineup" class="toggle-btn view-toggle toggle-active">Lineup</button>
-        <button data-view="players" class="toggle-btn view-toggle">All Players</button>
-        <button data-view="defenses" class="toggle-btn view-toggle">Defenses</button>
-      </div>
-      <div class="btn-row" id="targetToggleRow">
-        <button data-target="floor" class="toggle-btn target-toggle">Floor</button>
-        <button data-target="mid" class="toggle-btn target-toggle toggle-active">Mid</button>
-        <button data-target="ceiling" class="toggle-btn target-toggle">Ceiling</button>
-      </div>
-      <div id="weekly-results" class="results"></div>
+      <p class="report-note">Sportsbook-derived fantasy point distributions. Click a player to see the exact lines behind the curve.</p>
+      <div id="reportStatus" class="status"></div>
+      <div id="playerReport" class="results"></div>
     </section>
   </main>
 
-
-  <!-- League/team setup overlay -->
   <div id="leagueSetupOverlay" class="overlay hidden">
-    <div class="overlay-box details-box">
-      <div class="details-header">
-        <div class="details-title">Set Up Your League</div>
-        <button id="leagueSetupClose" class="close-btn" aria-label="Close">✕</button>
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Set up your league</h2>
+        <button id="leagueSetupClose" class="icon-btn" aria-label="Close">✕</button>
       </div>
-      <div class="details-body">
+      <div class="modal-body">
         <div id="leagueStepUser">
-          <p>Enter your Sleeper username to find your leagues.</p>
-          <div class="btn-row">
-            <input id="leagueUsernameInput" type="text" placeholder="Sleeper username" style="min-width:200px;" />
+          <p>Enter your Sleeper username.</p>
+          <div class="form-row">
+            <input id="leagueUsernameInput" type="text" placeholder="Sleeper username" />
             <button id="leagueUserContinue" type="button">Continue</button>
           </div>
-          <div id="leagueUserError" class="status" style="color:#f87171;"></div>
+          <div id="leagueUserError" class="error"></div>
         </div>
         <div id="leagueStepLeague" class="hidden">
-          <p id="leagueLeaguePrompt">Which league?</p>
-          <div class="btn-row">
-            <select id="leagueLeagueSelect" style="min-width:280px;"></select>
-          </div>
-          <div class="btn-row">
+          <p id="leagueLeaguePrompt">Choose a league.</p>
+          <select id="leagueLeagueSelect"></select>
+          <div class="form-row">
             <button id="leagueLeagueBack" type="button">Back</button>
             <button id="leagueLeagueContinue" type="button">Continue</button>
           </div>
-          <div id="leagueLeagueError" class="status" style="color:#f87171;"></div>
+          <div id="leagueLeagueError" class="error"></div>
         </div>
         <div id="leagueStepTeam" class="hidden">
-          <p id="leagueTeamPrompt">Which team is yours?</p>
-          <div class="btn-row">
-            <select id="leagueTeamSelect" style="min-width:260px;"></select>
-          </div>
-          <div class="btn-row">
+          <p id="leagueTeamPrompt">Choose your team.</p>
+          <select id="leagueTeamSelect"></select>
+          <div class="form-row">
             <button id="leagueTeamBack" type="button">Back</button>
-            <button id="leagueTeamContinue" type="button">Continue</button>
+            <button id="leagueTeamContinue" type="button">Use this team</button>
           </div>
-          <div id="leagueTeamError" class="status" style="color:#f87171;"></div>
+          <div id="leagueTeamError" class="error"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Details modal overlay -->
   <div id="detailsOverlay" class="overlay hidden">
-    <div class="overlay-box details-box">
-      <div class="details-header">
-        <div id="detailsTitle" class="details-title">Details</div>
-        <button id="detailsClose" class="close-btn" aria-label="Close">✕</button>
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="detailsTitle">Player details</h2>
+        <button id="detailsClose" class="icon-btn" aria-label="Close">✕</button>
       </div>
-      <div id="detailsBody" class="details-body"></div>
+      <div id="detailsBody" class="modal-body"></div>
     </div>
   </div>
 
-  <!-- Debug Math overlay -->
-  <div id="debugOverlay" class="overlay hidden">
-    <div class="overlay-box details-box">
-      <div class="details-header">
-        <button id="debugBack" class="back-btn" aria-label="Back">← Back</button>
-        <div id="debugTitle" class="details-title">Debug Math</div>
-        <button id="debugClose" class="close-btn" aria-label="Close">✕</button>
+  <div id="compareOverlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2>Roster probability curves</h2>
+        <button id="compareClose" class="icon-btn" aria-label="Close">✕</button>
       </div>
-      <div id="debugBody" class="details-body"></div>
+      <div id="compareBody" class="modal-body"></div>
     </div>
   </div>
-  <!-- Always-visible build stamp: which commit this instance is actually
-       running. Populated from /health by script.js. -->
-  <footer id="buildFooter" class="build-footer">
-    <span id="buildText" class="build-text">build …</span>
-  </footer>
+
+  <footer class="build-footer"><span id="buildText">build …</span></footer>
 
   <script src="/ui/script.js"></script>
-  <script src="/ui/prob-curve.js"></script>
   <script src="/ui/details.js"></script>
 </body>
 </html>
