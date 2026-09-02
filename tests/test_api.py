@@ -6,29 +6,27 @@ from oddsfantasy.api import application
 
 
 def wsgi_get(path: str):
-    """Call the WSGI app with a simple GET request and return (status, headers, body_json)."""
     environ = {
         "REQUEST_METHOD": "GET",
         "PATH_INFO": path.split("?", 1)[0],
-        "QUERY_STRING": (path.split("?", 1)[1] if "?" in path else ""),
+        "QUERY_STRING": path.split("?", 1)[1] if "?" in path else "",
         "wsgi.input": None,
         "wsgi.url_scheme": "http",
         "SERVER_NAME": "testserver",
         "SERVER_PORT": "80",
     }
-    resp = {}
+    response = {}
 
     def start_response(status, headers):
-        resp["status"] = status
-        resp["headers"] = headers
+        response["status"] = status
+        response["headers"] = headers
 
-    body_chunks = application(environ, start_response)
-    body = b"".join(body_chunks)
+    body = b"".join(application(environ, start_response))
     try:
         payload = json.loads(body.decode("utf-8"))
     except Exception:
         payload = None
-    return resp["status"], dict(resp["headers"]), payload
+    return response["status"], dict(response["headers"]), payload
 
 
 class ApiTestCase(unittest.TestCase):
@@ -36,226 +34,74 @@ class ApiTestCase(unittest.TestCase):
         status, headers, payload = wsgi_get("/health")
         self.assertTrue(status.startswith("200"))
         self.assertIn("application/json", headers.get("Content-Type", ""))
-        self.assertEqual(payload.get("status"), "ok")
+        self.assertEqual(payload["status"], "ok")
 
     @patch("oddsfantasy.api.compute_projections")
-    def test_projections(self, mock_proj):
-        mock_proj.return_value = {
+    def test_projections_passes_explicit_identity(self, mock_projection):
+        mock_projection.return_value = {
             "week": "this",
-            "players": [
-                {
-                    "name": "Test Player",
-                    "pos": "WR",
-                    "team": "X",
-                    "floor": 1.1,
-                    "mid": 2.2,
-                    "ceiling": 3.3,
-                    "books_used": 3,
-                    "markets_used": 2,
-                }
-            ],
-            "ratelimit": "remaining=100%",
+            "players": [{"name": "Test Player", "floor": 10, "mid": 15, "ceiling": 20}],
+            "ratelimit": "ok",
         }
-        status, headers, payload = wsgi_get("/projections?username=u&season=2025&week=this")
+        status, _, payload = wsgi_get("/projections?league_id=L1&roster_id=7&week=this")
         self.assertTrue(status.startswith("200"))
-        self.assertIsInstance(payload.get("players"), list)
         self.assertEqual(payload["players"][0]["name"], "Test Player")
-        self.assertIn("ratelimit", payload)
+        self.assertEqual(mock_projection.call_args.kwargs["league_id"], "L1")
+        self.assertEqual(mock_projection.call_args.kwargs["roster_id"], 7)
 
-    @patch("oddsfantasy.api.compute_book_coverage")
-    def test_book_coverage(self, mock_cov):
-        mock_cov.return_value = {
-            "week": "this",
-            "coverage": {
-                "markets": ["player_anytime_td"],
-                "rows": [
-                    {
-                        "name": "Test Player",
-                        "pos": "WR",
-                        "team": "BUF",
-                        "alias": "test",
-                        "markets": {"player_anytime_td": 3},
-                        "total_books": 3,
-                        "incomplete": False,
-                    }
-                ],
-            },
-            "ratelimit": "remaining=88%",
+    @patch("oddsfantasy.api.odds_details.get_player_odds_details")
+    def test_player_details(self, mock_details):
+        mock_details.return_value = {
+            "player": {"name": "Test Player"},
+            "projection": {"floor": 10, "mid": 15, "ceiling": 20, "curve": []},
+            "markets": {},
         }
-        status, headers, payload = wsgi_get("/book-coverage?username=u&season=2025&week=this")
+        status, _, payload = wsgi_get("/player/odds?league_id=L1&roster_id=7&name=Test+Player")
         self.assertTrue(status.startswith("200"))
-        self.assertIn("coverage", payload)
-        self.assertIsInstance(payload.get("coverage", {}).get("rows", []), list)
-
-    @patch("oddsfantasy.api.list_defenses")
-    @patch("oddsfantasy.api.build_lineup")
-    @patch("oddsfantasy.api.compute_projections")
-    def test_lineup(self, mock_proj, mock_build, mock_defs):
-        mock_proj.return_value = {
-            "players": [{"name": "QB A", "pos": "QB", "mid": 18.0}],
-            "ratelimit": "remaining=90%",
-        }
-        mock_defs.return_value = {"defenses": []}
-        mock_build.return_value = {
-            "target": "mid",
-            "lineup": [{"slot": "QB", "name": "QB A", "pos": "QB", "points": 18.0}],
-            "total_points": 18.0,
-        }
-        status, headers, payload = wsgi_get("/lineup?username=u&season=2025&week=this&target=mid")
-        self.assertTrue(status.startswith("200"))
-        self.assertEqual(payload["target"], "mid")
-        self.assertGreaterEqual(len(payload["lineup"]), 1)
-        # Defenses are looked up scoped to the caller's own roster only
-        self.assertEqual(mock_defs.call_args.kwargs.get("scope"), "owned")
-
-    @patch("oddsfantasy.api.list_defenses")
-    @patch("oddsfantasy.api.build_lineup_diffs")
-    @patch("oddsfantasy.api.compute_projections")
-    def test_lineup_diffs(self, mock_proj, mock_diffs, mock_defs):
-        mock_proj.return_value = {"players": [], "ratelimit": "remaining=80%"}
-        mock_defs.return_value = {"defenses": []}
-        mock_diffs.return_value = {
-            "from": {"lineup": []},
-            "floor_changes": [{"slot": "FLEX", "from": "X", "to": "Y"}],
-            "ceiling_changes": [],
-        }
-        status, headers, payload = wsgi_get("/lineup/diffs?username=u&season=2025&week=this")
-        self.assertTrue(status.startswith("200"))
-        self.assertIn("floor_changes", payload)
-
-    @patch("oddsfantasy.api.list_defenses")
-    def test_defenses(self, mock_defs):
-        mock_defs.return_value = {
-            "week": "this",
-            "defenses": [
-                {
-                    "defense": "Buffalo Bills",
-                    "opponent": "NY Jets",
-                    "implied_total_median": 20.5,
-                    "book_count": 5,
-                    "source": "owned",
-                }
-            ],
-            "ratelimit": "remaining=75%",
-        }
-        status, headers, payload = wsgi_get("/defenses?username=u&season=2025&week=this&scope=both")
-        self.assertTrue(status.startswith("200"))
-        self.assertIsInstance(payload.get("defenses"), list)
-
-    @patch("oddsfantasy.api.compute_draft_board")
-    def test_draft_board(self, mock_board):
-        mock_board.return_value = {
-            "week": "this",
-            "players": [
-                {
-                    "name": "Josh Allen",
-                    "pos": "QB",
-                    "team": "Buffalo Bills",
-                    "floor": 15.0,
-                    "mid": 20.0,
-                    "ceiling": 26.0,
-                },
-            ],
-            "ratelimit": "remaining=95%",
-        }
-        status, headers, payload = wsgi_get(
-            "/draft-board?username=u&season=2025&week=this&positions=QB,RB"
-        )
-        self.assertTrue(status.startswith("200"))
-        self.assertIsInstance(payload.get("players"), list)
-        self.assertEqual(payload["players"][0]["name"], "Josh Allen")
-        # positions query param should be parsed into a list and passed through
-        self.assertEqual(mock_board.call_args.kwargs.get("positions"), ["QB", "RB"])
+        self.assertEqual(payload["projection"]["mid"], 15)
+        self.assertEqual(mock_details.call_args.kwargs["league_id"], "L1")
+        self.assertEqual(mock_details.call_args.kwargs["roster_id"], 7)
 
     @patch("oddsfantasy.api.resolve_user_leagues")
     def test_user_leagues(self, mock_resolve):
         mock_resolve.return_value = {
             "username": "wesnicol",
-            "user_id": "u1",
-            "season": "2026",
-            "leagues": [
-                {"league_id": "123", "name": "My League", "status": "pre_draft", "season": "2026"}
-            ],
+            "leagues": [{"league_id": "123", "name": "League"}],
         }
-        status, headers, payload = wsgi_get("/user/leagues?username=wesnicol&season=2026")
+        status, _, payload = wsgi_get("/user/leagues?username=wesnicol&season=2026")
         self.assertTrue(status.startswith("200"))
-        self.assertEqual(len(payload["leagues"]), 1)
+        self.assertEqual(payload["leagues"][0]["league_id"], "123")
 
     def test_user_leagues_requires_username(self):
-        status, headers, payload = wsgi_get("/user/leagues")
+        status, _, _ = wsgi_get("/user/leagues")
         self.assertTrue(status.startswith("400"))
-
-    @patch("oddsfantasy.api.resolve_user_leagues")
-    def test_user_leagues_not_found(self, mock_resolve):
-        mock_resolve.return_value = {"error": "user_not_found", "username": "nobody"}
-        status, headers, payload = wsgi_get("/user/leagues?username=nobody")
-        self.assertTrue(status.startswith("404"))
 
     @patch("oddsfantasy.api.resolve_league")
     def test_league_resolve(self, mock_resolve):
         mock_resolve.return_value = {
             "league_id": "123",
-            "name": "My League",
-            "season": "2026",
-            "status": "pre_draft",
-            "teams": [
-                {"roster_id": 1, "owner_id": "u1", "team_name": "Alice", "display_name": "Alice"}
-            ],
+            "name": "League",
+            "teams": [{"roster_id": 1, "team_name": "Mine"}],
         }
-        status, headers, payload = wsgi_get("/league/resolve?league_id=123")
+        status, _, payload = wsgi_get("/league/resolve?league_id=123")
         self.assertTrue(status.startswith("200"))
-        self.assertEqual(payload["status"], "pre_draft")
-        self.assertEqual(len(payload["teams"]), 1)
+        self.assertEqual(payload["teams"][0]["roster_id"], 1)
 
-    def test_league_resolve_requires_league_id(self):
-        status, headers, payload = wsgi_get("/league/resolve")
-        self.assertTrue(status.startswith("400"))
-
-    @patch("oddsfantasy.api.resolve_league")
-    def test_league_resolve_not_found(self, mock_resolve):
-        mock_resolve.return_value = {"error": "league_not_found", "league_id": "bogus"}
-        status, headers, payload = wsgi_get("/league/resolve?league_id=bogus")
-        self.assertTrue(status.startswith("404"))
-
-    @patch("oddsfantasy.api.list_defenses")
-    @patch("oddsfantasy.api.build_lineup")
-    @patch("oddsfantasy.api.compute_projections")
-    def test_lineup_passes_league_id_and_roster_id_through(self, mock_proj, mock_build, mock_defs):
-        mock_proj.return_value = {"players": [], "ratelimit": "remaining=90%"}
-        mock_defs.return_value = {"defenses": []}
-        mock_build.return_value = {"target": "mid", "lineup": [], "total_points": 0}
-        wsgi_get("/lineup?league_id=LEAGUE123&roster_id=5&week=this&target=mid")
-        self.assertEqual(mock_proj.call_args.kwargs.get("league_id"), "LEAGUE123")
-        self.assertEqual(mock_proj.call_args.kwargs.get("roster_id"), 5)
-        self.assertEqual(mock_defs.call_args.kwargs.get("league_id"), "LEAGUE123")
-        self.assertEqual(mock_defs.call_args.kwargs.get("roster_id"), 5)
+    def test_removed_legacy_endpoint_is_not_found(self):
+        for path in (
+            "/lineup",
+            "/defenses",
+            "/draft-board",
+            "/dashboard",
+            "/book-coverage",
+        ):
+            status, _, _ = wsgi_get(path)
+            self.assertTrue(status.startswith("404"), path)
 
     def test_not_found(self):
-        status, headers, payload = wsgi_get("/nope")
+        status, _, payload = wsgi_get("/nope")
         self.assertTrue(status.startswith("404"))
-
-    @patch("oddsfantasy.api.build_dashboard")
-    def test_dashboard(self, mock_dash):
-        mock_dash.return_value = {
-            "lineups": {
-                "this": {
-                    "mid": {"target": "mid", "lineup": [], "total_points": 0},
-                    "floor": {"target": "floor", "lineup": [], "total_points": 0},
-                    "ceiling": {"target": "ceiling", "lineup": [], "total_points": 0},
-                },
-                "next": {
-                    "mid": {"target": "mid", "lineup": [], "total_points": 0},
-                    "floor": {"target": "floor", "lineup": [], "total_points": 0},
-                    "ceiling": {"target": "ceiling", "lineup": [], "total_points": 0},
-                },
-            },
-            "defenses": {"this": {"defenses": []}, "next": {"defenses": []}},
-            "ratelimit": "remaining=?%",
-        }
-        status, headers, payload = wsgi_get("/dashboard?username=u&season=2025")
-        self.assertTrue(status.startswith("200"))
-        self.assertIn("lineups", payload)
-        self.assertIn("defenses", payload)
+        self.assertEqual(payload["error"], "not_found")
 
 
 if __name__ == "__main__":

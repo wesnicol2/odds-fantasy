@@ -1,32 +1,14 @@
-"""Player-level projection: sample every stat, score it, sum it (§1 step 7, §2.5).
+"""Build the canonical fantasy-points probability curve for one player.
 
-:mod:`oddsfantasy.market_math` turns each market into a distribution and
-:mod:`oddsfantasy.scoring` turns a realized stat line into points. This module
-is the last two steps of the doc's pipeline: draw from each stat repeatedly,
-apply the *real* configured scoring to each draw -- which is what prices a
-bonus threshold correctly, since a draw either cleared it or it didn't -- and
-read floor / mid / ceiling off the resulting fantasy-points curve as its 10th /
-50th / 90th percentiles (§5).
-
-**Stats are summed independently, and that is a known understatement of the
-right tail.** The doc names this as the one place the market-translation-only
-principle bites (§2.5): a player's stats genuinely move together -- a big game
-drives yards and touchdowns alike -- but books quote marginals, not the joint,
-so the correlation simply is not in our feed. The two honest options are to
-assume independence or to price correlation off a market that quotes it (same
-game parlays, which this feed doesn't carry). We take the first and say so,
-rather than inventing a correlation matrix. Ceilings here are therefore
-conservative for players whose stats are tightly coupled (a QB's passing yards
-and passing touchdowns most of all).
-
-Sampling is deterministic: a fixed seed means the same odds produce the same
-projection on every call, so a page refresh doesn't jitter a lineup. The seed
-is also shared across players, which makes the draws common random numbers --
-two players compared on the same screen were dealt the same luck.
+Each sportsbook market is reconstructed in :mod:`oddsfantasy.market_math`, each
+sampled stat is scored with the league rules in :mod:`oddsfantasy.scoring`, and
+the stat point values are summed into one player-level distribution.  Floor,
+mid and ceiling are the 10th, 50th and 90th percentiles of that same curve.
 """
 
 from __future__ import annotations
 
+import bisect
 import random
 from dataclasses import dataclass, field
 
@@ -38,17 +20,8 @@ from .market_math import (
 )
 from .scoring import ScoringConfig
 
-# Draws per player. The variance that matters is in the 90th percentile; a few
-# thousand stratified draws pin it to well inside a tenth of a point, and the
-# draw loop also runs once per player on the league-wide draft board.
 DEFAULT_DRAWS = 4000
-
-# Equiprobable buckets used to represent a continuous stat. Evaluating the
-# quantile function this many times per market, once, is what keeps the draw
-# loop a constant-time pick.
 CONTINUOUS_BUCKETS = 128
-
-# Fixed so projections are reproducible and comparable across players.
 DEFAULT_SEED = 20260822
 
 FLOOR_PERCENTILE = 0.10
@@ -58,8 +31,6 @@ CEILING_PERCENTILE = 0.90
 
 @dataclass
 class StatProjection:
-    """One stat's contribution to a player's curve."""
-
     market_key: str
     distribution: object
     stat_range: tuple[float, float, float]
@@ -81,6 +52,10 @@ class PlayerProjection:
     def per_market_ranges(self) -> dict[str, tuple[float, float, float]]:
         return {key: stat.stat_range for key, stat in self.stats.items()}
 
+    @property
+    def has_projection(self) -> bool:
+        return bool(self.stats and self.samples)
+
 
 def percentile(sorted_values: list[float], q: float) -> float:
     """Linear-interpolated percentile of an already-sorted list."""
@@ -96,18 +71,37 @@ def percentile(sorted_values: list[float], q: float) -> float:
     return sorted_values[lower] * (1.0 - fraction) + sorted_values[upper] * fraction
 
 
+def survival_curve(samples: list[float], points: int = 61) -> list[dict[str, float]]:
+    """Compact ``P(FP >= x)`` curve from the exact projection samples.
+
+    The UI needs dozens of points, not all 4,000 Monte Carlo samples.  This
+    downsampling is display-only: floor/mid/ceiling continue to come from the
+    complete sample set.
+    """
+    if not samples:
+        return []
+    values = samples if samples == sorted(samples) else sorted(samples)
+    lo = min(0.0, values[0])
+    hi = values[-1]
+    if hi <= lo:
+        return [{"x": round(lo, 2), "survival": 1.0}]
+    count = max(2, int(points))
+    step = (hi - lo) / (count - 1)
+    n = len(values)
+    out: list[dict[str, float]] = []
+    for i in range(count):
+        x = lo + i * step
+        idx = bisect.bisect_left(values, x)
+        out.append({"x": round(x, 2), "survival": round((n - idx) / n, 4)})
+    return out
+
+
 def _base_market_key(market_key: str) -> str:
     return market_key[: -len("_alternate")] if market_key.endswith("_alternate") else market_key
 
 
 def candidate_markets(per_bookmaker_odds: dict, scoring: ScoringConfig) -> list[str]:
-    """Every market in this player's odds we know how to model and score.
-
-    Alternate ladders fold into their base market -- they are extra anchors on
-    the same stat, not a separate stat. A market with no scoring rule in the
-    league's config is dropped: it cannot move fantasy points under any
-    ruleset that doesn't mention it.
-    """
+    """Markets present in the feed that the methodology can model and score."""
     keys: set[str] = set()
     for markets in (per_bookmaker_odds or {}).values():
         for market_key in markets or {}:
@@ -163,7 +157,7 @@ def project_player(
     draws: int = DEFAULT_DRAWS,
     seed: int = DEFAULT_SEED,
 ) -> PlayerProjection:
-    """Full fantasy-points curve for one player, from their book odds alone."""
+    """Full fantasy-points curve for one player, from their sportsbook odds."""
     scoring = (
         scoring_rules
         if isinstance(scoring_rules, ScoringConfig)
@@ -190,8 +184,6 @@ def project_player(
         )
 
     totals = sorted(map(sum, zip(*per_stat_draws, strict=True)))
-    # The mean comes from the distributions rather than the draws: expectation
-    # is linear under any dependence, so it is exact here and free of MC noise.
     mean = sum(stat.expected_points for stat in stats.values())
 
     return PlayerProjection(
