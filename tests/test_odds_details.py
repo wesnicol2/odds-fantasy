@@ -53,6 +53,8 @@ class PlayerDetailsTest(TestCase):
         rush = result["markets"]["player_rush_yds"]
         self.assertEqual(len(rush["lines"]), 3)
         self.assertTrue(any(row["source"] == "alternate" for row in rush["lines"]))
+        self.assertTrue(all(row["fair_over"] is not None for row in rush["lines"]))
+        self.assertEqual(len(rush["line_points"]), 3)
         self.assertGreaterEqual(len(rush["anchors"]), 2)
         self.assertEqual(rush["graph"]["kind"], "survival")
         points = rush["graph"]["points"]
