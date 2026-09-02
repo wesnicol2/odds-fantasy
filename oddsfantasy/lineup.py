@@ -72,7 +72,10 @@ def build_best_lineup(
             [
                 index
                 for index, candidate in enumerate(candidates)
-                if candidate.get("pos") in eligible_positions and _score(candidate, target) is not None
+                if (
+                    candidate.get("pos") in eligible_positions
+                    and _score(candidate, target) is not None
+                )
             ]
         )
 
