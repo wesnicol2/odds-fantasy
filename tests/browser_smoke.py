@@ -28,14 +28,13 @@ CURVE_B = [
     {"x": 28, "survival": 0.10},
 ]
 RUSH_GRAPH = {
-    "kind": "bucket",
-    "bucket_width": 5.0,
+    "kind": "survival",
     "points": [
-        {"x": 40, "probability": 0.03},
-        {"x": 60, "probability": 0.08},
-        {"x": 80, "probability": 0.12},
-        {"x": 100, "probability": 0.07},
-        {"x": 120, "probability": 0.02},
+        {"x": 40, "probability": 0.90},
+        {"x": 60, "probability": 0.74},
+        {"x": 80, "probability": 0.47},
+        {"x": 100, "probability": 0.21},
+        {"x": 120, "probability": 0.06},
     ],
 }
 
@@ -106,15 +105,25 @@ def api_fixture(route: Route) -> None:
                         "stat_range": [45, 75, 115],
                         "expected_points": 7.5,
                         "graph": RUSH_GRAPH,
-                        "anchors": [{"threshold": 74.5, "survival": 0.51}],
+                        "anchors": [
+                            {"threshold": 64.5, "survival": 0.68},
+                            {"threshold": 84.5, "survival": 0.39},
+                        ],
                         "lines": [
                             {
                                 "book": "draftkings",
                                 "source": "main",
-                                "point": 74.5,
+                                "point": 64.5,
                                 "over_odds": 1.91,
                                 "under_odds": 1.91,
-                            }
+                            },
+                            {
+                                "book": "fanduel",
+                                "source": "alternate",
+                                "point": 84.5,
+                                "over_odds": 2.10,
+                                "under_odds": 1.72,
+                            },
                         ],
                     }
                 },
@@ -222,7 +231,17 @@ def main() -> None:
         assert page.locator("#graphMetricList .graph-metric-btn").count() >= 2
         page.get_by_role("button", name="Next graph").click()
         assert page.locator("#graphTitle").inner_text() == "Rushing yards"
-        page.get_by_text("Probability at x", exact=True).wait_for()
+        page.get_by_text("x = rushing yards threshold", exact=False).wait_for()
+        page.get_by_text("Probability at or above threshold", exact=True).wait_for()
+        page.get_by_text("consensus fair probability", exact=True).wait_for()
+        assert page.locator(".graph-consensus-marker").count() >= 2
+        assert page.locator(".graph-source-tick").count() >= 2
+        page.get_by_role("button", name="Explain betting lines").click()
+        page.get_by_text("Why this curve has this shape", exact=True).wait_for()
+        page.get_by_text("Consensus anchors", exact=True).wait_for()
+        page.get_by_text("Exact sportsbook lines", exact=True).wait_for()
+        page.get_by_text("draftkings", exact=True).wait_for()
+        page.get_by_text("fanduel", exact=True).wait_for()
         page.locator('[data-graph-position="WR"]').uncheck()
         assert "Beta Receiver" not in page.locator("#graphChartArea").inner_text()
         page.locator("#compareClose").click()

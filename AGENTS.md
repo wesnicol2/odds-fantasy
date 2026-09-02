@@ -31,9 +31,15 @@ Cross-stat correlation is still assumed independent because the market feed does
 
 `PlayerProjection.samples` is the source of truth for the fantasy-points distribution. `survival_curve()` downsamples the same samples used for Floor/Mid/Ceiling into `P(FP >= x)` points. The browser derives fixed one-point fantasy-score buckets from that curve for display only.
 
-For individual stat graphs, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution`. Count distributions expose their exact PMF. Continuous distributions expose fixed-width probability buckets through the distribution's own CDF. It must never refit sportsbook lines or participate in projection sampling/scoring.
+For individual stat graphs, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution` and emits a display-only survival curve. Continuous stats evaluate the fitted distribution's own survival function across its central range, including fitted anchor x-values. Count stats expose cumulative `P(count >= x)` values as a step curve. This graph helper must never refit sportsbook lines or participate in projection sampling/scoring.
 
-`/player/odds` includes these display graph points alongside the stat's anchors and source sportsbook lines. The Graph explorer loads those cached detail payloads and only filters/draws them. Do not add a second statistical model in JavaScript.
+`/player/odds` already includes the stat graph points alongside the stat's consensus anchors and exact source sportsbook lines. The Graph explorer places those three pieces on one explainability surface:
+
+- solid player-colored line = fitted survival curve;
+- diamond = de-vigged cross-book consensus anchor at its sportsbook threshold;
+- short x-axis tick = an exact source-book line location.
+
+The stat graph y-axis is fixed to probability and the x-axis is the stat threshold, so anchors and the fitted curve share the same semantics. `Explain betting lines` expands the same cached payload into a per-player table of consensus probabilities plus raw book/line/over/under prices. The browser only maps existing backend evidence to pixels; it does not calculate a replacement probability model.
 
 ## Shared player week context
 
@@ -96,6 +102,7 @@ Feature/main CI now builds the exact Dockerfile, runs the image, verifies `/heal
 - player report values;
 - player details and sportsbook source lines;
 - graph explorer left filter panel, multi-metric loading, metric cycling and position filtering;
+- stat graph fitted curve, consensus markers, exact sportsbook threshold markers and betting-line explanation panel;
 - defense comparison;
 - Floor/Mid/Ceiling Best Lineup switching.
 
