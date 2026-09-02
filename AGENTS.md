@@ -11,7 +11,7 @@ The application has three selectable weekly sections plus player drill-down and 
 2. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
 3. **Best lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots.
 4. Clicking a player exposes the exact source lines.
-5. **Graphs** compares roster probability distributions for fantasy points and each available modeled stat, with graph/position/player filters and Previous/Next metric navigation.
+5. **Graphs** compares roster probability distributions for fantasy points and each available modeled stat, with graph/position/player filters, Previous/Next metric navigation, and sportsbook line provenance.
 
 Pre-draft boards, model-comparison tools, book-coverage dashboards and alternate client-side projection engines remain removed.
 
@@ -31,9 +31,18 @@ Cross-stat correlation is still assumed independent because the market feed does
 
 `PlayerProjection.samples` is the source of truth for the fantasy-points distribution. `survival_curve()` downsamples the same samples used for Floor/Mid/Ceiling into `P(FP >= x)` points. The browser derives fixed one-point fantasy-score buckets from that curve for display only.
 
-For individual stat graphs, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution`. Count distributions expose their exact PMF. Continuous distributions expose fixed-width probability buckets through the distribution's own CDF. It must never refit sportsbook lines or participate in projection sampling/scoring.
+For individual stat graphs, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution` and exposes its survival curve: x is a stat threshold and y is the fitted probability of clearing that threshold. Continuous yardage curves are sampled densely from the distribution's own survival function; count distributions expose their cumulative survival steps. This is display-only and must never refit sportsbook lines or participate in projection sampling/scoring.
 
-`/player/odds` includes these display graph points alongside the stat's anchors and source sportsbook lines. The Graph explorer loads those cached detail payloads and only filters/draws them. Do not add a second statistical model in JavaScript.
+`oddsfantasy.line_provenance.fair_line_points()` reuses the exact `_book_anchors()` de-vigging path from `market_math.py` to expose the per-book fair over probabilities immediately before median consensus. It is presentation metadata, not a second odds model. `/player/odds` returns these book points, the final consensus anchors, the fitted stat survival curve, and the unchanged raw source lines together.
+
+The graph UI treats those layers distinctly:
+
+- fitted distribution = solid player-colored curve;
+- individual de-vigged book lines = small hollow points at their exact thresholds/probabilities;
+- consensus anchors = larger filled points with faint vertical guides;
+- collapsed graph-specific drill-down = book, main/alternate source, raw over/under prices and fair over probability.
+
+The stat y-axis stays fixed at 0–100% so different curves remain interpretable as probabilities. The Graph explorer loads cached detail payloads and only filters/draws them. Do not add a second statistical model in JavaScript.
 
 ## Shared player week context
 
@@ -96,6 +105,7 @@ Feature/main CI now builds the exact Dockerfile, runs the image, verifies `/heal
 - player report values;
 - player details and sportsbook source lines;
 - graph explorer left filter panel, multi-metric loading, metric cycling and position filtering;
+- stat-graph sportsbook book points, consensus anchors, labeled survival axis and line-provenance drill-down;
 - defense comparison;
 - Floor/Mid/Ceiling Best Lineup switching.
 
