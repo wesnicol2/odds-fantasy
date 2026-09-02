@@ -6,6 +6,7 @@ import re
 
 from . import ratelimit
 from .graph_data import distribution_graph
+from .line_provenance import fair_line_points, fair_probability_lookup
 from .market_math import collect_anchors
 from .projection import project_player, survival_curve
 from .services import NO_GAMES_SCHEDULED_MESSAGE, _load_week_context
@@ -21,7 +22,8 @@ def _norm_name(value: str) -> str:
 
 
 def _line_rows(by_book: dict, market_key: str) -> list[dict]:
-    """Flatten main and alternate lines without changing their prices."""
+    """Flatten main and alternate lines and attach their fair over probability."""
+    fair_lookup = fair_probability_lookup(by_book, market_key)
     rows: list[dict] = []
     for book_key, markets in (by_book or {}).items():
         main = (markets or {}).get(market_key)
@@ -30,6 +32,10 @@ def _line_rows(by_book: dict, market_key: str) -> list[dict]:
             under = main.get("under") or {}
             if over or under:
                 point = over.get("point") if over.get("point") is not None else under.get("point")
+                try:
+                    point_key = float(point)
+                except (TypeError, ValueError):
+                    point_key = 0.0
                 rows.append(
                     {
                         "book": book_key,
@@ -37,6 +43,7 @@ def _line_rows(by_book: dict, market_key: str) -> list[dict]:
                         "point": point,
                         "over_odds": over.get("odds"),
                         "under_odds": under.get("odds"),
+                        "fair_over": fair_lookup.get((str(book_key), point_key)),
                     }
                 )
 
@@ -58,6 +65,7 @@ def _line_rows(by_book: dict, market_key: str) -> list[dict]:
                             "point": point,
                             "over_odds": None,
                             "under_odds": None,
+                            "fair_over": fair_lookup.get((str(book_key), point)),
                         },
                     )
                     row[f"{side}_odds"] = item.get("odds")
@@ -127,6 +135,7 @@ def get_player_odds_details(
             "stat_range": [round(value, 2) for value in stat.stat_range],
             "expected_points": round(stat.expected_points, 3),
             "graph": distribution_graph(stat.distribution, market_key),
+            "line_points": fair_line_points(by_book, market_key),
             "anchors": [
                 {
                     "threshold": round(anchor.threshold, 2),
