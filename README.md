@@ -5,7 +5,7 @@ Odds Fantasy turns sportsbook markets into fantasy-football decision support for
 The app has four focused views:
 
 - **Player report** — Floor / Mid / Ceiling for every projected QB, RB, WR and TE.
-- **Graphs** — compare roster probability distributions for fantasy points and the underlying modeled stats, with player/position filters.
+- **Graphs** — compare roster probability distributions for fantasy points and the underlying modeled stats, with player/position filters and sportsbook line provenance.
 - **Defenses** — every NFL defense ranked by its opponent's implied team total, with league ownership shown.
 - **Best lineup** — optimize your modeled starters for Floor, Mid, or Ceiling.
 
@@ -19,7 +19,16 @@ The projection engine reconstructs a distribution for each priced stat from book
 - **Mid** — 50th percentile fantasy points
 - **Ceiling** — 90th percentile fantasy points
 
-Graphing is presentation-only. The fantasy-points graph shows the probability of finishing within a one-point bucket centered on each x-value (`x ± 0.5 FP`). Stat graphs use the same already-fitted backend distributions that feed the projection: count markets show exact integer probabilities and continuous markets show fixed-width probability buckets. None of these graph views changes Floor / Mid / Ceiling or creates a second projection model in the browser.
+Graphing is presentation-only. The fantasy-points graph shows the probability of finishing within a one-point bucket centered on each x-value (`x ± 0.5 FP`). Underlying stat graphs are shown as sportsbook-style survival curves: the x-axis is the stat threshold and the y-axis is the fitted probability that the player exceeds that threshold. Yardage curves therefore stay monotone instead of connecting independent probability buckets.
+
+On a stat graph:
+
+- the solid line is the already-fitted canonical stat distribution;
+- small hollow points are each individual book's de-vigged over probability at its exact posted threshold;
+- larger filled points are the median/isotonic consensus anchors used to fit the distribution;
+- **Inspect the betting lines behind this curve** expands the exact book, main/alternate threshold, raw over/under prices and fair over probability for the active graph.
+
+These graph views do not change Floor / Mid / Ceiling and do not create a second projection model in the browser.
 
 A player with no usable priced markets shows dashes. Missing one optional market does not hide an otherwise valid projection.
 
@@ -27,7 +36,7 @@ A player with no usable priced markets shows dashes. Missing one optional market
 
 1. Select your Sleeper username, league and team.
 2. Choose **This week** or **Next week**.
-3. In **Player report**, click a player for source lines or open **Graphs**. The graph explorer has a left filter panel for graph type, position and player, plus Previous/Next controls to cycle through available metrics.
+3. In **Player report**, click a player for source lines or open **Graphs**. The graph explorer has a left filter panel for graph type, position and player, plus Previous/Next controls to cycle through available metrics. Stat graphs overlay the source sportsbook points and provide a collapsed line-provenance drill-down below the chart.
 4. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken.
 5. In **Best lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.
 
@@ -73,7 +82,8 @@ Feature/main CI additionally builds the Docker image and runs a Chromium smoke t
 - `oddsfantasy/aggregator.py` — normalizes raw per-book market data.
 - `oddsfantasy/market_math.py` — de-vigging and stat-distribution reconstruction.
 - `oddsfantasy/projection.py` — canonical fantasy-points sampling/curve.
-- `oddsfantasy/graph_data.py` — display-only probability points from canonical fitted stat distributions.
+- `oddsfantasy/graph_data.py` — display-only survival curves from canonical fitted stat distributions.
+- `oddsfantasy/line_provenance.py` — display-only per-book fair probabilities immediately before consensus aggregation.
 - `oddsfantasy/scoring.py` — Sleeper scoring-rule translation.
 - `oddsfantasy/odds_details.py` — source-line player drill-down and stat graph payloads.
 - `oddsfantasy/defense.py` — implied-team-total and points-allowed DEF math.
