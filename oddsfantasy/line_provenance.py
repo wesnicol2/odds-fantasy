@@ -14,14 +14,14 @@ def fair_line_points(per_bookmaker_odds: dict, market_key: str) -> list[dict]:
     """
     points: list[dict] = []
     for book, markets in (per_bookmaker_odds or {}).items():
-        for anchor in _book_anchors(markets or {}, market_key):
-            points.append(
-                {
-                    "book": str(book),
-                    "threshold": round(float(anchor.threshold), 2),
-                    "survival": round(float(anchor.survival), 6),
-                }
-            )
+        points.extend(
+            {
+                "book": str(book),
+                "threshold": round(float(anchor.threshold), 2),
+                "survival": round(float(anchor.survival), 6),
+            }
+            for anchor in _book_anchors(markets or {}, market_key)
+        )
     points.sort(key=lambda point: (point["threshold"], point["book"]))
     return points
 
