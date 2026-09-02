@@ -312,7 +312,9 @@ def _defense_ownership_map(
         if league_id:
             resolved_league_id = league_id
         else:
-            resolved_league_id, selected_owner = sleeper_api.get_league_id_for_user(username, season)
+            resolved_league_id, selected_owner = sleeper_api.get_league_id_for_user(
+                username, season
+            )
         if not resolved_league_id:
             return {}, selected_owner
 
