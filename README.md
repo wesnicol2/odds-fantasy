@@ -23,6 +23,8 @@ Graphing is presentation-only. The fantasy-points graph shows the probability of
 
 A player with no usable priced markets shows dashes. Missing one optional market does not hide an otherwise valid projection.
 
+The header quota readout is refreshed independently of the odds cache. It uses The Odds API's zero-credit sports endpoint to obtain the current remaining/used headers, throttled to one provider check per minute, so a container restart or a cache-only report does not leave quota status unknown.
+
 ## Using the app
 
 1. Select your Sleeper username, league and team.
@@ -58,6 +60,7 @@ Feature/main CI additionally builds the Docker image and runs a Chromium smoke t
 ## Endpoints
 
 - `GET /health`
+- `GET /quota`
 - `GET /user/leagues?username=&season=`
 - `GET /league/resolve?league_id=`
 - `GET /projections?league_id=&roster_id=&week=this|next&mode=auto|cache|fresh`
