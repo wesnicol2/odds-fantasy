@@ -14,7 +14,7 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
-from . import odds_details, ratelimit
+from . import odds_client, odds_details, ratelimit
 from .build_info import build_info
 from .config import DEFAULT_SEASON
 from .services import (
@@ -59,6 +59,22 @@ def set_debug(flag: bool) -> None:
 def _dprint(*args) -> None:
     if _debug_enabled():
         print(*args, flush=True)
+
+
+def _refresh_quota_snapshot() -> None:
+    """Best-effort current quota check; never make app data depend on it."""
+    try:
+        odds_client.refresh_quota_status()
+    except Exception as exc:
+        _dprint(f"[api] quota refresh failed: {exc}")
+
+
+def _attach_quota(payload: dict) -> dict:
+    """Return a response with the freshest quota headers observed by this process."""
+    result = dict(payload)
+    result["ratelimit"] = ratelimit.format_status()
+    result["ratelimit_info"] = ratelimit.get_details()
+    return result
 
 
 def _serve_static(start_response: Callable, rel_path: str):
@@ -133,6 +149,10 @@ def application(environ, start_response):
                 },
             )
 
+        if path == "/quota":
+            _refresh_quota_snapshot()
+            return _json_response(start_response, "200 OK", _attach_quota({"status": "ok"}))
+
         if path == "/user/leagues":
             username = q("username")
             if not username:
@@ -154,10 +174,14 @@ def application(environ, start_response):
             return _json_response(start_response, status, data)
 
         if path == "/projections":
-            return _json_response(start_response, "200 OK", compute_projections(**common()))
+            _refresh_quota_snapshot()
+            data = compute_projections(**common())
+            return _json_response(start_response, "200 OK", _attach_quota(data))
 
         if path == "/defenses":
-            return _json_response(start_response, "200 OK", list_defenses(**common()))
+            _refresh_quota_snapshot()
+            data = list_defenses(**common())
+            return _json_response(start_response, "200 OK", _attach_quota(data))
 
         if path == "/best-lineup":
             params = common()
@@ -168,13 +192,16 @@ def application(environ, start_response):
                     "400 Bad Request",
                     {"error": "target_must_be_floor_mid_or_ceiling"},
                 )
-            return _json_response(start_response, "200 OK", compute_best_lineup(**params))
+            _refresh_quota_snapshot()
+            data = compute_best_lineup(**params)
+            return _json_response(start_response, "200 OK", _attach_quota(data))
 
         if path == "/player/odds":
             params = common()
             params["name"] = q("name")
+            _refresh_quota_snapshot()
             data = odds_details.get_player_odds_details(**params)
-            return _json_response(start_response, "200 OK", data)
+            return _json_response(start_response, "200 OK", _attach_quota(data))
 
         return _json_response(start_response, "404 Not Found", {"error": "not_found", "path": path})
     except Exception as exc:
