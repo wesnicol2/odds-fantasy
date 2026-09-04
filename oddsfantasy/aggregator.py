@@ -1,257 +1,107 @@
+"""Normalize Odds API event payloads into per-player, per-book market lines.
+
+No projection math lives here.  The methodology engine consumes the raw book
+lines directly, de-vigs each book, and builds consensus anchors itself.
+"""
+
 from __future__ import annotations
 
-import contextlib
-import os
-import statistics
-from dataclasses import dataclass
-
-from .predicted_stats import implied_probability
+import re
 
 
-@dataclass
-class MarketSummary:
-    avg_over_prob: float
-    avg_under_prob: float
-    avg_threshold: float
-    samples: int
+def _norm_name(value: str) -> str:
+    value = (value or "").lower()
+    value = re.sub(r"[\.'`-]", " ", value)
+    value = re.sub(r"[^a-z0-9 ]", "", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    tokens = [t for t in value.split() if t not in {"jr", "sr", "ii", "iii", "iv", "v"}]
+    return " ".join(tokens)
 
 
 def _classify_side(name: str) -> str | None:
-    n = (name or "").strip().lower()
-    if n in ("over", "yes"):
+    name = (name or "").strip().lower()
+    if name in {"over", "yes"}:
         return "over"
-    if n in ("under", "no"):
+    if name in {"under", "no"}:
         return "under"
     return None
 
 
 def aggregate_players_from_event(
-    event_odds: object,
-    target_player_aliases: set[str],
-) -> tuple[dict, dict]:
-    """Aggregate per-bookmaker odds for target players from a single event response.
+    event_odds: object, target_player_aliases: set[str]
+) -> dict[str, dict]:
+    """Return ``alias -> bookmaker -> market -> raw sides`` for one event."""
+    aliases = target_player_aliases or set()
+    norm_alias_map = {_norm_name(alias): alias for alias in aliases}
+    events = (
+        [event_odds]
+        if isinstance(event_odds, dict)
+        else event_odds
+        if isinstance(event_odds, list)
+        else []
+    )
+    output: dict[str, dict] = {}
 
-    Returns (per_player_odds, per_player_market_summaries).
-
-    per_player_odds is compatible with predict_stats_for_player input shape:
-      { player_alias: { bookmaker_key: { market_key: { 'over': {...}, 'under': {...} } } } }
-
-    per_player_market_summaries:
-      { player_alias: { market_key: MarketSummary(...) } }
-    """
-    out_per_player: dict = {}
-    out_summaries: dict = {}
-
-    # Debug toggle
-    _DBG = os.getenv("API_DEBUG") in ("1", "true", "True")
-
-    def _norm_name(s: str) -> str:
-        if not s:
-            return ""
-        s = s.lower()
-        # strip punctuation and dots/apostrophes
-        import re
-
-        s = re.sub(r"[\.'`-]", " ", s)
-        s = re.sub(r"[^a-z0-9 ]", "", s)
-        s = re.sub(r"\s+", " ", s).strip()
-        # drop suffixes like jr, sr, ii, iii, iv, v
-        toks = [t for t in s.split(" ") if t not in ("jr", "sr", "ii", "iii", "iv", "v")]
-        return " ".join(toks)
-
-    # Build normalized alias map for fuzzy matching
-    norm_alias_map: dict[str, str] = {_norm_name(a): a for a in (target_player_aliases or set())}
-
-    # Normalize event structure: can be a list with one event, or a dict
-    if isinstance(event_odds, dict):
-        events_list = [event_odds]
-    elif isinstance(event_odds, list):
-        events_list = event_odds
-    else:
-        events_list = []
-
-    for ev in events_list:
-        for book in ev.get("bookmakers", []) if isinstance(ev, dict) else []:
-            bookmaker_key = book.get("key")
-            if not bookmaker_key:
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        for book in event.get("bookmakers", []) or []:
+            book_key = book.get("key")
+            if not book_key:
                 continue
-            for market in book.get("markets", []):
+            for market in book.get("markets", []) or []:
                 market_key = market.get("key")
-                # First gather outcomes by alias for this market so we can de-vig per book
-                alias_outcomes = {}
-                for outcome in market.get("outcomes", []):
-                    raw_desc = outcome.get("description")
-                    if not raw_desc:
+                if not market_key:
+                    continue
+                alternate = str(market_key).endswith("_alternate")
+                gathered: dict[str, dict] = {}
+
+                for outcome in market.get("outcomes", []) or []:
+                    description = outcome.get("description")
+                    if not description:
                         continue
-                    alias = raw_desc if raw_desc in target_player_aliases else None
+                    alias = (
+                        description
+                        if description in aliases
+                        else norm_alias_map.get(_norm_name(description))
+                    )
                     if alias is None:
-                        n = _norm_name(raw_desc)
-                        alias = norm_alias_map.get(n)
-                        if alias is None:
-                            continue
-                    side = _classify_side(outcome.get("name")) or "over"
-                    # Preserve alternates as full lists by side
-                    if market_key and str(market_key).endswith("_alternate"):
-                        alias_outcomes.setdefault(alias, {"alts_over": [], "alts_under": []})
-                        rec = {
-                            "odds": outcome.get("price"),
-                            "point": outcome.get("point", 0),
-                        }
-                        if side == "over":
-                            alias_outcomes[alias]["alts_over"].append(rec)
-                        else:
-                            alias_outcomes[alias]["alts_under"].append(rec)
-                    else:
-                        alias_outcomes.setdefault(alias, {"over": None, "under": None})
-                        alias_outcomes[alias][side] = {
-                            "odds": outcome.get("price"),
-                            "point": outcome.get("point", 0),
-                        }
-
-                for alias, sides in alias_outcomes.items():
-                    # If alternate market, attach 'alts' lists and skip summary accumulation
-                    if market_key and str(market_key).endswith("_alternate"):
-                        out_per_player.setdefault(alias, {})
-                        out_per_player[alias].setdefault(bookmaker_key, {})
-                        out_per_player[alias][bookmaker_key][market_key] = {
-                            "alts": {
-                                "over": list(sides.get("alts_over") or []),
-                                "under": list(sides.get("alts_under") or []),
-                            }
-                        }
                         continue
-                    over = sides.get("over")
-                    under = sides.get("under")
-
-                    # Persist raw per-book sides for downstream prediction
-                    out_per_player.setdefault(alias, {})
-                    out_per_player[alias].setdefault(bookmaker_key, {})
-                    out_per_player[alias][bookmaker_key].setdefault(
-                        market_key, {"over": None, "under": None}
-                    )
-                    if over:
-                        out_per_player[alias][bookmaker_key][market_key]["over"] = over
-                    if under:
-                        out_per_player[alias][bookmaker_key][market_key]["under"] = under
-
-                    # Compute per-book de-vig probabilities if we have both sides; otherwise use raw implied
-                    p_over = 0.0
-                    p_under = 0.0
-                    if over and under and over.get("odds") and under.get("odds"):
-                        try:
-                            o_raw = implied_probability(over["odds"])  # 1/odds
-                            u_raw = implied_probability(under["odds"])  # 1/odds
-                            total = o_raw + u_raw
-                            if total > 0:
-                                p_over = o_raw / total
-                                p_under = u_raw / total
-                        except Exception:
-                            p_over = (
-                                implied_probability(over["odds"])
-                                if over and over.get("odds")
-                                else 0.0
-                            )
-                            p_under = (
-                                implied_probability(under["odds"])
-                                if under and under.get("odds")
-                                else 0.0
-                            )
+                    side = _classify_side(outcome.get("name")) or "over"
+                    record = {"odds": outcome.get("price"), "point": outcome.get("point", 0)}
+                    if alternate:
+                        bucket = gathered.setdefault(alias, {"over": [], "under": []})
+                        bucket[side].append(record)
                     else:
-                        # one-sided: keep raw implied where present
-                        if over and over.get("odds"):
-                            p_over = implied_probability(over["odds"]) or 0.0
-                        if under and under.get("odds"):
-                            p_under = implied_probability(under["odds"]) or 0.0
+                        bucket = gathered.setdefault(alias, {"over": None, "under": None})
+                        bucket[side] = record
 
-                    # Summary accumulators (averaging already de-vigged per-book p's when available)
-                    out_summaries.setdefault(alias, {})
-                    acc = out_summaries[alias].setdefault(
-                        market_key,
-                        {"over_vals": [], "under_vals": [], "point_vals": []},
-                    )
-                    acc["over_vals"].append(p_over)
-                    acc["under_vals"].append(p_under)
-                    # threshold from over (preferred) or under
-                    pt = None
-                    if over and ("point" in over):
-                        pt = over.get("point")
-                    elif under and ("point" in under):
-                        pt = under.get("point")
-                    if pt is not None:
-                        with contextlib.suppress(Exception):
-                            acc["point_vals"].append(float(pt))
+                for alias, sides in gathered.items():
+                    market_out = output.setdefault(alias, {}).setdefault(book_key, {})
+                    if alternate:
+                        market_out[market_key] = {
+                            "alts": {"over": list(sides["over"]), "under": list(sides["under"])}
+                        }
+                    else:
+                        market_out[market_key] = {"over": sides["over"], "under": sides["under"]}
 
-    # Finalize summaries
-    finalized: dict = {}
-    for alias, mkts in out_summaries.items():
-        finalized[alias] = {}
-        for mkey, acc in mkts.items():
-            over_vals = acc.get("over_vals", [])
-            under_vals = acc.get("under_vals", [])
-            point_vals = acc.get("point_vals", [])
-            samples = max(len(over_vals), len(under_vals), len(point_vals))
-            med_over = statistics.median(over_vals) if over_vals else 0.0
-            med_under = statistics.median(under_vals) if under_vals else 0.0
-            med_point = statistics.median(point_vals) if point_vals else 0.0
-            finalized[alias][mkey] = MarketSummary(
-                avg_over_prob=med_over,
-                avg_under_prob=med_under,
-                avg_threshold=med_point,
-                samples=samples,
-            )
-
-    return out_per_player, finalized
+    return output
 
 
 def aggregate_by_week(
-    event_odds_by_game: dict[str, list],
-    planned_games: dict[str, object],  # PlannedGame-like with .players
-) -> tuple[dict[str, dict], dict[str, dict]]:
-    """Aggregate players across all games in a window.
-
-    Returns (per_player_odds, per_player_market_summaries) where keys are player aliases.
-    """
-    per_player_odds: dict[str, dict] = {}
-    per_player_summaries: dict[str, dict] = {}
-
-    for gid, event_odds in event_odds_by_game.items():
-        game_plan = planned_games.get(gid)
+    event_odds_by_game: dict[str, object], planned_games: dict[str, object]
+) -> dict[str, dict]:
+    """Merge normalized player odds across all planned games in a week."""
+    output: dict[str, dict] = {}
+    for game_id, event_odds in (event_odds_by_game or {}).items():
+        game_plan = planned_games.get(game_id)
         if not game_plan:
             continue
-        aliases = {p["alias"] for p in game_plan.players}
-        p_odds, p_summ = aggregate_players_from_event(event_odds, aliases)
-
-        # Merge per-player odds
-        for alias, by_book in p_odds.items():
-            per_player_odds.setdefault(alias, {})
-            # merge bookmakers
-            for book_key, mkts in by_book.items():
-                per_player_odds[alias].setdefault(book_key, {})
-                for mkey, sides in mkts.items():
-                    per_player_odds[alias][book_key].setdefault(mkey, {"over": None, "under": None})
-                    for side, payload in sides.items():
-                        if payload:
-                            per_player_odds[alias][book_key][mkey][side] = payload
-
-        # Merge summaries (average of averages isn't ideal, but fine for a first pass)
-        for alias, mkts in p_summ.items():
-            per_player_summaries.setdefault(alias, {})
-            for mkey, summ in mkts.items():
-                # If already exists, do a simple running average by sample size
-                if mkey in per_player_summaries[alias]:
-                    prev = per_player_summaries[alias][mkey]
-                    total_n = prev.samples + summ.samples
-                    if total_n == 0:
-                        continue
-                    w_prev = prev.samples / total_n
-                    w_new = summ.samples / total_n
-                    per_player_summaries[alias][mkey] = MarketSummary(
-                        avg_over_prob=prev.avg_over_prob * w_prev + summ.avg_over_prob * w_new,
-                        avg_under_prob=prev.avg_under_prob * w_prev + summ.avg_under_prob * w_new,
-                        avg_threshold=prev.avg_threshold * w_prev + summ.avg_threshold * w_new,
-                        samples=total_n,
-                    )
-                else:
-                    per_player_summaries[alias][mkey] = summ
-
-    return per_player_odds, per_player_summaries
+        aliases = {player["alias"] for player in game_plan.players}
+        event_players = aggregate_players_from_event(event_odds, aliases)
+        for alias, books in event_players.items():
+            player_out = output.setdefault(alias, {})
+            for book_key, markets in books.items():
+                book_out = player_out.setdefault(book_key, {})
+                book_out.update(markets)
+    return output

@@ -10,7 +10,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from . import ratelimit
-from .config import API_KEY, DATA_DIR, EVENTS_URL
+from .config import API_KEY, BASE_URL, DATA_DIR, EVENTS_URL
 
 REQ_TIMEOUT = (5, 20)  # (connect, read) seconds
 
@@ -28,6 +28,13 @@ _META: dict | None = None
 
 # TTL (seconds) for auto mode
 ODDS_TTL = int(os.getenv("ODDS_TTL", "43200"))  # 12h default
+
+# The /v4/sports endpoint returns current usage headers without consuming credits.
+# Poll it at most once per minute so quota display remains current without creating
+# unnecessary provider traffic when the graph explorer opens many player details.
+QUOTA_STATUS_TTL = int(os.getenv("QUOTA_STATUS_TTL", "60"))
+_QUOTA_STATUS_LOCK = threading.Lock()
+_QUOTA_STATUS_CHECKED_AT = 0.0
 
 # Debug toggle for cache timing
 _DBG = os.getenv("CACHE_DEBUG") in ("1", "true", "True") or os.getenv("API_DEBUG") in (
@@ -117,6 +124,45 @@ def _is_fresh_enough(url: str) -> bool:
         return False
     age = int(time.time()) - int(ts)
     return age < ODDS_TTL
+
+
+def refresh_quota_status(force: bool = False) -> dict:
+    """Refresh current Odds API usage headers without consuming usage credits.
+
+    The provider's ``GET /v4/sports`` endpoint reports the same usage headers as
+    odds calls but has a quota cost of zero.  Keep a short in-process TTL so a
+    burst of app requests shares one status check.
+    """
+    global _QUOTA_STATUS_CHECKED_AT
+
+    details = ratelimit.get_details()
+    if not API_KEY:
+        return details
+
+    now = time.monotonic()
+    if (
+        not force
+        and details.get("remaining") is not None
+        and now - _QUOTA_STATUS_CHECKED_AT < QUOTA_STATUS_TTL
+    ):
+        return details
+
+    with _QUOTA_STATUS_LOCK:
+        details = ratelimit.get_details()
+        now = time.monotonic()
+        if (
+            not force
+            and details.get("remaining") is not None
+            and now - _QUOTA_STATUS_CHECKED_AT < QUOTA_STATUS_TTL
+        ):
+            return details
+
+        url = f"{BASE_URL}/sports?apiKey={API_KEY}"
+        resp = _SESSION.get(url, timeout=REQ_TIMEOUT)
+        resp.raise_for_status()
+        ratelimit.update_from_response(resp.headers, "quota_status")
+        _QUOTA_STATUS_CHECKED_AT = time.monotonic()
+        return ratelimit.get_details()
 
 
 def get_nfl_events(

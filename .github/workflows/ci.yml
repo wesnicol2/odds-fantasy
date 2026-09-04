@@ -1,8 +1,5 @@
 name: CI
 
-# The only entrypoint. Everything else in this directory is a reusable
-# workflow called from here, so there is exactly one place to look when you
-# want to know what runs on a push.
 on:
   push:
     branches:
@@ -10,17 +7,13 @@ on:
       - "dev/**"
       - "feature/**"
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Maps branch -> environment tag. See CONTRIBUTING.md "Environments".
-  #   feature/** -> :test    (Test)
-  #   main       -> :latest  (Production)
-  # dev/** derives no tag on purpose: the publish job is gated on a non-empty
-  # tag, so dev branches get lint and test but deploy nowhere.
   tag:
     runs-on: ubuntu-latest
     outputs:
@@ -28,14 +21,16 @@ jobs:
     steps:
       - name: Derive image tag from ref
         id: derive
+        env:
+          REF: ${{ github.ref }}
         run: |
-          case "${{ github.ref }}" in
+          case "$REF" in
             refs/heads/main)       tag=latest ;;
             refs/heads/feature/*)  tag=test ;;
             *)                     tag= ;;
           esac
           echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "ref=${{ github.ref }} -> tag=${tag:-<none>}"
+          echo "ref=$REF -> tag=${tag:-<none>}"
 
   lint:
     uses: ./.github/workflows/lint.yml
@@ -43,11 +38,27 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
 
+  smoke:
+    needs: [lint, test]
+    if: >-
+      startsWith(github.ref, 'refs/heads/feature/') ||
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    uses: ./.github/workflows/smoke.yml
+
   publish:
-    needs: [tag, lint, test]
-    # A pull request proves the code is good; the merge is what deploys.
-    if: github.event_name == 'push' && needs.tag.outputs.image_tag != ''
+    needs: [tag, lint, test, smoke]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.tag.outputs.image_tag != '' &&
+      needs.lint.result == 'success' &&
+      needs.test.result == 'success' &&
+      needs.smoke.result == 'success'
     uses: ./.github/workflows/publish.yml
     with:
       image_tag: ${{ needs.tag.outputs.image_tag }}
     secrets: inherit
+    permissions:
+      contents: read
+      packages: write

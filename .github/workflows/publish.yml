@@ -7,6 +7,9 @@ on:
         description: "GHCR tag to publish (test | latest)"
         required: true
         type: string
+    secrets:
+      GHCR_TOKEN:
+        required: true
 
 jobs:
   publish:
@@ -38,13 +41,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/odds-fantasy
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=${{ inputs.image_tag }}
             type=sha,format=short
 
-      # Watchtower on the home server polls this tag and recreates the matching
-      # container when the digest changes. CI never touches the server.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -52,8 +53,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Stamped into the image and surfaced by /health, so the UI footer
-          # can say exactly which commit is running on Test or Production.
           build-args: |
             GIT_COMMIT=${{ github.sha }}
             GIT_BRANCH=${{ github.ref_name }}
