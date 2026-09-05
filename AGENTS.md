@@ -1,7 +1,8 @@
 # Odds Fantasy — implementation notes
 
-`README.md` explains use, `CONTRIBUTING.md` owns process, and
-`docs/fantasy-projection-methodology.md` is the mathematical contract.
+`README.md` explains use, `CONTRIBUTING.md` owns process,
+`docs/fantasy-projection-methodology.md` is the mathematical contract, and
+`docs/design.md` is the UI/visualization contract.
 
 ## Product boundary
 
@@ -120,3 +121,4 @@ This catches broken Docker entrypoints, static assets, JavaScript wiring and pri
 - Architecture/reasoning: update this file.
 - Process changes: update CONTRIBUTING explicitly.
 - Durable model behavior belongs in `docs/fantasy-projection-methodology.md`.
+- Durable UI and visualization behavior belongs in `docs/design.md`; implementation choices stay here.
