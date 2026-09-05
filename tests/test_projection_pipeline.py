@@ -140,7 +140,14 @@ class ProjectionPipelineTest(unittest.TestCase):
         player = next(row for row in self._run()["players"] if row["name"] == "Beta Receiver")
         self.assertTrue(player["has_projection"])
         self.assertAlmostEqual(player["mean"], 4.0, places=6)
-        self.assertEqual({point["x"] for point in player["curve"]}, {0.0, 8.0})
+        self.assertEqual(player["floor"], 0.0)
+        self.assertEqual(player["ceiling"], 8.0)
+        self.assertEqual(player["curve"][0]["x"], 0.0)
+        self.assertEqual(player["curve"][-1]["x"], 8.0)
+        self.assertGreaterEqual(
+            player["curve"][0]["survival"],
+            player["curve"][-1]["survival"],
+        )
 
     def test_no_lines_does_not_fabricate_zero_projection(self):
         player = next(row for row in self._run()["players"] if row["name"] == "Bye Week WR")
