@@ -12,7 +12,7 @@ interface LineupViewProps {
 const TARGETS: LineupTarget[] = ['floor', 'mid', 'ceiling'];
 
 function label(value: LineupTarget): string {
-  return value[0].toUpperCase() + value.slice(1);
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function formatValue(value: number | null): string {
@@ -58,7 +58,9 @@ export function LineupView({
         </fieldset>
       </header>
 
-      {loading ? <div className="decision-loading">Optimizing modeled starter slots…</div> : null}
+      {loading ? (
+        <div className="decision-loading">Optimizing modeled starter slots…</div>
+      ) : null}
       {error ? <div className="error-state">{error}</div> : null}
       {!loading && !error && payload ? (
         <>
@@ -84,7 +86,9 @@ export function LineupView({
               <tbody>
                 {payload.lineup.map((row) => (
                   <tr key={`${row.slot}:${row.name}`}>
-                    <td><strong>{row.slot}</strong></td>
+                    <td>
+                      <strong>{row.slot}</strong>
+                    </td>
                     <td>{row.name}</td>
                     <td>{row.pos}</td>
                     <td>{row.team || '—'}</td>
