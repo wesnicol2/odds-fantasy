@@ -1,11 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isCountMetric, metricLabel, sortMetrics } from './analysis/metrics';
-import { fetchPlayerDetails, fetchProjections, MissingIdentityError } from './api/client';
+import {
+  fetchBestLineup,
+  fetchDefenses,
+  fetchPlayerDetails,
+  fetchProjections,
+  MissingIdentityError,
+} from './api/client';
+import { DefenseView } from './components/DefenseView';
+import { LineupView } from './components/LineupView';
 import { PlayerInspector } from './components/PlayerInspector';
 import { PlayerRanking } from './components/PlayerRanking';
 import { ProbabilityChart } from './components/ProbabilityChart';
 import { useWorkspaceStore } from './state/workspace';
-import type { ChartEvidence, PlayerOddsDetails, ProjectionResponse } from './types';
+import type {
+  ChartEvidence,
+  DefenseResponse,
+  LineupResponse,
+  PlayerOddsDetails,
+  ProjectionResponse,
+} from './types';
 
 const views = [
   ['players', 'Players'],
@@ -17,11 +31,16 @@ function detailsKey(week: string, player: string): string {
   return `${week}:${player}`;
 }
 
+function lineupKey(week: string, target: string): string {
+  return `${week}:${target}`;
+}
+
 export function App() {
   const view = useWorkspaceStore((state) => state.view);
   const week = useWorkspaceStore((state) => state.week);
   const metric = useWorkspaceStore((state) => state.metric);
   const target = useWorkspaceStore((state) => state.targetFantasyPoints);
+  const lineupTarget = useWorkspaceStore((state) => state.lineupTarget);
   const selectedPlayer = useWorkspaceStore((state) => state.selectedPlayer);
   const selectedPlayers = useWorkspaceStore((state) => state.selectedPlayers);
   const selectedPositions = useWorkspaceStore((state) => state.selectedPositions);
@@ -29,6 +48,7 @@ export function App() {
   const setWeek = useWorkspaceStore((state) => state.setWeek);
   const setMetric = useWorkspaceStore((state) => state.setMetric);
   const setTarget = useWorkspaceStore((state) => state.setTargetFantasyPoints);
+  const setLineupTarget = useWorkspaceStore((state) => state.setLineupTarget);
   const selectPlayer = useWorkspaceStore((state) => state.selectPlayer);
   const setSelectedPlayers = useWorkspaceStore((state) => state.setSelectedPlayers);
   const setSelectedPositions = useWorkspaceStore((state) => state.setSelectedPositions);
@@ -39,8 +59,16 @@ export function App() {
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
   const [detailsByKey, setDetailsByKey] = useState<Record<string, PlayerOddsDetails>>({});
   const [loadingDetailKeys, setLoadingDetailKeys] = useState<string[]>([]);
+  const [defensePayload, setDefensePayload] = useState<DefenseResponse | null>(null);
+  const [defenseLoading, setDefenseLoading] = useState(false);
+  const [defenseError, setDefenseError] = useState<string | null>(null);
+  const [lineupPayload, setLineupPayload] = useState<LineupResponse | null>(null);
+  const [lineupLoading, setLineupLoading] = useState(false);
+  const [lineupError, setLineupError] = useState<string | null>(null);
   const detailsRef = useRef<Record<string, PlayerOddsDetails>>({});
   const detailInflightRef = useRef(new Set<string>());
+  const defensesRef = useRef<Record<string, DefenseResponse>>({});
+  const lineupsRef = useRef<Record<string, LineupResponse>>({});
   const initializedWeekRef = useRef<string | null>(null);
 
   const loadPlayerDetails = useCallback(
@@ -118,6 +146,63 @@ export function App() {
     if (metric === 'fantasy_points') return;
     for (const player of selectedPlayers) void loadPlayerDetails(player);
   }, [metric, selectedPlayers, loadPlayerDetails]);
+
+  useEffect(() => {
+    if (view !== 'defenses') return;
+    const cached = defensesRef.current[week];
+    if (cached) {
+      setDefensePayload(cached);
+      setDefenseError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setDefenseLoading(true);
+    setDefenseError(null);
+    fetchDefenses(week, controller.signal)
+      .then((payload) => {
+        defensesRef.current = { ...defensesRef.current, [week]: payload };
+        setDefensePayload(payload);
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setDefenseError(reason instanceof Error ? reason.message : 'Could not load defenses.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDefenseLoading(false);
+      });
+    return () => controller.abort();
+  }, [view, week]);
+
+  useEffect(() => {
+    if (view !== 'lineup') return;
+    const key = lineupKey(week, lineupTarget);
+    const cached = lineupsRef.current[key];
+    if (cached) {
+      setLineupPayload(cached);
+      setLineupError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLineupLoading(true);
+    setLineupError(null);
+    fetchBestLineup(week, lineupTarget, controller.signal)
+      .then((payload) => {
+        lineupsRef.current = { ...lineupsRef.current, [key]: payload };
+        setLineupPayload(payload);
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setLineupError(reason instanceof Error ? reason.message : 'Could not build lineup.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLineupLoading(false);
+      });
+    return () => controller.abort();
+  }, [lineupTarget, view, week]);
 
   const players = report?.players ?? [];
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
@@ -352,15 +437,21 @@ export function App() {
             />
           </aside>
         </main>
-      ) : (
-        <main className="pending-view">
-          <span className="eyebrow">Migration in progress</span>
-          <h2>{view === 'defenses' ? 'Defense analysis' : 'Best lineup'}</h2>
-          <p>
-            This section remains on the existing runtime until its workstation view reaches parity.
-          </p>
-        </main>
-      )}
+      ) : null}
+
+      {view === 'defenses' ? (
+        <DefenseView payload={defensePayload} loading={defenseLoading} error={defenseError} />
+      ) : null}
+
+      {view === 'lineup' ? (
+        <LineupView
+          payload={lineupPayload}
+          target={lineupTarget}
+          loading={lineupLoading}
+          error={lineupError}
+          onTargetChange={setLineupTarget}
+        />
+      ) : null}
     </div>
   );
 }
