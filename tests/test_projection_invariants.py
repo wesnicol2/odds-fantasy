@@ -1,5 +1,6 @@
 """Regression invariants exposed by the cache-wide mathematical audit."""
 
+import itertools
 import math
 import unittest
 
@@ -88,9 +89,7 @@ class NegativeFantasyPointInvariantTest(unittest.TestCase):
     def test_fantasy_survival_is_monotonic_for_negative_samples(self):
         curve = survival_curve(self.projection.samples)
         probabilities = [point["survival"] for point in curve]
-        self.assertTrue(
-            all(a >= b for a, b in zip(probabilities, probabilities[1:], strict=False))
-        )
+        self.assertTrue(all(a >= b for a, b in itertools.pairwise(probabilities)))
 
     def test_seed_is_deterministic(self):
         repeated = project_player(self.odds, {"pass_int": -1})
