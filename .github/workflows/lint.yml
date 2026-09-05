@@ -29,3 +29,33 @@ jobs:
       # Catches syntax errors in anything ruff happened to skip.
       - name: Compile check
         run: python -m compileall -q oddsfantasy tests
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Bootstrap only: the lockfile produced here is committed before this dev PR merges,
+      # then this becomes npm ci. Direct dependencies are already exact-pinned.
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+
+      - name: Frontend format and lint
+        working-directory: frontend
+        run: npm run check
+
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload bootstrap lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-package-lock
+          path: frontend/package-lock.json
+          retention-days: 1
