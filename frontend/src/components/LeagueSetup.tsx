@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchLeagueResolution, fetchUserLeagues } from '../api/client';
 import { getCookie, saveLeagueIdentity } from '../identity';
 import type { LeagueResolution, SleeperLeagueSummary } from '../types';
@@ -26,6 +26,7 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
   const [selectedRosterId, setSelectedRosterId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -38,6 +39,11 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
     setBusy(false);
     setError(null);
   }, [open]);
+
+  useEffect(() => {
+    if (!open || step !== 'username') return;
+    usernameInputRef.current?.focus();
+  }, [open, step]);
 
   if (!open) return null;
 
@@ -108,20 +114,30 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
 
   return (
     <div className="setup-backdrop">
-      <section className="setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+      <section
+        className="setup-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="setup-title"
+      >
         <header className="setup-header">
           <div>
             <span className="eyebrow">Sleeper identity</span>
             <h2 id="setup-title">Set up your league</h2>
           </div>
           {!required ? (
-            <button type="button" className="setup-close" onClick={onClose} aria-label="Close league setup">
+            <button
+              type="button"
+              className="setup-close"
+              onClick={onClose}
+              aria-label="Close league setup"
+            >
               ×
             </button>
           ) : null}
         </header>
 
-        <div className="setup-progress" aria-label="Setup progress">
+        <div className="setup-progress" role="group" aria-label="Setup progress">
           <span className={step === 'username' ? 'active' : ''}>1 Username</span>
           <span className={step === 'league' ? 'active' : ''}>2 League</span>
           <span className={step === 'team' ? 'active' : ''}>3 Team</span>
@@ -138,12 +154,12 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
             <label className="setup-field">
               <span>Sleeper username</span>
               <input
+                ref={usernameInputRef}
                 type="text"
                 autoComplete="username"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 placeholder="Sleeper username"
-                autoFocus
               />
             </label>
             <div className="setup-actions">
@@ -164,7 +180,10 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
           >
             <label className="setup-field">
               <span>League for {username}</span>
-              <select value={selectedLeagueId} onChange={(event) => setSelectedLeagueId(event.target.value)}>
+              <select
+                value={selectedLeagueId}
+                onChange={(event) => setSelectedLeagueId(event.target.value)}
+              >
                 <option value="">Choose a league…</option>
                 {leagues.map((row) => (
                   <option key={row.league_id} value={row.league_id}>
@@ -194,7 +213,10 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
           >
             <label className="setup-field">
               <span>Team in {league.name || 'this league'}</span>
-              <select value={selectedRosterId} onChange={(event) => setSelectedRosterId(event.target.value)}>
+              <select
+                value={selectedRosterId}
+                onChange={(event) => setSelectedRosterId(event.target.value)}
+              >
                 <option value="">Choose a team…</option>
                 {league.teams.map((row) => (
                   <option key={row.roster_id} value={String(row.roster_id)}>
@@ -214,7 +236,11 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
           </form>
         ) : null}
 
-        {error ? <div className="setup-error" role="alert">{error}</div> : null}
+        {error ? (
+          <div className="setup-error" role="alert">
+            {error}
+          </div>
+        ) : null}
       </section>
     </div>
   );
