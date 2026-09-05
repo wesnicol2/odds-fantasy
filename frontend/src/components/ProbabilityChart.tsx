@@ -74,15 +74,16 @@ export function ProbabilityChart({ series, target, onPlayerHover }: ProbabilityC
         smooth: false,
         emphasis: { focus: 'series' },
         data: item.points.map((point) => [point.x, point.probability]),
-        markLine:
-          index === 0 && target !== null
-            ? {
+        ...(index === 0 && target !== null
+          ? {
+              markLine: {
                 symbol: 'none',
                 silent: true,
                 label: { formatter: `Target ${target.toFixed(1)}` },
                 data: [{ xAxis: target }],
-              }
-            : undefined,
+              },
+            }
+          : {}),
       })),
     };
 
