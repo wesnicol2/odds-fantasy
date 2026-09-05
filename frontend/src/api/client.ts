@@ -1,5 +1,10 @@
-import type { WeekWindow } from '../state/workspace';
-import type { PlayerOddsDetails, ProjectionResponse } from '../types';
+import type { LineupTarget, WeekWindow } from '../state/workspace';
+import type {
+  DefenseResponse,
+  LineupResponse,
+  PlayerOddsDetails,
+  ProjectionResponse,
+} from '../types';
 
 function getCookie(name: string): string | null {
   const key = `${name}=`;
@@ -49,6 +54,14 @@ async function fetchJson<T extends { error?: string }>(
   return payload;
 }
 
+function commonParams(week: WeekWindow): URLSearchParams {
+  const params = identityParams();
+  if (!params) throw new MissingIdentityError();
+  params.set('week', week);
+  params.set('mode', 'auto');
+  return params;
+}
+
 export class MissingIdentityError extends Error {
   constructor() {
     super('No saved Sleeper league identity was found.');
@@ -60,11 +73,7 @@ export async function fetchProjections(
   week: WeekWindow,
   signal?: AbortSignal,
 ): Promise<ProjectionResponse> {
-  const params = identityParams();
-  if (!params) throw new MissingIdentityError();
-  params.set('week', week);
-  params.set('mode', 'auto');
-  return fetchJson<ProjectionResponse>('/projections', params, signal);
+  return fetchJson<ProjectionResponse>('/projections', commonParams(week), signal);
 }
 
 export async function fetchPlayerDetails(
@@ -72,10 +81,24 @@ export async function fetchPlayerDetails(
   week: WeekWindow,
   signal?: AbortSignal,
 ): Promise<PlayerOddsDetails> {
-  const params = identityParams();
-  if (!params) throw new MissingIdentityError();
+  const params = commonParams(week);
   params.set('name', name);
-  params.set('week', week);
-  params.set('mode', 'auto');
   return fetchJson<PlayerOddsDetails>('/player/odds', params, signal);
+}
+
+export async function fetchDefenses(
+  week: WeekWindow,
+  signal?: AbortSignal,
+): Promise<DefenseResponse> {
+  return fetchJson<DefenseResponse>('/defenses', commonParams(week), signal);
+}
+
+export async function fetchBestLineup(
+  week: WeekWindow,
+  target: LineupTarget,
+  signal?: AbortSignal,
+): Promise<LineupResponse> {
+  const params = commonParams(week);
+  params.set('target', target);
+  return fetchJson<LineupResponse>('/best-lineup', params, signal);
 }
