@@ -136,6 +136,8 @@ def application(environ, start_response):
             return _serve_static(start_response, "")
         if path.startswith("/ui/"):
             return _serve_static(start_response, path[len("/ui/") :])
+        if path.startswith("/assets/"):
+            return _serve_static(start_response, path.lstrip("/"))
 
         if path == "/health":
             return _json_response(
