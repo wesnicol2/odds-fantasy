@@ -2,7 +2,7 @@
 
 Each sportsbook market is reconstructed in :mod:`oddsfantasy.market_math`, each
 sampled stat is scored with the league rules in :mod:`oddsfantasy.scoring`, and
-the stat point values are summed into one player-level distribution.  Floor,
+the stat point values are summed into one player-level distribution. Floor,
 mid and ceiling are the 10th, 50th and 90th percentiles of that same curve.
 """
 
@@ -12,6 +12,7 @@ import bisect
 import random
 from dataclasses import dataclass, field
 
+from .aggregator import PLAYER_POSITION_META_KEY
 from .market_math import (
     CountDistribution,
     build_distribution,
@@ -100,22 +101,45 @@ def _base_market_key(market_key: str) -> str:
     return market_key[: -len("_alternate")] if market_key.endswith("_alternate") else market_key
 
 
-def candidate_markets(per_bookmaker_odds: dict, scoring: ScoringConfig) -> list[str]:
+def _position_from_odds(per_bookmaker_odds: dict) -> str | None:
+    """Read position metadata attached during weekly odds normalization."""
+    for markets in (per_bookmaker_odds or {}).values():
+        if not isinstance(markets, dict):
+            continue
+        metadata = markets.get(PLAYER_POSITION_META_KEY)
+        if not isinstance(metadata, dict):
+            continue
+        position = str(metadata.get("value") or "").upper()
+        if position:
+            return position
+    return None
+
+
+def candidate_markets(
+    per_bookmaker_odds: dict,
+    scoring: ScoringConfig,
+    position: str | None = None,
+) -> list[str]:
     """Markets present in the feed that the methodology can model and score."""
     keys: set[str] = set()
     for markets in (per_bookmaker_odds or {}).values():
-        for market_key in markets or {}:
+        if not isinstance(markets, dict):
+            continue
+        for market_key in markets:
+            if market_key == PLAYER_POSITION_META_KEY:
+                continue
             keys.add(_base_market_key(str(market_key)))
     modeled = [k for k in sorted(keys) if is_count_market(k) or is_continuous_market(k)]
-    return [k for k in modeled if scoring.for_market(k) is not None]
+    return [k for k in modeled if scoring.for_market(k, position=position) is not None]
 
 
 def build_stat_projection(
     per_bookmaker_odds: dict,
     market_key: str,
     scoring: ScoringConfig,
+    position: str | None = None,
 ) -> StatProjection | None:
-    stat_scoring = scoring.for_market(market_key)
+    stat_scoring = scoring.for_market(market_key, position=position)
     if stat_scoring is None:
         return None
     distribution = build_distribution(per_bookmaker_odds, market_key)
@@ -156,18 +180,30 @@ def project_player(
     scoring_rules: dict | ScoringConfig,
     draws: int = DEFAULT_DRAWS,
     seed: int = DEFAULT_SEED,
+    position: str | None = None,
 ) -> PlayerProjection:
-    """Full fantasy-points curve for one player, from their sportsbook odds."""
+    """Full fantasy-points curve for one player, from their sportsbook odds.
+
+    Position may be supplied explicitly by callers. Normal app data carries the
+    same value as non-market metadata from the roster/game plan, so existing
+    service call sites automatically get position-aware anytime-TD scoring.
+    """
     scoring = (
         scoring_rules
         if isinstance(scoring_rules, ScoringConfig)
         else ScoringConfig.from_settings(scoring_rules)
     )
+    resolved_position = str(position or _position_from_odds(per_bookmaker_odds) or "").upper() or None
 
     stats: dict[str, StatProjection] = {}
-    for market_key in candidate_markets(per_bookmaker_odds, scoring):
+    for market_key in candidate_markets(per_bookmaker_odds, scoring, position=resolved_position):
         try:
-            stat = build_stat_projection(per_bookmaker_odds, market_key, scoring)
+            stat = build_stat_projection(
+                per_bookmaker_odds,
+                market_key,
+                scoring,
+                position=resolved_position,
+            )
         except Exception:
             stat = None
         if stat is not None:
