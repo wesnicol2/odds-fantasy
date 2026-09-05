@@ -1,5 +1,5 @@
-import type { ProjectionResponse } from '../types';
 import type { WeekWindow } from '../state/workspace';
+import type { ProjectionResponse } from '../types';
 
 function getCookie(name: string): string | null {
   const key = `${name}=`;

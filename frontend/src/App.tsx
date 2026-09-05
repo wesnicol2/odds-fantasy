@@ -41,7 +41,9 @@ export function App() {
       .then((payload) => {
         setReport(payload);
         if (initializedWeekRef.current !== week) {
-          const positions = [...new Set(payload.players.map((player) => player.pos).filter(Boolean))];
+          const positions = [
+            ...new Set(payload.players.map((player) => player.pos).filter(Boolean)),
+          ];
           const graphed = payload.players
             .filter((player) => player.curve.length > 0)
             .map((player) => player.name);
@@ -243,7 +245,9 @@ export function App() {
         <main className="pending-view">
           <span className="eyebrow">Migration in progress</span>
           <h2>{view === 'defenses' ? 'Defense analysis' : 'Best lineup'}</h2>
-          <p>This section remains on the existing runtime until its workstation view reaches parity.</p>
+          <p>
+            This section remains on the existing runtime until its workstation view reaches parity.
+          </p>
         </main>
       )}
     </div>

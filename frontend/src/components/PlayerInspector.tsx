@@ -30,9 +30,18 @@ export function PlayerInspector({ player, target }: PlayerInspectorProps) {
       {player.has_projection ? (
         <>
           <dl className="projection-summary">
-            <div><dt>Floor</dt><dd>{formatPoints(player.floor)}</dd></div>
-            <div className="emphasis"><dt>Mid</dt><dd>{formatPoints(player.mid)}</dd></div>
-            <div><dt>Ceiling</dt><dd>{formatPoints(player.ceiling)}</dd></div>
+            <div>
+              <dt>Floor</dt>
+              <dd>{formatPoints(player.floor)}</dd>
+            </div>
+            <div className="emphasis">
+              <dt>Mid</dt>
+              <dd>{formatPoints(player.mid)}</dd>
+            </div>
+            <div>
+              <dt>Ceiling</dt>
+              <dd>{formatPoints(player.ceiling)}</dd>
+            </div>
           </dl>
 
           {target !== null ? (
@@ -45,9 +54,18 @@ export function PlayerInspector({ player, target }: PlayerInspectorProps) {
           <div className="inspector-section">
             <div className="section-label">Model summary</div>
             <dl className="detail-list">
-              <div><dt>Mean</dt><dd>{formatPoints(player.mean)}</dd></div>
-              <div><dt>Sportsbooks</dt><dd>{player.books_used}</dd></div>
-              <div><dt>Modeled markets</dt><dd>{player.markets_used}</dd></div>
+              <div>
+                <dt>Mean</dt>
+                <dd>{formatPoints(player.mean)}</dd>
+              </div>
+              <div>
+                <dt>Sportsbooks</dt>
+                <dd>{player.books_used}</dd>
+              </div>
+              <div>
+                <dt>Modeled markets</dt>
+                <dd>{player.markets_used}</dd>
+              </div>
             </dl>
           </div>
         </>

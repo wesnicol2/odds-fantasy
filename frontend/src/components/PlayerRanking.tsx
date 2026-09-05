@@ -57,7 +57,9 @@ export function PlayerRanking({
     const filtered = players.filter((player) => {
       if (!selectedPositions.includes(player.pos)) return false;
       if (!normalizedQuery) return true;
-      return `${player.name} ${player.pos} ${player.team ?? ''}`.toLowerCase().includes(normalizedQuery);
+      return `${player.name} ${player.pos} ${player.team ?? ''}`
+        .toLowerCase()
+        .includes(normalizedQuery);
     });
 
     if (target === null) return filtered;
@@ -96,8 +98,12 @@ export function PlayerRanking({
         </fieldset>
         <div className="compare-actions">
           <span>{comparedPlayers.length} graphed</span>
-          <button type="button" onClick={onSelectAll}>All</button>
-          <button type="button" onClick={onSelectNone}>None</button>
+          <button type="button" onClick={onSelectAll}>
+            All
+          </button>
+          <button type="button" onClick={onSelectNone}>
+            None
+          </button>
         </div>
       </div>
 
@@ -105,13 +111,17 @@ export function PlayerRanking({
         <table className="ranking-table">
           <thead>
             <tr>
-              <th className="compare-column"><span className="sr-only">Graph</span></th>
+              <th className="compare-column">
+                <span className="sr-only">Graph</span>
+              </th>
               <th>Player</th>
               <th className="number">Floor</th>
               <th className="number">Mid</th>
               <th className="number">Ceil</th>
               <th>Range</th>
-              {target !== null ? <th className="number target-column">≥ {target.toFixed(1)}</th> : null}
+              {target !== null ? (
+                <th className="number target-column">≥ {target.toFixed(1)}</th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -119,7 +129,8 @@ export function PlayerRanking({
               const isSelected = player.name === selectedPlayer;
               const isHovered = player.name === hoveredPlayer;
               const targetProbability = probabilityAtTarget(player.curve, target);
-              const hasRange = player.floor !== null && player.mid !== null && player.ceiling !== null;
+              const hasRange =
+                player.floor !== null && player.mid !== null && player.ceiling !== null;
               const floorPercent = hasRange
                 ? glyphPercent(player.floor ?? 0, glyphMinimum, glyphMaximum)
                 : 0;
@@ -153,7 +164,9 @@ export function PlayerRanking({
                       onClick={() => onSelectPlayer(player.name)}
                     >
                       <strong>{player.name}</strong>
-                      <span>{player.pos} · {player.team || 'Team unavailable'}</span>
+                      <span>
+                        {player.pos} · {player.team || 'Team unavailable'}
+                      </span>
                       {!player.has_projection ? <small>no priced markets</small> : null}
                     </button>
                   </td>
@@ -169,11 +182,17 @@ export function PlayerRanking({
                       >
                         <span
                           className="range-segment"
-                          style={{ left: `${floorPercent}%`, width: `${ceilingPercent - floorPercent}%` }}
+                          style={{
+                            left: `${floorPercent}%`,
+                            width: `${ceilingPercent - floorPercent}%`,
+                          }}
                         />
                         <span className="range-end floor" style={{ left: `${floorPercent}%` }} />
                         <span className="range-mid" style={{ left: `${midPercent}%` }} />
-                        <span className="range-end ceiling" style={{ left: `${ceilingPercent}%` }} />
+                        <span
+                          className="range-end ceiling"
+                          style={{ left: `${ceilingPercent}%` }}
+                        />
                       </div>
                     ) : (
                       <span className="subtle">—</span>
