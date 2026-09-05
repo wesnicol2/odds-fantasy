@@ -55,6 +55,13 @@ COUNT_MARKETS = {
 # Probabilities are clamped this far from 0/1 before any inverse-normal call.
 _EPS = 1e-6
 
+# A valid two-way sportsbook quote should include non-negative margin, so the
+# raw implied probabilities should sum to at least one. A materially smaller
+# total means the paired sides are stale/mismatched (or otherwise not one
+# coherent quote) and must not be de-vigged together. Keep a tiny tolerance for
+# decimal serialization noise around exactly 1.0.
+_MIN_VALID_TWO_WAY_TOTAL = 1.0 - 1e-9
+
 # How many integer buckets above the highest *fitted* count anchor we are
 # willing to enumerate when a sparse ladder forces a parametric fill.
 _MAX_COUNT = 12
@@ -179,12 +186,14 @@ def _sides_from_market(market: dict) -> list[tuple[float, float | None, float | 
 def _book_anchors(book_markets: dict, market_key: str) -> list[Anchor]:
     """Fair P(over) at every threshold one book posts for a market (§2.1).
 
-    A two-way line is de-vigged proportionally. A one-sided rung of an
-    alternate ladder ("125+" with no under) can't be de-vigged as a two-way
-    market, so it is corrected by that same book's *own* measured overround on
-    this market -- its margin, taken from its two-way lines, not a constant we
-    picked. If the book posts no two-way line here, the raw implied probability
-    is used and simply carries the vig.
+    A coherent two-way line is de-vigged proportionally. A paired quote whose
+    raw implied probabilities sum to less than one is rejected instead of being
+    treated as one market, because that normally means stale/mismatched sides.
+    A one-sided rung of an alternate ladder ("125+" with no under) can't be
+    de-vigged as a two-way market, so it is corrected by that same book's *own*
+    measured overround on this market -- its margin, taken only from valid
+    two-way lines, not a constant we picked. If the book posts no valid two-way
+    line here, the raw implied probability is used and simply carries the vig.
     """
     rows: list[tuple[float, float | None, float | None]] = []
     for key in (market_key, f"{market_key}_alternate"):
@@ -197,7 +206,9 @@ def _book_anchors(book_markets: dict, market_key: str) -> list[Anchor]:
         p_over = decimal_to_probability(over_odds)
         p_under = decimal_to_probability(under_odds)
         if p_over is not None and p_under is not None:
-            overrounds.append(p_over + p_under)
+            total = p_over + p_under
+            if total >= _MIN_VALID_TWO_WAY_TOTAL:
+                overrounds.append(total)
     overround = median(overrounds) if overrounds else 1.0
     if overround <= 0:
         overround = 1.0
@@ -208,6 +219,8 @@ def _book_anchors(book_markets: dict, market_key: str) -> list[Anchor]:
         p_under = decimal_to_probability(under_odds)
         fair: float | None = None
         if p_over is not None and p_under is not None:
+            if p_over + p_under < _MIN_VALID_TWO_WAY_TOTAL:
+                continue
             devigged = devig_proportional(p_over, p_under)
             if devigged is not None:
                 fair = devigged[0]
