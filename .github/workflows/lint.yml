@@ -41,6 +41,13 @@ jobs:
         working-directory: frontend
         run: npm install --no-audit --no-fund
 
+      - name: Upload bootstrap lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-package-lock
+          path: frontend/package-lock.json
+          retention-days: 1
+
       - name: Frontend format and lint
         working-directory: frontend
         run: npm run check
@@ -52,10 +59,3 @@ jobs:
       - name: Frontend build
         working-directory: frontend
         run: npm run build
-
-      - name: Upload bootstrap lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-package-lock
-          path: frontend/package-lock.json
-          retention-days: 1
