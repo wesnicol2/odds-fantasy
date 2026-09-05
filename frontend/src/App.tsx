@@ -23,7 +23,8 @@ export function App() {
           <div className="eyebrow">Decision support</div>
           <h1>Odds Fantasy</h1>
         </div>
-        <div className="topbar-controls" role="group" aria-label="Week window">
+        <fieldset className="topbar-controls">
+          <legend className="sr-only">Week window</legend>
           <button
             className={week === 'this' ? 'active' : ''}
             onClick={() => setWeek('this')}
@@ -38,7 +39,7 @@ export function App() {
           >
             Next week
           </button>
-        </div>
+        </fieldset>
       </header>
 
       <nav className="primary-nav" aria-label="Analysis view">
