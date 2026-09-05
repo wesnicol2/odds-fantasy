@@ -1,36 +1,26 @@
-import type { LineupTarget, WeekWindow } from '../state/workspace';
+import { currentNflSeason, savedLeagueIdentity } from '../identity';
+import type { DataMode, LineupTarget, WeekWindow } from '../state/workspace';
 import type {
   DefenseResponse,
+  LeagueResolution,
   LineupResponse,
   PlayerOddsDetails,
   ProjectionResponse,
+  UserLeaguesResponse,
 } from '../types';
-
-function getCookie(name: string): string | null {
-  const key = `${name}=`;
-  const row = document.cookie.split('; ').find((item) => item.startsWith(key));
-  return row ? decodeURIComponent(row.slice(key.length)) : null;
-}
-
-function currentNflSeason(): string {
-  const now = new Date();
-  return String(now.getUTCMonth() + 1 >= 3 ? now.getUTCFullYear() : now.getUTCFullYear() - 1);
-}
 
 function identityParams(): URLSearchParams | null {
   const params = new URLSearchParams();
-  const leagueId = getCookie('league_id');
-  const rosterId = getCookie('roster_id');
+  const identity = savedLeagueIdentity();
 
-  if (leagueId && rosterId) {
-    params.set('league_id', leagueId);
-    params.set('roster_id', rosterId);
+  if (identity.leagueId && identity.rosterId) {
+    params.set('league_id', identity.leagueId);
+    params.set('roster_id', identity.rosterId);
     return params;
   }
 
-  const username = getCookie('sleeper_username');
-  if (!username) return null;
-  params.set('username', username);
+  if (!identity.username) return null;
+  params.set('username', identity.username);
   params.set('season', currentNflSeason());
   return params;
 }
@@ -46,7 +36,8 @@ async function fetchJson<T extends { error?: string }>(
   params: URLSearchParams,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(`${path}?${params.toString()}`, requestInit(signal));
+  const query = params.toString();
+  const response = await fetch(query ? `${path}?${query}` : path, requestInit(signal));
   const payload = (await response.json()) as T;
   if (!response.ok) {
     throw new Error(payload.error || `Request failed (${response.status}).`);
@@ -54,11 +45,11 @@ async function fetchJson<T extends { error?: string }>(
   return payload;
 }
 
-function commonParams(week: WeekWindow): URLSearchParams {
+function commonParams(week: WeekWindow, mode: DataMode): URLSearchParams {
   const params = identityParams();
   if (!params) throw new MissingIdentityError();
   params.set('week', week);
-  params.set('mode', 'auto');
+  params.set('mode', mode);
   return params;
 }
 
@@ -69,36 +60,56 @@ export class MissingIdentityError extends Error {
   }
 }
 
+export async function fetchUserLeagues(
+  username: string,
+  signal?: AbortSignal,
+): Promise<UserLeaguesResponse> {
+  const params = new URLSearchParams({ username, season: currentNflSeason() });
+  return fetchJson<UserLeaguesResponse>('/user/leagues', params, signal);
+}
+
+export async function fetchLeagueResolution(
+  leagueId: string,
+  signal?: AbortSignal,
+): Promise<LeagueResolution> {
+  const params = new URLSearchParams({ league_id: leagueId });
+  return fetchJson<LeagueResolution>('/league/resolve', params, signal);
+}
+
 export async function fetchProjections(
   week: WeekWindow,
+  mode: DataMode,
   signal?: AbortSignal,
 ): Promise<ProjectionResponse> {
-  return fetchJson<ProjectionResponse>('/projections', commonParams(week), signal);
+  return fetchJson<ProjectionResponse>('/projections', commonParams(week, mode), signal);
 }
 
 export async function fetchPlayerDetails(
   name: string,
   week: WeekWindow,
+  mode: DataMode,
   signal?: AbortSignal,
 ): Promise<PlayerOddsDetails> {
-  const params = commonParams(week);
+  const params = commonParams(week, mode);
   params.set('name', name);
   return fetchJson<PlayerOddsDetails>('/player/odds', params, signal);
 }
 
 export async function fetchDefenses(
   week: WeekWindow,
+  mode: DataMode,
   signal?: AbortSignal,
 ): Promise<DefenseResponse> {
-  return fetchJson<DefenseResponse>('/defenses', commonParams(week), signal);
+  return fetchJson<DefenseResponse>('/defenses', commonParams(week, mode), signal);
 }
 
 export async function fetchBestLineup(
   week: WeekWindow,
   target: LineupTarget,
+  mode: DataMode,
   signal?: AbortSignal,
 ): Promise<LineupResponse> {
-  const params = commonParams(week);
+  const params = commonParams(week, mode);
   params.set('target', target);
   return fetchJson<LineupResponse>('/best-lineup', params, signal);
 }

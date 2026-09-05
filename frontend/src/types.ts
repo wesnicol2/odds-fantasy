@@ -135,3 +135,35 @@ export interface LineupResponse {
   error?: string;
   ratelimit?: string;
 }
+
+export interface SleeperLeagueSummary {
+  league_id: string;
+  name: string | null;
+  status: string | null;
+  season: string | null;
+}
+
+export interface UserLeaguesResponse {
+  username: string;
+  user_id: string;
+  season: string;
+  leagues: SleeperLeagueSummary[];
+  error?: string;
+}
+
+export interface SleeperLeagueTeam {
+  roster_id: number;
+  owner_id?: string | null;
+  team_name: string | null;
+  display_name?: string | null;
+}
+
+export interface LeagueResolution {
+  league_id: string;
+  name: string | null;
+  season?: string | null;
+  status?: string | null;
+  roster_positions: string[];
+  teams: SleeperLeagueTeam[];
+  error?: string;
+}
