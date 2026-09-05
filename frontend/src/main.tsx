@@ -4,6 +4,7 @@ import { App } from './App';
 import './styles.css';
 import './evidence.css';
 import './decision.css';
+import './setup.css';
 
 const root = document.getElementById('root');
 if (!root) {
