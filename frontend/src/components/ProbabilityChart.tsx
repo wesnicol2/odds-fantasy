@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ProbabilitySeries } from '../types';
-import { echarts } from '../visualization/echarts';
 import type { EChartsOption, EChartsType } from '../visualization/echarts';
+import { echarts } from '../visualization/echarts';
 
 interface ProbabilityChartProps {
   series: ProbabilitySeries[];

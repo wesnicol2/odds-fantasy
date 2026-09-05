@@ -23,7 +23,7 @@ export function App() {
           <div className="eyebrow">Decision support</div>
           <h1>Odds Fantasy</h1>
         </div>
-        <div className="topbar-controls" aria-label="Week window">
+        <div className="topbar-controls" role="group" aria-label="Week window">
           <button
             className={week === 'this' ? 'active' : ''}
             onClick={() => setWeek('this')}
