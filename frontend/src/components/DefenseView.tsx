@@ -61,13 +61,17 @@ export function DefenseView({ payload, loading, error }: DefenseViewProps) {
                       <span className="row-secondary">{row.defense}</span>
                     </td>
                     <td>{row.opponent}</td>
-                    <td className="number primary-decision-value">{formatValue(row.implied_total)}</td>
+                    <td className="number primary-decision-value">
+                      {formatValue(row.implied_total)}
+                    </td>
                     <td className="number">{formatValue(row.floor)}</td>
                     <td className="number">{formatValue(row.mid)}</td>
                     <td className="number">{formatValue(row.ceiling)}</td>
                     <td className="number">{row.book_count}</td>
                     <td>
-                      <span className={`ownership ${ownershipClass(row)}`}>{ownershipLabel(row)}</span>
+                      <span className={`ownership ${ownershipClass(row)}`}>
+                        {ownershipLabel(row)}
+                      </span>
                     </td>
                   </tr>
                 ))}
