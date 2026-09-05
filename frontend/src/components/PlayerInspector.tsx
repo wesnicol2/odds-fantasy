@@ -35,7 +35,7 @@ export function PlayerInspector({
   }
 
   const targetProbability = probabilityAtTarget(player.curve, target);
-  const market = metric === 'fantasy_points' ? null : details?.markets[metric] ?? null;
+  const market = metric === 'fantasy_points' ? null : (details?.markets[metric] ?? null);
   const sportsbookCount = market
     ? new Set(market.lines.map((line) => line.book).filter(Boolean)).size
     : 0;
@@ -77,7 +77,9 @@ export function PlayerInspector({
           {metric !== 'fantasy_points' ? (
             <div className="inspector-section evidence-section">
               <div className="section-label">{metricLabel(metric)} evidence</div>
-              {detailsLoading && !market ? <p className="subtle evidence-status">Loading market evidence…</p> : null}
+              {detailsLoading && !market ? (
+                <p className="subtle evidence-status">Loading market evidence…</p>
+              ) : null}
               {!detailsLoading && !market ? (
                 <div className="empty-state">No priced market is available for this metric.</div>
               ) : null}
@@ -103,7 +105,9 @@ export function PlayerInspector({
                     <span>{sportsbookCount} books</span>
                   </div>
                   <p className="evidence-explainer">
-                    Diamonds are de-vigged cross-book consensus anchors. Small x-axis ticks are exact sportsbook thresholds. The fitted survival curve is the backend model constrained by that evidence.
+                    Diamonds are de-vigged cross-book consensus anchors. Small x-axis ticks are
+                    exact sportsbook thresholds. The fitted survival curve is the backend model
+                    constrained by that evidence.
                   </p>
                   <details className="evidence-details">
                     <summary>Explain betting lines</summary>
@@ -147,8 +151,10 @@ export function PlayerInspector({
                               </tr>
                             </thead>
                             <tbody>
-                              {market.lines.map((line, index) => (
-                                <tr key={`${line.book}:${line.source}:${line.point}:${index}`}>
+                              {market.lines.map((line) => (
+                                <tr
+                                  key={`${line.book}:${line.source}:${line.point}:${line.over_odds}:${line.under_odds}`}
+                                >
                                   <td>{line.book}</td>
                                   <td>{line.source === 'alternate' ? 'Alt' : 'Main'}</td>
                                   <td className="number">{formatValue(line.point)}</td>

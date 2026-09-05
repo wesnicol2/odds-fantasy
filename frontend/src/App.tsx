@@ -122,7 +122,7 @@ export function App() {
   const players = report?.players ?? [];
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
   const selectedDetails = selectedPlayer
-    ? detailsByKey[detailsKey(week, selectedPlayer)] ?? null
+    ? (detailsByKey[detailsKey(week, selectedPlayer)] ?? null)
     : null;
   const selectedDetailsLoading = selectedPlayer
     ? loadingDetailKeys.includes(detailsKey(week, selectedPlayer))
@@ -159,8 +159,7 @@ export function App() {
 
     return players
       .filter(
-        (player) =>
-          selectedPlayers.includes(player.name) && selectedPositions.includes(player.pos),
+        (player) => selectedPlayers.includes(player.name) && selectedPositions.includes(player.pos),
       )
       .flatMap((player) => {
         const market = detailsByKey[detailsKey(week, player.name)]?.markets[metric];
@@ -303,7 +302,8 @@ export function App() {
               ) : null}
             </div>
 
-            <div className="metric-strip" aria-label="Probability metric">
+            <fieldset className="metric-strip">
+              <legend className="sr-only">Probability metric</legend>
               {availableMetrics.map((value) => (
                 <button
                   key={value}
@@ -314,7 +314,7 @@ export function App() {
                   {metricLabel(value)}
                 </button>
               ))}
-            </div>
+            </fieldset>
 
             <div className="chart-instruction">
               {fantasyPointsMetric

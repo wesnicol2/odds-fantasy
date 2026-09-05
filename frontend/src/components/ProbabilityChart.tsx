@@ -186,7 +186,17 @@ export function ProbabilityChart({
     };
 
     chart.setOption(option, { notMerge: true });
-  }, [series, target, activePlayerId, evidence, metric, stepCurve, targetEnabled, xAxisName, yAxisName]);
+  }, [
+    series,
+    target,
+    activePlayerId,
+    evidence,
+    metric,
+    stepCurve,
+    targetEnabled,
+    xAxisName,
+    yAxisName,
+  ]);
 
   useEffect(() => {
     const chart = chartRef.current;

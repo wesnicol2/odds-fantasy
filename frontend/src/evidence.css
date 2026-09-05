@@ -9,8 +9,9 @@
   display: flex;
   gap: 2px;
   margin: 10px 0 4px;
-  padding-bottom: 6px;
+  padding: 0 0 6px;
   overflow-x: auto;
+  border: 0;
   border-bottom: 1px solid #1b2028;
 }
 

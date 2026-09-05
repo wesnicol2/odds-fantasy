@@ -47,7 +47,8 @@ export function sortMetrics(metrics: string[]): string[] {
   return [...metrics].sort((left, right) => {
     const leftIndex = METRIC_ORDER.indexOf(left as (typeof METRIC_ORDER)[number]);
     const rightIndex = METRIC_ORDER.indexOf(right as (typeof METRIC_ORDER)[number]);
-    if (leftIndex === -1 && rightIndex === -1) return metricLabel(left).localeCompare(metricLabel(right));
+    if (leftIndex === -1 && rightIndex === -1)
+      return metricLabel(left).localeCompare(metricLabel(right));
     if (leftIndex === -1) return 1;
     if (rightIndex === -1) return -1;
     return leftIndex - rightIndex;
