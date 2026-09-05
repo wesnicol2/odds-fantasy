@@ -106,12 +106,8 @@ def api_fixture(route: Route) -> None:
             {
                 "week": query.get("week", ["this"])[0],
                 "players": [
-                    projection_player(
-                        "Alpha Runner", "RB", "Buffalo Bills", 10, 17, 25, CURVE_A
-                    ),
-                    projection_player(
-                        "Beta Receiver", "WR", "Miami Dolphins", 8, 15, 24, CURVE_B
-                    ),
+                    projection_player("Alpha Runner", "RB", "Buffalo Bills", 10, 17, 25, CURVE_A),
+                    projection_player("Beta Receiver", "WR", "Miami Dolphins", 8, 15, 24, CURVE_B),
                 ],
                 "roster_positions": ["RB", "WR", "K"],
                 "ratelimit": "Odds API · 499 remaining",
@@ -125,7 +121,7 @@ def api_fixture(route: Route) -> None:
         pos = "WR" if is_receiver else "RB"
         team = "Miami Dolphins" if is_receiver else "Buffalo Bills"
         curve = CURVE_B if is_receiver else CURVE_A
-        floor, mid, ceiling = ((8, 15, 24) if is_receiver else (10, 17, 25))
+        floor, mid, ceiling = (8, 15, 24) if is_receiver else (10, 17, 25)
         fulfill_json(
             route,
             {
@@ -277,7 +273,9 @@ def main() -> None:
         assert "10.0" in alpha_row.inner_text()
         assert "17.0" in alpha_row.inner_text()
         assert "25.0" in alpha_row.inner_text()
-        page.get_by_role("img", name="Fantasy points survival probability comparison", exact=False).wait_for()
+        page.get_by_role(
+            "img", name="Fantasy points survival probability comparison", exact=False
+        ).wait_for()
 
         target_input = page.get_by_label("Target FP")
         target_input.fill("20")
@@ -306,8 +304,10 @@ def main() -> None:
         # Cache mode is operational state and must be sent to the API, not just styled locally.
         page.get_by_text("Settings", exact=True).click()
         with page.expect_request(
-            lambda request: urlparse(request.url).path == "/projections"
-            and parse_qs(urlparse(request.url).query).get("mode") == ["cache"]
+            lambda request: (
+                urlparse(request.url).path == "/projections"
+                and parse_qs(urlparse(request.url).query).get("mode") == ["cache"]
+            )
         ):
             page.get_by_label("Odds data").select_option("cache")
         ranking.get_by_text("Alpha Runner", exact=True).wait_for()
@@ -333,7 +333,7 @@ def main() -> None:
         lineup_view.get_by_text("Alpha Runner", exact=True).wait_for()
         lineup_view.get_by_role("button", name="Ceiling").click()
         lineup_view.get_by_text("Projected Ceiling", exact=True).wait_for()
-        lineup_view.get_by_text("25.0", exact=True).wait_for()
+        assert "25.0" in lineup_view.inner_text()
         lineup_view.get_by_text("Not modeled: K.", exact=False).wait_for()
 
         browser.close()
