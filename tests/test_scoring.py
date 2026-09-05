@@ -23,6 +23,7 @@ LEAGUE = {
     "bonus_rush_yd_200": 5,
     "rec": 0,
     "rec_yd": 0.1,
+    "rec_td": 6,
     "bonus_rec_yd_100": 5,
     "bonus_rec_yd_200": 5,
 }
@@ -36,11 +37,33 @@ class ScoringValuesTest(unittest.TestCase):
         self.assertEqual(scoring.for_market("player_pass_tds").per_unit, 4)
         self.assertEqual(scoring.for_market("player_anytime_td").per_unit, 6)
 
+    def test_anytime_td_uses_position_specific_touchdown_rule(self):
+        scoring = ScoringConfig.from_settings(dict(LEAGUE, rush_td=5, rec_td=8))
+        self.assertEqual(scoring.for_market("player_anytime_td", position="RB").rule_key, "rush_td")
+        self.assertEqual(scoring.for_market("player_anytime_td", position="QB").per_unit, 5)
+        self.assertEqual(scoring.for_market("player_anytime_td", position="WR").rule_key, "rec_td")
+        self.assertEqual(scoring.for_market("player_anytime_td", position="WR").per_unit, 8)
+        self.assertEqual(scoring.for_market("player_anytime_td", position="TE").per_unit, 8)
+
+    def test_anytime_td_without_position_keeps_rushing_fallback(self):
+        scoring = ScoringConfig.from_settings(dict(LEAGUE, rush_td=5, rec_td=8))
+        self.assertEqual(scoring.for_market("player_anytime_td").per_unit, 5)
+
+    def test_receiving_position_falls_back_when_rec_td_is_not_configured(self):
+        settings = {key: value for key, value in LEAGUE.items() if key != "rec_td"}
+        scoring = ScoringConfig.from_settings(dict(settings, rush_td=5))
+        self.assertEqual(scoring.for_market("player_anytime_td", position="WR").per_unit, 5)
+
     def test_a_different_ruleset_is_a_config_change_not_a_math_change(self):
         doubled = dict(LEAGUE, pass_yd=0.08, rush_td=4)
         scoring = ScoringConfig.from_settings(doubled)
         self.assertEqual(scoring.score({"player_pass_yds": 250.0}), 20.0)
         self.assertEqual(scoring.score({"player_anytime_td": 2.0}), 8.0)
+
+    def test_score_accepts_position_for_anytime_td(self):
+        scoring = ScoringConfig.from_settings(dict(LEAGUE, rush_td=5, rec_td=8))
+        self.assertEqual(scoring.score({"player_anytime_td": 1.0}, position="RB"), 5.0)
+        self.assertEqual(scoring.score({"player_anytime_td": 1.0}, position="WR"), 8.0)
 
     def test_missing_value_scores_zero_rather_than_raising(self):
         scoring = ScoringConfig.from_settings({})
