@@ -315,6 +315,7 @@ def main() -> None:
 
         # Re-opening setup for an existing identity must not erase the active selection.
         page.get_by_role("button", name="Change league").click()
+        assert page.locator("details.app-settings").get_attribute("open") is None
         setup.wait_for()
         setup.get_by_role("button", name="Close league setup").click()
         setup.wait_for(state="hidden")
