@@ -80,7 +80,8 @@ export function PlayerRanking({
           placeholder="Search players"
           aria-label="Search players"
         />
-        <div className="position-filters" aria-label="Position filters">
+        <fieldset className="position-filters">
+          <legend className="sr-only">Position filters</legend>
           {positions.map((position) => (
             <button
               key={position}
@@ -92,7 +93,7 @@ export function PlayerRanking({
               {position}
             </button>
           ))}
-        </div>
+        </fieldset>
         <div className="compare-actions">
           <span>{comparedPlayers.length} graphed</span>
           <button type="button" onClick={onSelectAll}>All</button>
@@ -163,6 +164,7 @@ export function PlayerRanking({
                     {hasRange ? (
                       <div
                         className="range-glyph"
+                        role="img"
                         aria-label={`Floor ${formatPoints(player.floor)}, mid ${formatPoints(player.mid)}, ceiling ${formatPoints(player.ceiling)}`}
                       >
                         <span
