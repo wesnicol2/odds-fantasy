@@ -19,13 +19,7 @@ function formatValue(value: number | null): string {
   return value === null ? '—' : value.toFixed(1);
 }
 
-export function LineupView({
-  payload,
-  target,
-  loading,
-  error,
-  onTargetChange,
-}: LineupViewProps) {
+export function LineupView({ payload, target, loading, error, onTargetChange }: LineupViewProps) {
   const notices: string[] = [];
   if (payload?.unmodeled_slots.length) {
     notices.push(`Not modeled: ${payload.unmodeled_slots.join(', ')}.`);
@@ -58,9 +52,7 @@ export function LineupView({
         </fieldset>
       </header>
 
-      {loading ? (
-        <div className="decision-loading">Optimizing modeled starter slots…</div>
-      ) : null}
+      {loading ? <div className="decision-loading">Optimizing modeled starter slots…</div> : null}
       {error ? <div className="error-state">{error}</div> : null}
       {!loading && !error && payload ? (
         <>
