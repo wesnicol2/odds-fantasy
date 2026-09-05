@@ -23,8 +23,8 @@ export function AppSettings({ dataMode, onDataModeChange, onChangeLeague }: AppS
           </select>
         </label>
         <p>
-          Auto reuses valid provider caches. Cache only makes no provider refresh. Force fresh bypasses
-          reusable odds caches for newly loaded data.
+          Auto reuses valid provider caches. Cache only makes no provider refresh. Force fresh
+          bypasses reusable odds caches for newly loaded data.
         </p>
         <button type="button" onClick={onChangeLeague}>
           Change league
