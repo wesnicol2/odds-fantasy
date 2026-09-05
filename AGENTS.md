@@ -6,40 +6,64 @@
 
 ## Product boundary
 
-The application has three selectable weekly sections plus player drill-down and graph exploration:
+The application has three selectable weekly decision views:
 
-1. **Player report** — QB/RB/WR/TE Floor / Mid / Ceiling from sportsbook props.
+1. **Players** — one linked analytical workstation: roster ranking, Floor / Mid / Ceiling, fantasy/stat survival curves, position/player comparison filters, Target FP and a persistent evidence inspector.
 2. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
 3. **Best lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots.
-4. Clicking a player exposes the exact source lines.
-5. **Graphs** compares roster probability distributions for fantasy points and each available modeled stat, with graph/position/player filters and Previous/Next metric navigation.
+
+Player evidence is progressive disclosure inside the same workstation. There is no separate Graphs product surface and no alternate browser-side projection engine.
 
 Pre-draft boards, model-comparison tools, book-coverage dashboards and alternate client-side projection engines remain removed.
 
-## Frontend architecture and migration
+## Frontend architecture
 
-`frontend/` is the target implementation of the analytical workstation specified in `docs/design.md`.
+`frontend/` is the only authored frontend source for the analytical workstation specified in `docs/design.md`.
 
-The frontend stack is deliberately small:
+The stack is deliberately small:
 
 - **React 19 + TypeScript** own components and interaction logic.
 - **Vite 8** owns development and production bundling.
 - **Apache ECharts 6** renders analytical visualizations.
-- **Zustand** owns the small shared workstation state that must coordinate ranking, chart, filters and inspector.
+- **Zustand** owns the small shared workstation state that coordinates ranking, chart, filters and inspector.
 - **Biome** is the whole JavaScript/TypeScript/CSS formatting and linting story. Do not add ESLint or Prettier unless an explicit owner decision changes that contract.
 
-React was chosen over Astro because the target UI is one coordinated interactive application rather than a mostly-static page with isolated interactive islands. Ranking/list selection, chart emphasis, metric/position filters, selected player and the fantasy-point Target threshold intentionally update one another continuously. Splitting those surfaces into separate hydration islands would add state synchronization boundaries without providing a meaningful static-rendering benefit. Svelte was viable, but React was preferred for its mature ecosystem, predictable ECharts integration and broad agent familiarity.
+React was chosen over Astro because the target UI is one coordinated interactive application rather than a mostly-static page with isolated interactive islands. Ranking selection, chart emphasis, metric/position filters, selected player and Target FP intentionally update one another continuously. Svelte was viable, but React was preferred for its mature ecosystem, predictable ECharts integration and broad agent familiarity.
 
 State ownership is strict:
 
-- Zustand owns canonical browser interaction state such as view, week, metric, selected player(s), position filters, Target threshold and lineup objective.
+- Zustand owns canonical browser interaction state such as view, week, metric, selected player(s), position filters, Target threshold, data mode and lineup objective.
 - React components consume that state and API data.
 - ECharts receives data/options as a renderer and emits interaction events back to the application. It must not become the canonical owner of application state.
 - The Python backend remains canonical for projections, probability distributions, scoring and sportsbook modeling. Browser code may derive display-only quantities from canonical payloads (for example `P(FP >= target)` from the supplied fantasy-point curve) but must not refit sportsbook evidence or create a second projection model.
 
-The initial component boundaries should stay recognizable as the implementation grows: workspace/navigation, ranking pane, probability chart, Target control, inspector/evidence, defense view and lineup view. Prefer extracting focused components/state selectors over recreating the old monolithic JavaScript inside React.
+Keep component boundaries recognizable: workspace/navigation, ranking pane, probability chart, Target control, inspector/evidence, league setup/settings, defense view and lineup view. Prefer focused components/state selectors over rebuilding a monolithic application component.
 
-Migration is incremental. The legacy `ui/` implementation remains served at `/` while the new frontend reaches functional parity and automated browser coverage is updated. The new scaffold must not expose invented demo data merely to look complete. Once the React UI is the tested runtime, delete replaced `ui/` files in the same feature; do not keep two frontend implementations as fallbacks.
+## Production frontend runtime
+
+The Dockerfile is the production frontend build contract:
+
+1. a Node 22 build stage runs `npm ci` and `npm run build` in `frontend/`;
+2. the Python runtime copies the Vite `dist/` output into `/app/ui/`;
+3. `oddsfantasy.api` serves `/app/ui/index.html` at `/` and compiled assets from the same directory.
+
+The repository intentionally does **not** keep a second hand-written `ui/` implementation. Treat `/app/ui/` as generated runtime output. Do not add source files under repository `ui/` as a fallback or bypass the Vite build.
+
+For local UI development, run the Python API on port 8000 and Vite on port 5173; `frontend/vite.config.ts` proxies application API routes to the Python service.
+
+## League identity and operational data mode
+
+`league_id` + `roster_id` browser cookies are authoritative after setup. Username is primarily league discovery and a legacy API fallback.
+
+A fresh browser must be able to complete username → league → team setup entirely in React. Opening **Change league** for an existing identity must not delete the active selection until a replacement team is committed.
+
+Odds data mode is operational state, not model state:
+
+- `auto` reuses provider caches normally;
+- `cache` forbids provider refreshes;
+- `fresh` bypasses reusable odds caches for newly loaded data.
+
+Client-side response caches must include identity and data mode in their keys so responses from one team or mode cannot silently satisfy another.
 
 ## One player projection engine
 
@@ -53,19 +77,21 @@ Pipeline:
 
 Cross-stat correlation is still assumed independent because the market feed does not provide a joint distribution.
 
-## Graphs are presentation-only canonical data
+## Visualizations are presentation-only canonical data
 
-`PlayerProjection.samples` is the source of truth for the fantasy-points distribution. `survival_curve()` downsamples the same samples used for Floor/Mid/Ceiling into `P(FP >= x)` points. The browser derives fixed one-point fantasy-score buckets from that curve for display only.
+`PlayerProjection.samples` is the source of truth for the fantasy-points distribution. `survival_curve()` downsamples the same samples used for Floor/Mid/Ceiling into `P(FP >= x)` points.
 
 For individual stat graphs, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution` and emits a display-only survival curve. Continuous stats evaluate the fitted distribution's own survival function across its central range, including fitted anchor x-values. Count stats expose cumulative `P(count >= x)` values as a step curve. This graph helper must never refit sportsbook lines or participate in projection sampling/scoring.
 
-`/player/odds` already includes the stat graph points alongside the stat's consensus anchors and exact source sportsbook lines. The Graph explorer places those three pieces on one explainability surface:
+`/player/odds` includes stat graph points alongside consensus anchors and exact source sportsbook lines. The linked player workspace places those three pieces on one explainability surface:
 
 - solid player-colored line = fitted survival curve;
 - diamond = de-vigged cross-book consensus anchor at its sportsbook threshold;
-- short x-axis tick = an exact source-book line location.
+- short x-axis tick = exact source-book line location.
 
-The stat graph y-axis is fixed to probability and the x-axis is the stat threshold, so anchors and the fitted curve share the same semantics. `Explain betting lines` expands the same cached payload into a per-player table of consensus probabilities plus raw book/line/over/under prices. The browser only maps existing backend evidence to pixels; it does not calculate a replacement probability model.
+The graph y-axis is probability and x-axis is the fantasy/stat threshold. `Explain betting lines` expands the same payload into consensus probabilities plus raw book/line/over/under prices. ECharts maps backend evidence to pixels; it does not calculate a replacement probability model.
+
+Target FP is also display-only. The browser interpolates the supplied fantasy-point survival curve to show/rank `P(FP >= target)`; changing Target FP must not make a provider request or modify Floor / Mid / Ceiling.
 
 ## Shared player week context
 
@@ -78,7 +104,7 @@ The stat graph y-axis is fixed to probability and the x-axis is the stat thresho
 5. normalize raw book lines;
 6. cache for `SERVICE_CACHE_TTL`.
 
-The report, player details and graph explorer consume that same context, so drill-down/graph loading normally adds no fresh Odds API calls and cannot silently use different lines from the row.
+The report and player-evidence requests consume that same context, so evidence loading normally adds no fresh Odds API calls and cannot silently use different lines from the ranking row. Stat metric comparison may request details for multiple selected players, but those HTTP requests reuse the shared backend week context.
 
 ## Missing coverage semantics
 
@@ -113,30 +139,29 @@ Unsupported starter slots (currently most importantly K) are returned as `unmode
 
 ## Odds API efficiency
 
-Player props and defense matchup data have separate caches because they use different market sets, but both avoid duplicate calls inside their flow. Defense comparison is loaded only when the user selects Defenses or Best Lineup; it is not an automatic cost on the Player Report.
+Player props and defense matchup data have separate caches because they use different market sets, but both avoid duplicate calls inside their flow. Defense comparison is loaded only when the user selects Defenses or Best Lineup; it is not an automatic cost on Players.
 
-Best Lineup calls `compute_projections()` and `list_defenses()`, which normally hit the in-process caches if those views were already loaded.
+Best Lineup calls `compute_projections()` and `list_defenses()`, which normally hit in-process caches if those flows are already loaded.
 
-Graph explorer lazily requests `/player/odds` only after it is opened. Those requests share `_load_week_context()` with Player Report, so they reuse the current normalized odds context rather than triggering a new sportsbook fetch for each player.
+The selected player's `/player/odds` evidence may preload so the inspector is immediately useful. That request shares `_load_week_context()` with `/projections`, so it normally reuses normalized current-week odds rather than triggering a sportsbook fetch for that player. Target movement is always client-only.
 
 ## Automated runtime gate
 
-The old process required a human/agent to exercise the LAN-only Test container. That is not a reliable automation contract.
+Feature/main CI builds the exact Dockerfile, runs the image, verifies `/health` and `/`, then launches Chromium with Playwright against the production-served React bundle. Browser application-data requests are intercepted with deterministic fixtures, so the smoke test spends zero Odds API quota and does not depend on Sleeper availability.
 
-Feature/main CI now builds the exact Dockerfile, runs the image, verifies `/health` and `/`, then launches Chromium with Playwright against the real served HTML/CSS/JS. Browser API requests for Sleeper/Odds-derived data are intercepted with deterministic fixtures. The smoke test covers:
+The runtime smoke covers:
 
-- player report values;
-- player details and sportsbook source lines;
-- graph explorer left filter panel, multi-metric loading, metric cycling and position filtering;
-- stat graph fitted curve, consensus markers, exact sportsbook threshold markers and betting-line explanation panel;
+- fresh-browser username → league → team setup and cookie persistence;
+- linked player ranking/chart/inspector behavior and Target FP;
+- stat metric evidence, consensus/source-line explanation and sportsbook rows;
+- operational odds data mode reaching API requests;
+- Change league preserving the active identity when canceled;
 - defense comparison;
-- Floor/Mid/Ceiling Best Lineup switching.
+- Floor/Mid/Ceiling Best Lineup switching and unsupported slots.
 
-This catches broken Docker entrypoints, static assets, JavaScript wiring and primary interaction regressions without consuming Odds API quota or depending on the home LAN. Watchtower/GHCR/Unraid-specific behavior remains an optional deployment smoke test when those systems themselves change.
+This catches broken multi-stage Docker builds, compiled static assets, React wiring and primary interaction regressions. Watchtower/GHCR/Unraid-specific behavior remains an optional deployment smoke test when those systems themselves change.
 
-## Identity and weekly windows
-
-`league_id` + `roster_id` cookies are authoritative after setup. Username is primarily league discovery and a legacy fallback.
+## Weekly windows
 
 `weekly_windows.resolve_week_windows()` keeps its schedule-aware fallback so a preseason calendar window with no games can still resolve the next posted NFL slate.
 

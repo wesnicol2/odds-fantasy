@@ -42,7 +42,7 @@ jobs:
           python -m pip install "playwright>=1.55,<2"
           python -m playwright install --with-deps chromium
 
-      - name: Exercise report, details, curves, defenses and lineup
+      - name: Exercise setup and analytical workstation
         env:
           SMOKE_BASE_URL: http://127.0.0.1:18000
         run: python tests/browser_smoke.py
