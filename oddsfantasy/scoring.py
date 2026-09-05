@@ -25,6 +25,13 @@ import re
 from dataclasses import dataclass, field
 
 from .config import STAT_MARKET_MAPPING_SLEEPER
+from .market_math import CONTINUOUS_MARKETS, COUNT_MARKETS
+
+# The canonical player projection engine intentionally models only the market
+# families whose reconstruction is specified and tested in market_math. Sleeper
+# exposes scoring keys for DEF/K/fumbles/etc., but a scoring key alone is not a
+# license to infer a probability distribution for an unsupported market.
+_MODELED_PLAYER_MARKETS = CONTINUOUS_MARKETS | COUNT_MARKETS
 
 # Sleeper spells yardage bonuses as bonus_<what>_yd_<threshold>. `what` maps to
 # the market the bonus is measured against; the threshold is read from the key.
@@ -123,6 +130,12 @@ class ScoringConfig:
         for market_key, rule_key in STAT_MARKET_MAPPING_SLEEPER.items():
             if "_bonus_" in market_key:
                 # Bonus pseudo-markets in the mapping table; handled above.
+                continue
+            if market_key not in _MODELED_PLAYER_MARKETS:
+                # DEF/K/fumble/2pt mappings are real Sleeper scoring settings,
+                # but this player engine has no canonical sportsbook model for
+                # them. Leave them out instead of letting name-pattern matching
+                # fabricate a distribution.
                 continue
             per_unit = _numeric_setting(settings, rule_key)
             if per_unit is None:
