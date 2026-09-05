@@ -41,12 +41,17 @@ jobs:
         working-directory: frontend
         run: npm install --no-audit --no-fund
 
-      - name: Upload bootstrap lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-package-lock
-          path: frontend/package-lock.json
-          retention-days: 1
+      - name: Commit bootstrap lockfile
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev/frontend-foundation'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Lock frontend dependencies"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Frontend format and lint
         working-directory: frontend
