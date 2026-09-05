@@ -9,10 +9,11 @@ The interface exists to help a user answer questions quickly:
 1. What outcomes should I expect from my players?
 2. Which players or defenses are preferable?
 3. What lineup best matches the level of risk I want?
-4. Why does the model believe what it believes?
-5. What sportsbook evidence supports the model?
+4. What is the probability a player reaches a score I care about?
+5. Why does the model believe what it believes?
+6. What sportsbook evidence supports the model?
 
-The UI should feel like a **professional analytical tool**, not a sportsbook, fantasy-news site, or generic SaaS dashboard.
+The UI should feel like a **professional analytical workstation**, not a sportsbook, fantasy-news site, or generic SaaS dashboard.
 
 This document defines the product's UI and visualization behavior independently of any frontend framework, component library, charting library, or rendering technology.
 
@@ -35,6 +36,7 @@ For player projections, the primary decision data is:
 - Floor
 - Mid
 - Ceiling
+- Probability of reaching a user-selected target when Target mode is active
 
 Supporting evidence belongs progressively deeper in the interface.
 
@@ -44,7 +46,19 @@ The hierarchy is:
 
 Do not reverse this hierarchy merely because the underlying data model is complicated.
 
-### 2. Dense, not cluttered
+### 2. One linked analytical workspace
+
+Tables, charts, filters, and evidence are not separate products.
+
+On desktop, the primary player-analysis experience should behave as one coordinated workspace. Selecting or inspecting information in one view should update or highlight the related information in the others without forcing the user through modal navigation.
+
+The default mental model is:
+
+**ranking/list ↔ visualization ↔ inspector/evidence**
+
+The user should be able to move between comparison and explanation without losing context.
+
+### 3. Dense, not cluttered
 
 Odds Fantasy is a data application. High information density is desirable.
 
@@ -61,7 +75,7 @@ Avoid creating a card for every value simply to add visual separation.
 
 Whitespace should clarify structure, not reduce the amount of useful information visible on screen.
 
-### 3. Numbers are the interface
+### 4. Numbers are the interface
 
 Numerical information must be especially easy to compare.
 
@@ -77,15 +91,15 @@ Never display a missing projection as `0`.
 
 `—`, an explicit unavailable state, or a short explanation is preferable.
 
-### 4. Uncertainty is first-class
+### 5. Uncertainty is first-class
 
 Odds Fantasy does not produce a single definitive player value.
 
-Floor / Mid / Ceiling and probability distributions are core product concepts and must never be visually reduced to a single "projection" without context.
+Floor / Mid / Ceiling, target probabilities, and probability distributions are core product concepts and must never be visually reduced to a single "projection" without context.
 
 The interface should make uncertainty understandable without making it intimidating.
 
-### 5. Evidence should be inspectable
+### 6. Evidence should be inspectable
 
 The product derives information from betting markets.
 
@@ -97,14 +111,14 @@ without encountering a second, contradictory representation of the same model.
 
 Visualizations are presentations of canonical backend model data. The frontend must not invent a separate probability model.
 
-### 6. Color communicates meaning
+### 7. Color communicates meaning
 
 Color must not exist merely to decorate the application.
 
 Use color primarily for:
 
 - active selection;
-- series identity;
+- stable player/series identity;
 - semantic state;
 - emphasis;
 - warnings/errors.
@@ -115,29 +129,75 @@ Do not rely on color alone to communicate meaning.
 
 ---
 
+## Desktop analytical workstation
+
+The preferred desktop player-analysis layout is a coordinated three-region workspace:
+
+1. **Ranking/list region** — player comparison, filters, Floor / Mid / Ceiling, compact uncertainty glyphs, and Target probability when active.
+2. **Visualization region** — the dominant probability chart and metric controls.
+3. **Inspector region** — the selected player's summary, relevant model details, and progressively disclosed sportsbook evidence.
+
+These regions may resize or collapse based on viewport size, but they should behave as parts of one analytical surface rather than independent modal experiences.
+
+The visualization should receive the largest share of available width after the ranking list remains comfortably scannable.
+
+The inspector may collapse when nothing is selected, but selecting a player should not obscure or remove the primary ranking and graph context.
+
+### Coordinated selection
+
+A player selected in the ranking/list should become the active player in the inspector and be emphasized in the visualization.
+
+A player emphasized through the visualization or legend should be identifiable in the ranking/list.
+
+Where pointer hover exists, cross-highlighting should be immediate but temporary. Selection should remain explicit and persistent.
+
+Filtering players or positions should update all coordinated views consistently.
+
+Series identity should remain stable across compatible metrics whenever practical.
+
+---
+
 ## Information architecture
 
-The application has four primary analytical surfaces.
+The application has three primary decision sections plus the integrated analytical workspace.
 
 ### Player Report
 
-The default surface.
+The default section.
 
-Its purpose is rapid comparison of the user's relevant players.
+Its purpose is rapid comparison of the user's relevant players while keeping their probability distributions immediately available.
 
-Primary columns:
+Primary row information:
 
 - Player
 - Position / matchup context
 - Floor
 - Mid
 - Ceiling
+- Compact uncertainty visualization
+- Target probability when Target mode is active
 
-`Mid` is the default visual anchor but Floor and Ceiling must remain immediately comparable.
+`Mid` is the default numeric anchor but Floor and Ceiling must remain immediately comparable.
 
 Rows with incomplete or unavailable projections remain visible but visually de-emphasized with an explicit reason.
 
-Selecting a player opens deeper analysis without losing the user's place in the report.
+Selecting a player updates the inspector and visualization without losing the user's place in the report.
+
+### Inline uncertainty glyph
+
+Player rows should include a compact visual representation of the Floor / Mid / Ceiling range when space permits.
+
+The glyph should communicate:
+
+- Floor as the low endpoint;
+- Ceiling as the high endpoint;
+- Mid as the central marker.
+
+It supplements the actual numbers rather than replacing them.
+
+Its purpose is rapid visual comparison of uncertainty width and upside/downside shape across many rows.
+
+Do not use area, color saturation, or decorative effects that make the glyph harder to compare than a simple interval representation.
 
 ### Defenses
 
@@ -181,25 +241,29 @@ The result should emphasize:
 
 Unsupported or unfilled roster slots must be stated explicitly rather than silently filled with invented values.
 
-### Graph Explorer
+When switching optimization objectives, the UI should make changed lineup slots easy to identify. Where useful, it may explain the tradeoff that caused a change, such as higher ceiling at the expense of floor.
 
-Graph Explorer is a first-class analytical workspace.
+Subtle transition is acceptable when it helps the user perceive changed slots. Animation must never delay comparison.
 
-It should not feel like an incidental chart added to a report.
+---
 
-On sufficiently large screens it should have enough space to simultaneously display:
+## Visualization workspace
 
+Visualization is a first-class part of the primary analytical experience, not an optional secondary modal.
+
+On sufficiently large screens, the user should be able to simultaneously see:
+
+- the relevant player list or ranking;
 - metric selection;
-- position/player filtering;
-- visualization;
-- legend;
-- contextual explanation.
+- player/position filtering;
+- the active visualization;
+- legend or direct labels;
+- selected-player context;
+- access to supporting sportsbook evidence.
 
-The visualization itself is the dominant element.
+Detailed evidence is progressively disclosed rather than permanently consuming the graph area.
 
-Detailed sportsbook evidence is progressively disclosed beneath or alongside it.
-
-A framework implementation may use a route, full-screen workspace, sheet, or other presentation, but the graph must not be constrained to an unnecessarily small chart viewport.
+The graph must not be constrained to an unnecessarily small viewport.
 
 ---
 
@@ -209,6 +273,7 @@ Use a clear visual distinction between:
 
 - navigation;
 - filtering;
+- analytical mode;
 - actions.
 
 Controls that switch between mutually exclusive states should use segmented controls, tabs, or equivalent single-selection patterns.
@@ -218,10 +283,11 @@ Examples:
 - Player Report / Defenses / Best Lineup
 - This Week / Next Week
 - Floor / Mid / Ceiling
-
-Do not represent mutually exclusive choices as independent buttons when that obscures the relationship between them.
+- metric selection
 
 The currently selected state must always be visually obvious.
+
+Operational controls such as cache behavior belong outside the primary analytical hierarchy.
 
 ---
 
@@ -236,7 +302,8 @@ The application should feel:
 - compact;
 - precise;
 - modern;
-- trustworthy.
+- trustworthy;
+- powerful without appearing complicated for its own sake.
 
 It should not feel:
 
@@ -282,15 +349,15 @@ Numeric data should use tabular numerals.
 
 ### Borders and elevation
 
-Prefer subtle borders and background changes.
+Prefer thin separators, subtle borders, and restrained background changes.
 
 Use shadows primarily for genuinely floating surfaces such as:
 
-- dialogs;
 - menus;
-- temporary overlays.
+- temporary overlays;
+- exceptional dialogs.
 
-Normal report sections should not appear as stacks of floating cards.
+Normal analytical regions should not appear as stacks of floating cards.
 
 ### Corners
 
@@ -302,17 +369,17 @@ Pills are appropriate for compact semantic statuses such as ownership.
 
 ---
 
-## Tables
+## Tables and ranking lists
 
 Tables are a core UI primitive, not a fallback.
 
-Use tables whenever users benefit from scanning the same attributes across multiple players or teams.
+Use tables or table-like dense ranking lists whenever users benefit from scanning the same attributes across multiple players or teams.
 
 Requirements:
 
 - stable column positions;
 - sortable-looking columns only when sorting actually exists;
-- clear hover/focus row state;
+- clear hover/focus/selected row states;
 - readable row density;
 - sticky headers where long datasets justify them;
 - right-aligned numeric values;
@@ -320,7 +387,9 @@ Requirements:
 
 Important numeric columns should not shift horizontally as data loads or changes.
 
-Where horizontal scrolling is unavoidable on mobile, preserve the identity column so the values being viewed remain understandable.
+Where horizontal scrolling is unavoidable on mobile, preserve player/team identity so the values being viewed remain understandable.
+
+Selection state must remain visible even if the pointer moves away.
 
 ---
 
@@ -342,15 +411,36 @@ A user should not have to infer axis semantics from context.
 
 Grid lines should aid estimation without dominating the graph.
 
-Interactive charts should expose exact values through hover, focus, tap, or equivalent inspection.
+Interactive charts should expose exact values through hover, focus, tap, keyboard interaction, or equivalent inspection.
 
 Important information must remain accessible without requiring pointer hover.
 
-### Fantasy-point distributions
+### One probability grammar
 
-Fantasy-point graphs compare outcome distributions between players.
+Where possible, Odds Fantasy should use a consistent survival-probability grammar across metrics:
 
-The graph must make relative probability and distribution shape easier to understand than the Floor / Mid / Ceiling table alone.
+**P(metric ≥ x)**
+
+This lets the user ask the same question across fantasy points and individual player statistics: "What is the chance this player reaches at least this value?"
+
+For individual statistics this is the canonical stat-survival interpretation.
+
+For fantasy points, the primary comparison visualization should likewise present:
+
+**P(Fantasy Points ≥ x)**
+
+using the canonical backend fantasy-point distribution/survival data. This is a presentation choice, not a replacement model.
+
+### Fantasy-point survival comparison
+
+Fantasy-point graphs compare players by the probability of reaching or exceeding each fantasy-score threshold.
+
+Therefore:
+
+- x-axis = fantasy-point threshold;
+- y-axis = probability of scoring at least that many fantasy points.
+
+The graph must make relative downside, median region, upside, and tail behavior easier to understand than Floor / Mid / Ceiling alone.
 
 Multiple players may be compared simultaneously.
 
@@ -360,7 +450,44 @@ Do not assign a different color to the same player merely because the selected g
 
 Filtering players must update the graph without destroying the user's other relevant selections.
 
-### Stat survival curves
+---
+
+## Target mode
+
+Target mode is a first-class player-comparison interaction.
+
+It answers:
+
+**"What is the probability this player scores at least X fantasy points?"**
+
+The user chooses a fantasy-point threshold through direct manipulation of the fantasy-point survival graph, an accessible numeric control, or both.
+
+The visualization should show the selected threshold as a clear vertical reference line or equivalent marker.
+
+At the selected threshold, every currently compared player should expose:
+
+**P(Fantasy Points ≥ target)**
+
+That probability should also be available in the ranking/list so the user can rank or rapidly compare players at the chosen target without reading every curve manually.
+
+Changing the target should update already-loaded results immediately and must not trigger sportsbook refetches merely because the display threshold moved.
+
+The target value is an analytical lens over the canonical fantasy-point distribution. The frontend must not estimate a separate distribution to support it.
+
+### Target interaction requirements
+
+- Dragging the graph reference line should update target probabilities continuously or at an appropriately responsive cadence.
+- Keyboard and touch users must have an equivalent way to change the target.
+- The exact target value must always be readable.
+- The exact probability for each selected player must be inspectable.
+- Target selection must not erase player, position, week, or metric context.
+- A user's manually chosen target should remain stable while comparing players until the user changes it or leaves the relevant analysis context.
+
+Target mode is a player-analysis lens. It does **not** implicitly add a new Best Lineup optimization objective unless that is separately specified in the future.
+
+---
+
+## Stat survival curves
 
 Individual-stat graphs represent:
 
@@ -377,17 +504,19 @@ The y-axis should use a consistent probability scale so graphs are comparable.
 
 Count statistics should retain their discrete/step semantics instead of being visually smoothed into continuous measurements.
 
-### Betting-market evidence
+---
+
+## Betting-market evidence
 
 The visualization has three conceptually different elements.
 
-#### Fitted curve
+### Fitted curve
 
 The continuous or step line represents the modeled probability distribution.
 
 It is the primary visual element.
 
-#### Consensus anchors
+### Consensus anchors
 
 Consensus sportsbook thresholds are displayed as distinct point markers.
 
@@ -395,7 +524,7 @@ These represent de-vigged cross-book evidence constraining the fitted distributi
 
 They must be visually distinguishable from the curve itself.
 
-#### Exact sportsbook thresholds
+### Exact sportsbook thresholds
 
 Individual sportsbook line locations are displayed as lighter secondary markers along the relevant threshold axis.
 
@@ -405,9 +534,9 @@ The graph must include a compact visual key explaining these encodings.
 
 ---
 
-## Evidence inspection
+## Linked evidence inspection
 
-Detailed evidence should be available through progressive disclosure.
+Detailed evidence should be available through progressive disclosure in the inspector or adjacent evidence region.
 
 The default visualization should remain readable without displaying a large raw sportsbook table.
 
@@ -422,9 +551,36 @@ When evidence is expanded, the user should be able to inspect:
 - over price;
 - under price.
 
-The interface should explain the relationship between these values and the displayed fitted curve in concise language.
+The graph and evidence should be linked where doing so reduces mental lookup work.
+
+Examples of desirable coordinated behavior:
+
+- selecting a consensus marker reveals or emphasizes the corresponding consensus evidence;
+- inspecting an individual sportsbook line emphasizes its threshold location on the graph;
+- changing the selected player updates evidence without destroying the graph's metric/filter context.
+
+The interface should explain the relationship between raw prices, consensus anchors, and the displayed fitted curve in concise language.
 
 Raw evidence should never visually compete with the primary graph until the user requests it.
+
+---
+
+## Persistent inspector
+
+On desktop, player detail should normally appear in a persistent or collapsible inspector rather than a context-destroying full-screen/modal flow.
+
+The inspector should prioritize:
+
+1. player identity and matchup context;
+2. Floor / Mid / Ceiling;
+3. Target probability when active;
+4. available modeled stats;
+5. evidence summary;
+6. progressively disclosed raw evidence.
+
+Selecting another player should replace inspector content quickly while keeping the rest of the workspace stable.
+
+A modal remains acceptable for exceptional flows where the user genuinely leaves the analytical context, but it should not be the default pattern for ordinary player inspection.
 
 ---
 
@@ -433,12 +589,15 @@ Raw evidence should never visually compete with the primary graph until the user
 Useful analytical interactions include:
 
 - player selection;
+- cross-highlighting between list, chart, legend, and inspector;
 - position filtering;
 - player search;
 - metric selection;
 - previous/next metric navigation;
+- Target threshold manipulation;
 - exact-value inspection;
-- legend-driven identification.
+- legend-driven identification;
+- linked evidence inspection.
 
 Interaction should answer analytical questions, not exist because a charting framework supports it.
 
@@ -451,7 +610,7 @@ Avoid unnecessary:
 - decorative gradients;
 - excessive transitions.
 
-Pan, zoom, brushing, annotations, or cross-highlighting should only be introduced where they materially improve analysis.
+Pan, zoom, brushing, annotations, or additional linked views should only be introduced where they materially improve analysis.
 
 ---
 
@@ -468,6 +627,8 @@ Prefer:
 Avoid replacing the entire application with a global spinner when only one dataset is loading.
 
 Existing data should generally remain visible while a refresh is in progress unless displaying it would be misleading.
+
+Already-loaded client-side filtering, selection, Target movement, and metric presentation should not look like network operations.
 
 ---
 
@@ -505,23 +666,32 @@ Technical stack traces and raw upstream errors do not belong in the primary UI.
 
 Settings that affect data retrieval but are not part of ordinary fantasy decisions should remain visually secondary.
 
-Operational controls such as cache/fresh-data behavior should not compete with Player Report, Defenses, Best Lineup, or Graph Explorer.
+Operational controls such as cache/fresh-data behavior should not compete with Player Report, Defenses, Best Lineup, Target analysis, or the visualization workspace.
 
 ---
 
 ## Responsive behavior
 
-The desktop interface should optimize for analytical density.
+The desktop interface should optimize for analytical density and coordinated views.
 
-The mobile interface should optimize for preserving the same decision hierarchy rather than reproducing the desktop layout at a smaller scale.
+The mobile interface should preserve the same decision hierarchy rather than reproducing the desktop three-region layout at a smaller scale.
+
+A preferred narrow-screen order is:
+
+1. ranking/player selection;
+2. selected-player summary;
+3. full-width visualization;
+4. evidence/details.
 
 On narrow screens:
 
 - primary decisions remain visible first;
 - controls may stack;
 - secondary context may collapse;
-- detailed evidence may become a dedicated lower section or sheet;
-- graphs must remain readable without requiring arbitrary fixed-width desktop canvases.
+- the inspector may become an inline section or sheet;
+- detailed evidence may become a dedicated lower section;
+- graphs must remain readable without requiring arbitrary fixed-width desktop canvases;
+- Target mode must remain usable by touch and accessible numeric input.
 
 Do not convert every table row into a large card unless that demonstrably improves readability.
 
@@ -537,10 +707,11 @@ At minimum:
 - focus states are clearly visible;
 - semantic HTML is preferred;
 - controls have accessible names;
-- dialogs properly manage focus;
+- dialogs properly manage focus when dialogs are used;
 - text and essential graphics have adequate contrast;
 - color is never the only indicator of state;
 - charts expose meaningful textual values or equivalent accessible inspection;
+- Target threshold manipulation has a keyboard-operable equivalent;
 - touch targets are large enough for mobile interaction.
 
 Reduced-motion preferences must be respected.
@@ -555,7 +726,8 @@ Appropriate uses include:
 
 - short disclosure transitions;
 - loading indicators;
-- subtle state transitions.
+- subtle cross-highlighting;
+- restrained transitions that make changed Best Lineup slots easier to perceive.
 
 Large animated chart transitions should not make comparisons harder.
 
@@ -571,7 +743,9 @@ Frontend architecture should avoid shipping substantial client-side code for sta
 
 Large visualization dependencies must justify their cost through functionality used by the product.
 
-Filtering or switching an already-loaded visualization should ordinarily feel instantaneous.
+Filtering, selecting players, cross-highlighting, switching an already-loaded visualization, and moving the Target threshold should ordinarily feel instantaneous.
+
+The visualization implementation should support the expected number of simultaneously rendered player series without interaction latency becoming distracting.
 
 ---
 
@@ -583,6 +757,7 @@ Prefer:
 
 - `No priced markets`
 - `Optimize for Ceiling`
+- `Chance of scoring at least 24.5`
 - `Opponent implied total`
 - `Explain betting lines`
 
@@ -612,7 +787,8 @@ Do not introduce the following without a specific product reason:
 - excessive badges;
 - animation for visual spectacle;
 - horizontal carousels of analytical data;
-- hidden information that is essential to basic comparison.
+- hidden information that is essential to basic comparison;
+- separate modal workflows for information that should remain coordinated with the primary analysis surface.
 
 Do not mimic sportsbook visual design.
 
@@ -634,6 +810,18 @@ Can the user identify the most important decision information immediately?
 
 Can values that are intended to be compared actually be scanned quickly?
 
+### Coordination
+
+Do list selection, graph emphasis, inspector state, filters, and evidence stay logically synchronized?
+
+Does ordinary inspection preserve analytical context rather than forcing unnecessary navigation?
+
+### Target mode
+
+Can a user choose a fantasy-point target and immediately understand each selected player's probability of reaching it?
+
+Does Target mode use the canonical fantasy-point distribution and avoid unnecessary data refetches?
+
 ### States
 
 Are loading, empty, unavailable, selected, disabled, error, and success states understandable?
@@ -648,7 +836,7 @@ Can core workflows be completed with keyboard and touch, and are states perceiva
 
 ### Visualization semantics
 
-Do chart axes, probability meaning, markers, series identities, and evidence still represent the canonical backend data correctly?
+Do chart axes, survival-probability meaning, markers, series identities, Target probabilities, and evidence still represent the canonical backend data correctly?
 
 ### Regression
 
@@ -669,7 +857,9 @@ Changes to the intended user experience or visualization semantics do.
 Examples requiring an intentional design-contract change:
 
 - changing the primary information hierarchy;
+- abandoning the coordinated analytical-workstation model;
 - removing Floor/Mid/Ceiling from direct comparison;
+- removing or materially changing Target mode;
 - changing graph probability semantics;
 - changing the meaning of consensus/source markers;
 - materially changing how evidence is exposed;
