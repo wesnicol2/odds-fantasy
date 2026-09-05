@@ -1,7 +1,8 @@
 # Odds Fantasy — implementation notes
 
-`README.md` explains use, `CONTRIBUTING.md` owns process, and
-`docs/fantasy-projection-methodology.md` is the mathematical contract.
+`README.md` explains use, `CONTRIBUTING.md` owns process,
+`docs/fantasy-projection-methodology.md` is the mathematical contract, and
+`docs/design.md` is the UI/visualization contract.
 
 ## Product boundary
 
@@ -14,6 +15,31 @@ The application has three selectable weekly sections plus player drill-down and 
 5. **Graphs** compares roster probability distributions for fantasy points and each available modeled stat, with graph/position/player filters and Previous/Next metric navigation.
 
 Pre-draft boards, model-comparison tools, book-coverage dashboards and alternate client-side projection engines remain removed.
+
+## Frontend architecture and migration
+
+`frontend/` is the target implementation of the analytical workstation specified in `docs/design.md`.
+
+The frontend stack is deliberately small:
+
+- **React 19 + TypeScript** own components and interaction logic.
+- **Vite 8** owns development and production bundling.
+- **Apache ECharts 6** renders analytical visualizations.
+- **Zustand** owns the small shared workstation state that must coordinate ranking, chart, filters and inspector.
+- **Biome** is the whole JavaScript/TypeScript/CSS formatting and linting story. Do not add ESLint or Prettier unless an explicit owner decision changes that contract.
+
+React was chosen over Astro because the target UI is one coordinated interactive application rather than a mostly-static page with isolated interactive islands. Ranking/list selection, chart emphasis, metric/position filters, selected player and the fantasy-point Target threshold intentionally update one another continuously. Splitting those surfaces into separate hydration islands would add state synchronization boundaries without providing a meaningful static-rendering benefit. Svelte was viable, but React was preferred for its mature ecosystem, predictable ECharts integration and broad agent familiarity.
+
+State ownership is strict:
+
+- Zustand owns canonical browser interaction state such as view, week, metric, selected player(s), position filters, Target threshold and lineup objective.
+- React components consume that state and API data.
+- ECharts receives data/options as a renderer and emits interaction events back to the application. It must not become the canonical owner of application state.
+- The Python backend remains canonical for projections, probability distributions, scoring and sportsbook modeling. Browser code may derive display-only quantities from canonical payloads (for example `P(FP >= target)` from the supplied fantasy-point curve) but must not refit sportsbook evidence or create a second projection model.
+
+The initial component boundaries should stay recognizable as the implementation grows: workspace/navigation, ranking pane, probability chart, Target control, inspector/evidence, defense view and lineup view. Prefer extracting focused components/state selectors over recreating the old monolithic JavaScript inside React.
+
+Migration is incremental. The legacy `ui/` implementation remains served at `/` while the new frontend reaches functional parity and automated browser coverage is updated. The new scaffold must not expose invented demo data merely to look complete. Once the React UI is the tested runtime, delete replaced `ui/` files in the same feature; do not keep two frontend implementations as fallbacks.
 
 ## One player projection engine
 
@@ -120,3 +146,4 @@ This catches broken Docker entrypoints, static assets, JavaScript wiring and pri
 - Architecture/reasoning: update this file.
 - Process changes: update CONTRIBUTING explicitly.
 - Durable model behavior belongs in `docs/fantasy-projection-methodology.md`.
+- Durable UI and visualization behavior belongs in `docs/design.md`; implementation choices stay here.
