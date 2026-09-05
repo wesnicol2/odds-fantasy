@@ -193,7 +193,9 @@ def project_player(
         if isinstance(scoring_rules, ScoringConfig)
         else ScoringConfig.from_settings(scoring_rules)
     )
-    resolved_position = str(position or _position_from_odds(per_bookmaker_odds) or "").upper() or None
+    resolved_position = (
+        str(position or _position_from_odds(per_bookmaker_odds) or "").upper() or None
+    )
 
     stats: dict[str, StatProjection] = {}
     for market_key in candidate_markets(per_bookmaker_odds, scoring, position=resolved_position):
