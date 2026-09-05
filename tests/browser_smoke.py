@@ -212,12 +212,13 @@ def main() -> None:
         page.locator(".graph-filter-panel").wait_for()
         graph_area = page.locator("#graphChartArea")
         fantasy_subtitle = page.locator("#graphSubtitle").inner_text()
-        assert "x = fantasy point threshold" in fantasy_subtitle
-        assert "y = probability of scoring at least x" in fantasy_subtitle
-        graph_area.get_by_text("full 4,000 projection samples", exact=False).wait_for()
-        graph_area.get_by_text("Probability of scoring at least x", exact=True).wait_for()
+        assert "x = fantasy points" in fantasy_subtitle
+        assert "y = probability within a 1-point scoring bucket" in fantasy_subtitle
+        graph_area.get_by_text("full 4,000-sample fantasy-point projection", exact=False).wait_for()
+        graph_area.get_by_text("Probability within 1 FP", exact=True).wait_for()
+        assert graph_area.locator(".fp-probability-path").count() >= 2
         assert graph_area.locator(".fp-range-guide").count() >= 6
-        assert graph_area.locator(".fp-range-marker").count() >= 6
+        assert graph_area.locator(".fp-range-marker").count() == 0
         assert "Floor 10.00" in graph_area.inner_text()
         assert "Mid 17.00" in graph_area.inner_text()
         assert "Ceiling 25.00" in graph_area.inner_text()

@@ -115,6 +115,36 @@ class CollectAnchorsTest(unittest.TestCase):
         self.assertAlmostEqual(low_vig[0].survival, 0.5, places=6)
         self.assertAlmostEqual(high_vig[0].survival, 0.5, places=6)
 
+    def test_rejects_underround_two_way_pair(self):
+        # A paired quote with implied probabilities totaling below 100% is not
+        # one coherent sportsbook market. The audit found stale BetRivers pairs
+        # like this; they must not enter consensus or get normalized as if valid.
+        book = {
+            "player_receptions": {
+                "over": {"odds": 2.20, "point": 4.5},
+                "under": {"odds": 2.20, "point": 4.5},
+            }
+        }
+        self.assertEqual(collect_anchors({"betrivers": book}, "player_receptions"), [])
+
+    def test_underround_pair_does_not_set_one_sided_overround(self):
+        # Invalid paired sides must also be excluded from the book-level margin
+        # estimate used to correct one-sided alternates. With no valid pair, the
+        # one-sided line falls back to its raw implied probability.
+        book = {
+            "player_rush_yds": {
+                "over": {"odds": 2.20, "point": 50},
+                "under": {"odds": 2.20, "point": 50},
+            },
+            "player_rush_yds_alternate": {
+                "alts": {"over": [{"odds": 3.0, "point": 100}], "under": []}
+            },
+        }
+        anchors = collect_anchors({"b": book}, "player_rush_yds")
+        self.assertEqual(len(anchors), 1)
+        self.assertEqual(anchors[0].threshold, 100)
+        self.assertAlmostEqual(anchors[0].survival, 1 / 3, places=6)
+
     def test_isotonic_flattens_a_dipping_ladder(self):
         # §2.3: a noisy line must not leave the survival curve non-monotone,
         # or differencing it could produce negative probability mass.

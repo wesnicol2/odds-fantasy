@@ -20,7 +20,13 @@ EVENT = {
     "commence_time": FUTURE_GAME.strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 ROSTER = {
-    "scoring_rules": {"rush_yd": 0.1, "rush_td": 6, "rec": 0.5, "rec_yd": 0.1},
+    "scoring_rules": {
+        "rush_yd": 0.1,
+        "rush_td": 5,
+        "rec": 0.5,
+        "rec_yd": 0.1,
+        "rec_td": 8,
+    },
     "players": {
         "1": {
             "name": {"full": "James Cook"},
@@ -35,6 +41,11 @@ ROSTER = {
         "3": {
             "name": {"full": "Bills D/ST"},
             "primary_position": "DEF",
+            "editorial_team_full_name": "Buffalo Bills",
+        },
+        "4": {
+            "name": {"full": "Beta Receiver"},
+            "primary_position": "WR",
             "editorial_team_full_name": "Buffalo Bills",
         },
     },
@@ -80,7 +91,12 @@ EVENT_ODDS = [
                     },
                     {
                         "key": "player_anytime_td",
-                        "outcomes": [outcome("Yes", 2.2), outcome("No", 1.7)],
+                        "outcomes": [
+                            outcome("Yes", 2.2),
+                            outcome("No", 1.7),
+                            outcome("Yes", 2.0, description="Beta Receiver"),
+                            outcome("No", 2.0, description="Beta Receiver"),
+                        ],
                     },
                 ],
             }
@@ -106,7 +122,7 @@ class ProjectionPipelineTest(unittest.TestCase):
         players = self._run()["players"]
         self.assertEqual(
             {player["name"] for player in players},
-            {"James Cook", "Bye Week WR"},
+            {"James Cook", "Bye Week WR", "Beta Receiver"},
         )
 
     def test_projected_player_has_ordered_numbers_and_curve(self):
@@ -115,6 +131,19 @@ class ProjectionPipelineTest(unittest.TestCase):
         self.assertLess(player["floor"], player["mid"])
         self.assertLess(player["mid"], player["ceiling"])
         self.assertGreater(len(player["curve"]), 20)
+        self.assertGreaterEqual(
+            player["curve"][0]["survival"],
+            player["curve"][-1]["survival"],
+        )
+
+    def test_receiver_anytime_td_uses_receiving_td_scoring(self):
+        player = next(row for row in self._run()["players"] if row["name"] == "Beta Receiver")
+        self.assertTrue(player["has_projection"])
+        self.assertAlmostEqual(player["mean"], 4.0, places=6)
+        self.assertEqual(player["floor"], 0.0)
+        self.assertEqual(player["ceiling"], 8.0)
+        self.assertEqual(player["curve"][0]["x"], 0.0)
+        self.assertEqual(player["curve"][-1]["x"], 8.0)
         self.assertGreaterEqual(
             player["curve"][0]["survival"],
             player["curve"][-1]["survival"],
