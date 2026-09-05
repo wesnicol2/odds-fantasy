@@ -123,6 +123,10 @@
 .setup-progress {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   border-bottom: 1px solid #252c35;
 }
 
