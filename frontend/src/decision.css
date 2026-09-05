@@ -85,8 +85,8 @@
   font-size: 9px;
 }
 
-.primary-decision-value {
-  color: #f1f4f7 !important;
+.decision-table td.primary-decision-value {
+  color: #f1f4f7;
   font-weight: 700;
 }
 
