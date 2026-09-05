@@ -88,3 +88,50 @@ export interface ChartEvidence {
   anchors: ConsensusAnchor[];
   lines: SportsbookLine[];
 }
+
+export interface DefenseRow {
+  defense: string;
+  abbr: string | null;
+  opponent: string;
+  game_date: string | null;
+  implied_total: number | null;
+  book_count: number;
+  taken: boolean;
+  owner: string | null;
+  owned_by_current: boolean;
+  floor: number | null;
+  mid: number | null;
+  ceiling: number | null;
+}
+
+export interface DefenseResponse {
+  week: string;
+  defenses: DefenseRow[];
+  note?: string;
+  message?: string;
+  error?: string;
+  ratelimit?: string;
+}
+
+export interface LineupRow {
+  slot: string;
+  name: string;
+  pos: string;
+  team: string | null;
+  points: number;
+  floor: number | null;
+  mid: number | null;
+  ceiling: number | null;
+}
+
+export interface LineupResponse {
+  week: string;
+  target: 'floor' | 'mid' | 'ceiling';
+  lineup: LineupRow[];
+  total_points: number;
+  unmodeled_slots: string[];
+  unfilled_slots: string[];
+  defense_note?: string;
+  error?: string;
+  ratelimit?: string;
+}
