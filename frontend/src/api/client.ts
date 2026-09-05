@@ -1,5 +1,5 @@
 import type { WeekWindow } from '../state/workspace';
-import type { ProjectionResponse } from '../types';
+import type { PlayerOddsDetails, ProjectionResponse } from '../types';
 
 function getCookie(name: string): string | null {
   const key = `${name}=`;
@@ -30,6 +30,25 @@ function identityParams(): URLSearchParams | null {
   return params;
 }
 
+function requestInit(signal?: AbortSignal): RequestInit {
+  const request: RequestInit = { headers: { Accept: 'application/json' } };
+  if (signal) request.signal = signal;
+  return request;
+}
+
+async function fetchJson<T extends { error?: string }>(
+  path: string,
+  params: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(`${path}?${params.toString()}`, requestInit(signal));
+  const payload = (await response.json()) as T;
+  if (!response.ok) {
+    throw new Error(payload.error || `Request failed (${response.status}).`);
+  }
+  return payload;
+}
+
 export class MissingIdentityError extends Error {
   constructor() {
     super('No saved Sleeper league identity was found.');
@@ -45,15 +64,18 @@ export async function fetchProjections(
   if (!params) throw new MissingIdentityError();
   params.set('week', week);
   params.set('mode', 'auto');
+  return fetchJson<ProjectionResponse>('/projections', params, signal);
+}
 
-  const request: RequestInit = { headers: { Accept: 'application/json' } };
-  if (signal) request.signal = signal;
-
-  const response = await fetch(`/projections?${params.toString()}`, request);
-
-  const payload = (await response.json()) as ProjectionResponse;
-  if (!response.ok) {
-    throw new Error(payload.error || `Projection request failed (${response.status}).`);
-  }
-  return payload;
+export async function fetchPlayerDetails(
+  name: string,
+  week: WeekWindow,
+  signal?: AbortSignal,
+): Promise<PlayerOddsDetails> {
+  const params = identityParams();
+  if (!params) throw new MissingIdentityError();
+  params.set('name', name);
+  params.set('week', week);
+  params.set('mode', 'auto');
+  return fetchJson<PlayerOddsDetails>('/player/odds', params, signal);
 }

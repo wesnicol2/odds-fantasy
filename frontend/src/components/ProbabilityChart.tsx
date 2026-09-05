@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { ProbabilitySeries } from '../types';
+import { sourceThresholdX } from '../analysis/metrics';
+import type { ChartEvidence, ProbabilitySeries } from '../types';
 import type { EChartsOption, EChartsType } from '../visualization/echarts';
 import { echarts } from '../visualization/echarts';
 
@@ -7,6 +8,12 @@ interface ProbabilityChartProps {
   series: ProbabilitySeries[];
   target: number | null;
   activePlayerId: string | null;
+  metric?: string;
+  xAxisName?: string;
+  yAxisName?: string;
+  targetEnabled?: boolean;
+  stepCurve?: boolean;
+  evidence?: ChartEvidence | null;
   onTargetChange: (target: number) => void;
   onPlayerHover: (playerId: string | null) => void;
   onPlayerSelect: (playerId: string) => void;
@@ -22,10 +29,21 @@ function roundedTarget(value: number): number {
   return Math.round(value * 2) / 2;
 }
 
+function playerSeriesId(seriesId?: string): string | null {
+  if (!seriesId || seriesId.includes('::')) return null;
+  return seriesId;
+}
+
 export function ProbabilityChart({
   series,
   target,
   activePlayerId,
+  metric = 'fantasy_points',
+  xAxisName = 'Fantasy points',
+  yAxisName = 'P(FP ≥ x)',
+  targetEnabled = true,
+  stepCurve = false,
+  evidence = null,
   onTargetChange,
   onPlayerHover,
   onPlayerSelect,
@@ -55,6 +73,77 @@ export function ProbabilityChart({
     const chart = chartRef.current;
     if (!chart) return;
 
+    const playerSeries = series.map((item, index) => {
+      const isActive = activePlayerId === null || item.id === activePlayerId;
+      return {
+        id: item.id,
+        name: item.label,
+        type: 'line' as const,
+        showSymbol: false,
+        smooth: false,
+        ...(stepCurve ? { step: 'end' as const } : {}),
+        color: playerColor(item.id),
+        lineStyle: {
+          width: item.id === activePlayerId ? 3.5 : 2,
+          opacity: isActive ? 1 : 0.42,
+        },
+        emphasis: { focus: 'series' as const, lineStyle: { width: 4 } },
+        data: item.points.map((point) => [point.x, point.probability]),
+        ...(index === 0 && targetEnabled && target !== null
+          ? {
+              markLine: {
+                symbol: 'none',
+                silent: true,
+                lineStyle: { width: 2, type: 'dashed' as const, color: '#f1f4f7' },
+                label: {
+                  color: '#f1f4f7',
+                  backgroundColor: '#171c23',
+                  padding: [4, 6],
+                  formatter: `Target ${target.toFixed(1)}`,
+                },
+                data: [{ xAxis: target }],
+              },
+            }
+          : {}),
+      };
+    });
+
+    const evidenceSeries = [];
+    if (evidence) {
+      evidenceSeries.push({
+        id: `${evidence.playerId}::anchors`,
+        name: 'Consensus anchors',
+        type: 'scatter' as const,
+        symbol: 'diamond',
+        symbolSize: 10,
+        itemStyle: { color: '#f1f4f7', borderColor: '#0a0c0f', borderWidth: 1 },
+        data: evidence.anchors.map((anchor) => [
+          sourceThresholdX(metric, anchor.threshold),
+          anchor.survival,
+        ]),
+        z: 8,
+      });
+
+      const sourceThresholds = [
+        ...new Set(
+          evidence.lines
+            .map((line) => line.point)
+            .filter((point): point is number => point !== null)
+            .map((point) => sourceThresholdX(metric, point)),
+        ),
+      ];
+      evidenceSeries.push({
+        id: `${evidence.playerId}::source-lines`,
+        name: 'Sportsbook thresholds',
+        type: 'scatter' as const,
+        symbol: 'rect',
+        symbolSize: [2, 12],
+        itemStyle: { color: '#a9b1bd', opacity: 0.65 },
+        data: sourceThresholds.map((threshold) => [threshold, 0.018]),
+        z: 7,
+      });
+    }
+
     const option: EChartsOption = {
       animationDuration: 180,
       animationDurationUpdate: 100,
@@ -73,7 +162,7 @@ export function ProbabilityChart({
       },
       xAxis: {
         type: 'value',
-        name: 'Fantasy points',
+        name: xAxisName,
         nameLocation: 'middle',
         nameGap: 36,
         axisLabel: { color: '#8a94a3' },
@@ -82,7 +171,7 @@ export function ProbabilityChart({
       },
       yAxis: {
         type: 'value',
-        name: 'P(FP ≥ x)',
+        name: yAxisName,
         min: 0,
         max: 1,
         interval: 0.25,
@@ -93,49 +182,34 @@ export function ProbabilityChart({
         axisLine: { lineStyle: { color: '#303844' } },
         splitLine: { lineStyle: { color: '#1d242d' } },
       },
-      series: series.map((item, index) => {
-        const isActive = activePlayerId === null || item.id === activePlayerId;
-        return {
-          id: item.id,
-          name: item.label,
-          type: 'line',
-          showSymbol: false,
-          smooth: false,
-          color: playerColor(item.id),
-          lineStyle: { width: item.id === activePlayerId ? 3.5 : 2, opacity: isActive ? 1 : 0.42 },
-          emphasis: { focus: 'series', lineStyle: { width: 4 } },
-          data: item.points.map((point) => [point.x, point.probability]),
-          ...(index === 0 && target !== null
-            ? {
-                markLine: {
-                  symbol: 'none',
-                  silent: true,
-                  lineStyle: { width: 2, type: 'dashed', color: '#f1f4f7' },
-                  label: {
-                    color: '#f1f4f7',
-                    backgroundColor: '#171c23',
-                    padding: [4, 6],
-                    formatter: `Target ${target.toFixed(1)}`,
-                  },
-                  data: [{ xAxis: target }],
-                },
-              }
-            : {}),
-        };
-      }),
+      series: [...playerSeries, ...evidenceSeries],
     };
 
     chart.setOption(option, { notMerge: true });
-  }, [series, target, activePlayerId]);
+  }, [
+    series,
+    target,
+    activePlayerId,
+    evidence,
+    metric,
+    stepCurve,
+    targetEnabled,
+    xAxisName,
+    yAxisName,
+  ]);
 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
 
-    const handleOver = (params: { seriesId?: string }) => onPlayerHover(params.seriesId ?? null);
+    const handleOver = (params: { seriesId?: string }) => {
+      const playerId = playerSeriesId(params.seriesId);
+      if (playerId) onPlayerHover(playerId);
+    };
     const handleOut = () => onPlayerHover(null);
     const handleClick = (params: { seriesId?: string }) => {
-      if (params.seriesId) onPlayerSelect(params.seriesId);
+      const playerId = playerSeriesId(params.seriesId);
+      if (playerId) onPlayerSelect(playerId);
     };
     chart.on('mouseover', handleOver);
     chart.on('mouseout', handleOut);
@@ -150,7 +224,7 @@ export function ProbabilityChart({
 
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart || series.length === 0) return;
+    if (!chart || series.length === 0 || !targetEnabled) return;
     const renderer = chart.getZr();
 
     const targetFromPointer = (offsetX: number, offsetY: number): number | null => {
@@ -200,7 +274,7 @@ export function ProbabilityChart({
       renderer.off('mouseup', stopDragging);
       renderer.off('globalout', stopDragging);
     };
-  }, [series.length, target, onTargetChange]);
+  }, [series.length, target, targetEnabled, onTargetChange]);
 
   return (
     <div className="chart-shell">
@@ -208,10 +282,10 @@ export function ProbabilityChart({
         ref={elementRef}
         className="probability-chart"
         role="img"
-        aria-label="Fantasy point survival probability comparison. Drag the target line or use the numeric target control."
+        aria-label={`${xAxisName} survival probability comparison.${targetEnabled ? ' Drag the target line or use the numeric target control.' : ''}`}
       />
       {series.length === 0 ? (
-        <div className="chart-empty">Select players to compare probability distributions.</div>
+        <div className="chart-empty">No selected players have data for this metric.</div>
       ) : null}
     </div>
   );

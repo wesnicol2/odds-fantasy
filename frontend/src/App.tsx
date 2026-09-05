@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchProjections, MissingIdentityError } from './api/client';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isCountMetric, metricLabel, sortMetrics } from './analysis/metrics';
+import { fetchPlayerDetails, fetchProjections, MissingIdentityError } from './api/client';
 import { PlayerInspector } from './components/PlayerInspector';
 import { PlayerRanking } from './components/PlayerRanking';
 import { ProbabilityChart } from './components/ProbabilityChart';
 import { useWorkspaceStore } from './state/workspace';
-import type { ProjectionResponse } from './types';
+import type { ChartEvidence, PlayerOddsDetails, ProjectionResponse } from './types';
 
 const views = [
   ['players', 'Players'],
@@ -12,15 +13,21 @@ const views = [
   ['lineup', 'Best lineup'],
 ] as const;
 
+function detailsKey(week: string, player: string): string {
+  return `${week}:${player}`;
+}
+
 export function App() {
   const view = useWorkspaceStore((state) => state.view);
   const week = useWorkspaceStore((state) => state.week);
+  const metric = useWorkspaceStore((state) => state.metric);
   const target = useWorkspaceStore((state) => state.targetFantasyPoints);
   const selectedPlayer = useWorkspaceStore((state) => state.selectedPlayer);
   const selectedPlayers = useWorkspaceStore((state) => state.selectedPlayers);
   const selectedPositions = useWorkspaceStore((state) => state.selectedPositions);
   const setView = useWorkspaceStore((state) => state.setView);
   const setWeek = useWorkspaceStore((state) => state.setWeek);
+  const setMetric = useWorkspaceStore((state) => state.setMetric);
   const setTarget = useWorkspaceStore((state) => state.setTargetFantasyPoints);
   const selectPlayer = useWorkspaceStore((state) => state.selectPlayer);
   const setSelectedPlayers = useWorkspaceStore((state) => state.setSelectedPlayers);
@@ -30,7 +37,31 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
+  const [detailsByKey, setDetailsByKey] = useState<Record<string, PlayerOddsDetails>>({});
+  const [loadingDetailKeys, setLoadingDetailKeys] = useState<string[]>([]);
+  const detailsRef = useRef<Record<string, PlayerOddsDetails>>({});
+  const detailInflightRef = useRef(new Set<string>());
   const initializedWeekRef = useRef<string | null>(null);
+
+  const loadPlayerDetails = useCallback(
+    async (name: string) => {
+      const key = detailsKey(week, name);
+      if (detailsRef.current[key] || detailInflightRef.current.has(key)) return;
+      detailInflightRef.current.add(key);
+      setLoadingDetailKeys((current) => [...current, key]);
+      try {
+        const payload = await fetchPlayerDetails(name, week);
+        detailsRef.current = { ...detailsRef.current, [key]: payload };
+        setDetailsByKey(detailsRef.current);
+      } catch (reason) {
+        console.error(`Could not load evidence for ${name}`, reason);
+      } finally {
+        detailInflightRef.current.delete(key);
+        setLoadingDetailKeys((current) => current.filter((value) => value !== key));
+      }
+    },
+    [week],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,11 +110,40 @@ export function App() {
     return () => controller.abort();
   }, [week, selectPlayer, setSelectedPlayers, setSelectedPositions]);
 
+  useEffect(() => {
+    if (selectedPlayer) void loadPlayerDetails(selectedPlayer);
+  }, [selectedPlayer, loadPlayerDetails]);
+
+  useEffect(() => {
+    if (metric === 'fantasy_points') return;
+    for (const player of selectedPlayers) void loadPlayerDetails(player);
+  }, [metric, selectedPlayers, loadPlayerDetails]);
+
   const players = report?.players ?? [];
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
-  const graphSeries = useMemo(
-    () =>
-      players
+  const selectedDetails = selectedPlayer
+    ? (detailsByKey[detailsKey(week, selectedPlayer)] ?? null)
+    : null;
+  const selectedDetailsLoading = selectedPlayer
+    ? loadingDetailKeys.includes(detailsKey(week, selectedPlayer))
+    : false;
+
+  const availableMetrics = useMemo(() => {
+    const metrics = new Set<string>(['fantasy_points']);
+    for (const player of selectedPlayers) {
+      const details = detailsByKey[detailsKey(week, player)];
+      if (!details) continue;
+      for (const key of Object.keys(details.markets)) metrics.add(key);
+    }
+    if (selectedDetails) {
+      for (const key of Object.keys(selectedDetails.markets)) metrics.add(key);
+    }
+    return sortMetrics([...metrics]);
+  }, [detailsByKey, selectedDetails, selectedPlayers, week]);
+
+  const graphSeries = useMemo(() => {
+    if (metric === 'fantasy_points') {
+      return players
         .filter(
           (player) =>
             player.curve.length > 0 &&
@@ -94,9 +154,26 @@ export function App() {
           id: player.name,
           label: player.name,
           points: player.curve.map((point) => ({ x: point.x, probability: point.survival })),
-        })),
-    [players, selectedPlayers, selectedPositions],
-  );
+        }));
+    }
+
+    return players
+      .filter(
+        (player) => selectedPlayers.includes(player.name) && selectedPositions.includes(player.pos),
+      )
+      .flatMap((player) => {
+        const market = detailsByKey[detailsKey(week, player.name)]?.markets[metric];
+        if (!market?.graph.points.length) return [];
+        return [{ id: player.name, label: player.name, points: market.graph.points }];
+      });
+  }, [detailsByKey, metric, players, selectedPlayers, selectedPositions, week]);
+
+  const chartEvidence: ChartEvidence | null = useMemo(() => {
+    if (!selectedPlayer || metric === 'fantasy_points') return null;
+    const market = selectedDetails?.markets[metric];
+    if (!market) return null;
+    return { playerId: selectedPlayer, anchors: market.anchors, lines: market.lines };
+  }, [metric, selectedDetails, selectedPlayer]);
 
   const toggleComparedPlayer = (name: string) => {
     setSelectedPlayers(
@@ -113,6 +190,9 @@ export function App() {
         : [...selectedPositions, position],
     );
   };
+
+  const fantasyPointsMetric = metric === 'fantasy_points';
+  const activeMetricLabel = metricLabel(metric);
 
   return (
     <div className="app-frame">
@@ -169,7 +249,7 @@ export function App() {
             {!error && !loading ? (
               <PlayerRanking
                 players={players}
-                target={target}
+                target={fantasyPointsMetric ? target : null}
                 selectedPlayer={selectedPlayer}
                 comparedPlayers={selectedPlayers}
                 selectedPositions={selectedPositions}
@@ -192,42 +272,67 @@ export function App() {
             <div className="pane-heading split">
               <div>
                 <span className="eyebrow">Probability</span>
-                <h2>Fantasy points survival</h2>
+                <h2>{activeMetricLabel} survival</h2>
                 <p className="pane-description">
-                  Chance of scoring at least each fantasy-point threshold.
+                  Chance of reaching or exceeding each {activeMetricLabel.toLowerCase()} threshold.
                 </p>
               </div>
-              <div className="target-controls">
-                <label className="target-control">
-                  <span>Target FP</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.5"
-                    value={target ?? ''}
-                    placeholder="Set"
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setTarget(value === '' ? null : Number(value));
-                    }}
-                  />
-                </label>
-                {target !== null ? (
-                  <button className="clear-target" type="button" onClick={() => setTarget(null)}>
-                    Clear
-                  </button>
-                ) : null}
-              </div>
+              {fantasyPointsMetric ? (
+                <div className="target-controls">
+                  <label className="target-control">
+                    <span>Target FP</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.5"
+                      value={target ?? ''}
+                      placeholder="Set"
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setTarget(value === '' ? null : Number(value));
+                      }}
+                    />
+                  </label>
+                  {target !== null ? (
+                    <button className="clear-target" type="button" onClick={() => setTarget(null)}>
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
+
+            <fieldset className="metric-strip">
+              <legend className="sr-only">Probability metric</legend>
+              {availableMetrics.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={metric === value ? 'active' : ''}
+                  onClick={() => setMetric(value)}
+                >
+                  {metricLabel(value)}
+                </button>
+              ))}
+            </fieldset>
+
             <div className="chart-instruction">
-              {target === null
-                ? 'Click and drag in the chart to set a target.'
-                : 'Drag the dashed target line or type an exact value.'}
+              {fantasyPointsMetric
+                ? target === null
+                  ? 'Click and drag in the chart to set a target.'
+                  : 'Drag the dashed target line or type an exact value.'
+                : 'Diamonds show consensus market anchors; x-axis ticks show exact sportsbook thresholds for the selected player.'}
             </div>
             <ProbabilityChart
               series={graphSeries}
-              target={target}
+              target={fantasyPointsMetric ? target : null}
               activePlayerId={hoveredPlayer ?? selectedPlayer}
+              metric={metric}
+              xAxisName={activeMetricLabel}
+              yAxisName={`P(${activeMetricLabel} ≥ x)`}
+              targetEnabled={fantasyPointsMetric}
+              stepCurve={!fantasyPointsMetric && isCountMetric(metric)}
+              evidence={chartEvidence}
               onTargetChange={setTarget}
               onPlayerHover={setHoveredPlayer}
               onPlayerSelect={selectPlayer}
@@ -238,7 +343,13 @@ export function App() {
             <div className="pane-heading">
               <span className="eyebrow">Inspector</span>
             </div>
-            <PlayerInspector player={selected} target={target} />
+            <PlayerInspector
+              player={selected}
+              target={target}
+              metric={metric}
+              details={selectedDetails}
+              detailsLoading={selectedDetailsLoading}
+            />
           </aside>
         </main>
       ) : (
