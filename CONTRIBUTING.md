@@ -29,14 +29,28 @@ No direct commits to `feature/*` or `main`.
 ## Workflow
 
 1. Create the feature branch from `main` if needed, then a `dev/*` branch from it.
-2. Make the change and run `ruff check .`, `ruff format --check .`, and
-   `python -m pytest tests/`.
+2. Make the change and run the same deterministic gates CI runs:
+   - `ruff check .`
+   - `ruff format --check .`
+   - `python -m pytest tests/`
+   - `cd frontend && npm ci --no-audit --no-fund`
+   - `npm run check`
+   - `npm run typecheck`
+   - `npm run build`
 3. Push the dev branch. Red CI is a hard stop.
 4. PR `dev/*` → `feature/*`; merge only when green, then delete the dev branch.
 5. Feature CI builds the real Docker image and runs the automated container/browser
    smoke test. This is the required pre-production runtime gate.
 6. PR `feature/*` → `main` for owner review. Merge only when all CI is green, then
    delete the feature branch.
+
+`frontend/package-lock.json` is committed and authoritative. Use `npm ci`, not
+`npm install`, for validation and CI. Direct package/version changes must update the
+lockfile intentionally.
+
+Biome is the frontend formatting/linting contract. Do not add ESLint or Prettier
+without an explicit owner decision; agents should run `npm run check` before push
+rather than using CI failures to discover formatting or React/accessibility rules.
 
 Testing the actual home-server Test container is **optional**, not a promotion
 requirement. It is useful when a change specifically touches Watchtower, GHCR
@@ -54,7 +68,8 @@ likely failure and explicitly flag anything that was not verified.
 `ci.yml` is the only entrypoint. It runs on pushes to `dev/**`, `feature/**`, and
 `main`, on pull requests, and via `workflow_dispatch`.
 
-1. `lint.yml`: Ruff lint, Ruff format check, Python syntax compile.
+1. `lint.yml`: Ruff lint, Ruff format check, Python syntax compile, then a locked
+   Node install plus Biome check, strict TypeScript check and production Vite build.
 2. `test.yml`: deterministic unit/integration tests.
 3. `smoke.yml`: for feature/main and PRs targeting main, build the actual
    Dockerfile, start the image, verify `/health` and `/`, then use Chromium via
