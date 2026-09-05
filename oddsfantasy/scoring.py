@@ -36,10 +36,25 @@ _BONUS_WHAT_TO_MARKET = {
     "rec": "player_reception_yds",
 }
 
+# The Odds API's anytime-TD market says only that the player scores a touchdown,
+# not how. Position is the market-only metadata we already know about the player:
+# WR/TE touchdowns use receiving-TD scoring; QB/RB use rushing-TD scoring. This
+# matters only in leagues where those configured point values differ.
+_RECEIVING_TD_POSITIONS = {"WR", "TE"}
+
 # Markets whose scoring value is always negative regardless of how the league
 # spells it. Sleeper stores pass_int as -1, but some settings dumps carry the
 # magnitude only, and an interception that *adds* points would be silently wrong.
 _ALWAYS_NEGATIVE_MARKETS = {"player_pass_interceptions"}
+
+
+def _numeric_setting(settings: dict, key: str) -> float | None:
+    if key not in settings:
+        return None
+    try:
+        return float(settings.get(key) or 0.0)
+    except (TypeError, ValueError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -78,7 +93,7 @@ class ScoringConfig:
     """A league's scoring rules, indexed by Odds API market key."""
 
     by_market: dict[str, StatScoring] = field(default_factory=dict)
-    raw: dict[str, float] = field(default_factory=dict)
+    raw: dict[str, object] = field(default_factory=dict)
 
     @classmethod
     def from_settings(cls, scoring_settings: dict | None) -> ScoringConfig:
@@ -109,9 +124,8 @@ class ScoringConfig:
             if "_bonus_" in market_key:
                 # Bonus pseudo-markets in the mapping table; handled above.
                 continue
-            try:
-                per_unit = float(settings.get(rule_key, 0.0) or 0.0)
-            except (TypeError, ValueError):
+            per_unit = _numeric_setting(settings, rule_key)
+            if per_unit is None:
                 per_unit = 0.0
             if market_key in _ALWAYS_NEGATIVE_MARKETS:
                 per_unit = -abs(per_unit)
@@ -124,10 +138,30 @@ class ScoringConfig:
 
         return cls(by_market=by_market, raw=settings)
 
-    def for_market(self, market_key: str) -> StatScoring | None:
-        return self.by_market.get(market_key)
+    def for_market(self, market_key: str, position: str | None = None) -> StatScoring | None:
+        """Return configured scoring for a market, using position where required.
 
-    def score(self, stat_line: dict[str, float]) -> float:
+        ``player_anytime_td`` is the only ambiguous market: the sportsbook line
+        does not identify rushing vs receiving touchdown type. For WR/TE, use
+        the league's configured ``rec_td`` value when present; otherwise fall
+        back to the existing ``rush_td`` mapping. QB/RB and callers without
+        position retain the rushing-TD mapping.
+        """
+        base = self.by_market.get(market_key)
+        if market_key != "player_anytime_td" or base is None:
+            return base
+
+        if str(position or "").upper() in _RECEIVING_TD_POSITIONS:
+            receiving_value = _numeric_setting(self.raw, "rec_td")
+            if receiving_value is not None:
+                return StatScoring(
+                    market_key=market_key,
+                    rule_key="rec_td",
+                    per_unit=receiving_value,
+                )
+        return base
+
+    def score(self, stat_line: dict[str, float], position: str | None = None) -> float:
         """Fantasy points for one realized stat line (one simulated game).
 
         This is the exact scoring function applied per Monte Carlo draw, which
@@ -136,7 +170,7 @@ class ScoringConfig:
         """
         total = 0.0
         for market_key, value in stat_line.items():
-            stat_scoring = self.by_market.get(market_key)
+            stat_scoring = self.for_market(market_key, position=position)
             if stat_scoring is None or value is None:
                 continue
             total += stat_scoring.points_for(float(value))
