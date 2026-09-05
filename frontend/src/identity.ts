@@ -11,6 +11,7 @@ export function getCookie(name: string): string | null {
 }
 
 export function setCookie(name: string, value: string, days = 365): void {
+  // biome-ignore lint/suspicious/noDocumentCookie: the existing API contract reads these browser cookies synchronously.
   document.cookie = `${name}=${encodeURIComponent(value)}; max-age=${days * 86400}; path=/; SameSite=Lax`;
 }
 
