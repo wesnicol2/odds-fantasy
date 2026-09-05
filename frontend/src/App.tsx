@@ -3,15 +3,19 @@ import { isCountMetric, metricLabel, sortMetrics } from './analysis/metrics';
 import {
   fetchBestLineup,
   fetchDefenses,
+  fetchLeagueResolution,
   fetchPlayerDetails,
   fetchProjections,
   MissingIdentityError,
 } from './api/client';
+import { AppSettings } from './components/AppSettings';
 import { DefenseView } from './components/DefenseView';
+import { LeagueSetup, type LeagueSelectionSummary } from './components/LeagueSetup';
 import { LineupView } from './components/LineupView';
 import { PlayerInspector } from './components/PlayerInspector';
 import { PlayerRanking } from './components/PlayerRanking';
 import { ProbabilityChart } from './components/ProbabilityChart';
+import { hasSavedLeagueIdentity, savedLeagueIdentity } from './identity';
 import { useWorkspaceStore } from './state/workspace';
 import type {
   ChartEvidence,
@@ -27,18 +31,19 @@ const views = [
   ['lineup', 'Best lineup'],
 ] as const;
 
-function detailsKey(week: string, player: string): string {
-  return `${week}:${player}`;
+function detailsKey(mode: string, week: string, player: string): string {
+  return `${mode}:${week}:${player}`;
 }
 
-function lineupKey(week: string, target: string): string {
-  return `${week}:${target}`;
+function lineupKey(mode: string, week: string, target: string): string {
+  return `${mode}:${week}:${target}`;
 }
 
 export function App() {
   const view = useWorkspaceStore((state) => state.view);
   const week = useWorkspaceStore((state) => state.week);
   const metric = useWorkspaceStore((state) => state.metric);
+  const dataMode = useWorkspaceStore((state) => state.dataMode);
   const target = useWorkspaceStore((state) => state.targetFantasyPoints);
   const lineupTarget = useWorkspaceStore((state) => state.lineupTarget);
   const selectedPlayer = useWorkspaceStore((state) => state.selectedPlayer);
@@ -47,14 +52,18 @@ export function App() {
   const setView = useWorkspaceStore((state) => state.setView);
   const setWeek = useWorkspaceStore((state) => state.setWeek);
   const setMetric = useWorkspaceStore((state) => state.setMetric);
+  const setDataMode = useWorkspaceStore((state) => state.setDataMode);
   const setTarget = useWorkspaceStore((state) => state.setTargetFantasyPoints);
   const setLineupTarget = useWorkspaceStore((state) => state.setLineupTarget);
   const selectPlayer = useWorkspaceStore((state) => state.selectPlayer);
   const setSelectedPlayers = useWorkspaceStore((state) => state.setSelectedPlayers);
   const setSelectedPositions = useWorkspaceStore((state) => state.setSelectedPositions);
 
+  const [identityVersion, setIdentityVersion] = useState(0);
+  const [setupOpen, setSetupOpen] = useState(() => !hasSavedLeagueIdentity());
+  const [leagueContext, setLeagueContext] = useState<string | null>(null);
   const [report, setReport] = useState<ProjectionResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => hasSavedLeagueIdentity());
   const [error, setError] = useState<string | null>(null);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
   const [detailsByKey, setDetailsByKey] = useState<Record<string, PlayerOddsDetails>>({});
@@ -71,14 +80,17 @@ export function App() {
   const lineupsRef = useRef<Record<string, LineupResponse>>({});
   const initializedWeekRef = useRef<string | null>(null);
 
+  const identityReady = hasSavedLeagueIdentity();
+
   const loadPlayerDetails = useCallback(
     async (name: string) => {
-      const key = detailsKey(week, name);
+      if (!hasSavedLeagueIdentity()) return;
+      const key = detailsKey(dataMode, week, name);
       if (detailsRef.current[key] || detailInflightRef.current.has(key)) return;
       detailInflightRef.current.add(key);
       setLoadingDetailKeys((current) => [...current, key]);
       try {
-        const payload = await fetchPlayerDetails(name, week);
+        const payload = await fetchPlayerDetails(name, week, dataMode);
         detailsRef.current = { ...detailsRef.current, [key]: payload };
         setDetailsByKey(detailsRef.current);
       } catch (reason) {
@@ -88,15 +100,45 @@ export function App() {
         setLoadingDetailKeys((current) => current.filter((value) => value !== key));
       }
     },
-    [week],
+    [dataMode, week],
   );
 
   useEffect(() => {
+    const identity = savedLeagueIdentity();
+    if (!identity.leagueId || !identity.rosterId) {
+      setLeagueContext(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchLeagueResolution(identity.leagueId, controller.signal)
+      .then((payload) => {
+        const team = payload.teams.find(
+          (row) => String(row.roster_id) === String(identity.rosterId),
+        );
+        const leagueName = payload.name || identity.leagueId;
+        const teamName = team?.team_name || team?.display_name || `Team ${identity.rosterId}`;
+        setLeagueContext(`${leagueName} · ${teamName}`);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLeagueContext(null);
+      });
+    return () => controller.abort();
+  }, [identityVersion]);
+
+  useEffect(() => {
+    if (!hasSavedLeagueIdentity()) {
+      setLoading(false);
+      setReport(null);
+      setError(null);
+      return;
+    }
+
     const controller = new AbortController();
     setLoading(true);
     setError(null);
 
-    fetchProjections(week, controller.signal)
+    fetchProjections(week, dataMode, controller.signal)
       .then((payload) => {
         setReport(payload);
         if (initializedWeekRef.current !== week) {
@@ -122,11 +164,9 @@ export function App() {
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
-        setReport(null);
         if (reason instanceof MissingIdentityError) {
-          setError(
-            'No saved Sleeper league was found. Use the current app setup flow once, then return here.',
-          );
+          setSetupOpen(true);
+          setError(null);
         } else {
           setError(reason instanceof Error ? reason.message : 'Could not load projections.');
         }
@@ -136,7 +176,7 @@ export function App() {
       });
 
     return () => controller.abort();
-  }, [week, selectPlayer, setSelectedPlayers, setSelectedPositions]);
+  }, [dataMode, identityVersion, week, selectPlayer, setSelectedPlayers, setSelectedPositions]);
 
   useEffect(() => {
     if (selectedPlayer) void loadPlayerDetails(selectedPlayer);
@@ -148,8 +188,9 @@ export function App() {
   }, [metric, selectedPlayers, loadPlayerDetails]);
 
   useEffect(() => {
-    if (view !== 'defenses') return;
-    const cached = defensesRef.current[week];
+    if (view !== 'defenses' || !hasSavedLeagueIdentity()) return;
+    const key = `${dataMode}:${week}`;
+    const cached = defensesRef.current[key];
     if (cached) {
       setDefensePayload(cached);
       setDefenseError(null);
@@ -159,9 +200,9 @@ export function App() {
     const controller = new AbortController();
     setDefenseLoading(true);
     setDefenseError(null);
-    fetchDefenses(week, controller.signal)
+    fetchDefenses(week, dataMode, controller.signal)
       .then((payload) => {
-        defensesRef.current = { ...defensesRef.current, [week]: payload };
+        defensesRef.current = { ...defensesRef.current, [key]: payload };
         setDefensePayload(payload);
       })
       .catch((reason: unknown) => {
@@ -173,11 +214,11 @@ export function App() {
         if (!controller.signal.aborted) setDefenseLoading(false);
       });
     return () => controller.abort();
-  }, [view, week]);
+  }, [dataMode, identityVersion, view, week]);
 
   useEffect(() => {
-    if (view !== 'lineup') return;
-    const key = lineupKey(week, lineupTarget);
+    if (view !== 'lineup' || !hasSavedLeagueIdentity()) return;
+    const key = lineupKey(dataMode, week, lineupTarget);
     const cached = lineupsRef.current[key];
     if (cached) {
       setLineupPayload(cached);
@@ -188,7 +229,7 @@ export function App() {
     const controller = new AbortController();
     setLineupLoading(true);
     setLineupError(null);
-    fetchBestLineup(week, lineupTarget, controller.signal)
+    fetchBestLineup(week, lineupTarget, dataMode, controller.signal)
       .then((payload) => {
         lineupsRef.current = { ...lineupsRef.current, [key]: payload };
         setLineupPayload(payload);
@@ -202,21 +243,21 @@ export function App() {
         if (!controller.signal.aborted) setLineupLoading(false);
       });
     return () => controller.abort();
-  }, [lineupTarget, view, week]);
+  }, [dataMode, identityVersion, lineupTarget, view, week]);
 
   const players = report?.players ?? [];
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
   const selectedDetails = selectedPlayer
-    ? (detailsByKey[detailsKey(week, selectedPlayer)] ?? null)
+    ? (detailsByKey[detailsKey(dataMode, week, selectedPlayer)] ?? null)
     : null;
   const selectedDetailsLoading = selectedPlayer
-    ? loadingDetailKeys.includes(detailsKey(week, selectedPlayer))
+    ? loadingDetailKeys.includes(detailsKey(dataMode, week, selectedPlayer))
     : false;
 
   const availableMetrics = useMemo(() => {
     const metrics = new Set<string>(['fantasy_points']);
     for (const player of selectedPlayers) {
-      const details = detailsByKey[detailsKey(week, player)];
+      const details = detailsByKey[detailsKey(dataMode, week, player)];
       if (!details) continue;
       for (const key of Object.keys(details.markets)) metrics.add(key);
     }
@@ -224,7 +265,7 @@ export function App() {
       for (const key of Object.keys(selectedDetails.markets)) metrics.add(key);
     }
     return sortMetrics([...metrics]);
-  }, [detailsByKey, selectedDetails, selectedPlayers, week]);
+  }, [dataMode, detailsByKey, selectedDetails, selectedPlayers, week]);
 
   const graphSeries = useMemo(() => {
     if (metric === 'fantasy_points') {
@@ -244,14 +285,15 @@ export function App() {
 
     return players
       .filter(
-        (player) => selectedPlayers.includes(player.name) && selectedPositions.includes(player.pos),
+        (player) =>
+          selectedPlayers.includes(player.name) && selectedPositions.includes(player.pos),
       )
       .flatMap((player) => {
-        const market = detailsByKey[detailsKey(week, player.name)]?.markets[metric];
+        const market = detailsByKey[detailsKey(dataMode, week, player.name)]?.markets[metric];
         if (!market?.graph.points.length) return [];
         return [{ id: player.name, label: player.name, points: market.graph.points }];
       });
-  }, [detailsByKey, metric, players, selectedPlayers, selectedPositions, week]);
+  }, [dataMode, detailsByKey, metric, players, selectedPlayers, selectedPositions, week]);
 
   const chartEvidence: ChartEvidence | null = useMemo(() => {
     if (!selectedPlayer || metric === 'fantasy_points') return null;
@@ -276,6 +318,21 @@ export function App() {
     );
   };
 
+  const completeLeagueSetup = (summary: LeagueSelectionSummary) => {
+    detailsRef.current = {};
+    detailInflightRef.current.clear();
+    defensesRef.current = {};
+    lineupsRef.current = {};
+    initializedWeekRef.current = null;
+    setDetailsByKey({});
+    setLoadingDetailKeys([]);
+    setDefensePayload(null);
+    setLineupPayload(null);
+    setLeagueContext(`${summary.leagueName} · ${summary.teamName}`);
+    setSetupOpen(false);
+    setIdentityVersion((value) => value + 1);
+  };
+
   const fantasyPointsMetric = metric === 'fantasy_points';
   const activeMetricLabel = metricLabel(metric);
 
@@ -285,6 +342,7 @@ export function App() {
         <div>
           <div className="eyebrow">Decision support</div>
           <h1>Odds Fantasy</h1>
+          {leagueContext ? <div className="league-context">{leagueContext}</div> : null}
         </div>
         <div className="header-status">
           {loading ? <span className="loading-dot">Loading projections…</span> : null}
@@ -306,6 +364,11 @@ export function App() {
               Next week
             </button>
           </fieldset>
+          <AppSettings
+            dataMode={dataMode}
+            onDataModeChange={setDataMode}
+            onChangeLeague={() => setSetupOpen(true)}
+          />
         </div>
       </header>
 
@@ -331,7 +394,10 @@ export function App() {
             </div>
             {error ? <div className="error-state">{error}</div> : null}
             {!error && report?.message ? <div className="status-note">{report.message}</div> : null}
-            {!error && !loading ? (
+            {!identityReady ? (
+              <div className="empty-state">Choose a Sleeper league and team to load projections.</div>
+            ) : null}
+            {!error && !loading && identityReady ? (
               <PlayerRanking
                 players={players}
                 target={fantasyPointsMetric ? target : null}
@@ -452,6 +518,13 @@ export function App() {
           onTargetChange={setLineupTarget}
         />
       ) : null}
+
+      <LeagueSetup
+        open={setupOpen}
+        required={!identityReady}
+        onClose={() => setSetupOpen(false)}
+        onComplete={completeLeagueSetup}
+      />
     </div>
   );
 }
