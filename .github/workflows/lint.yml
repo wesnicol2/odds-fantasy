@@ -16,11 +16,6 @@ jobs:
         with:
           args: check
 
-      - name: Ruff format preview
-        uses: astral-sh/ruff-action@v3
-        with:
-          args: format --diff
-
       - name: Ruff format check
         uses: astral-sh/ruff-action@v3
         with:
