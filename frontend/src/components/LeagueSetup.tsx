@@ -137,11 +137,12 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
           ) : null}
         </header>
 
-        <div className="setup-progress" role="group" aria-label="Setup progress">
+        <fieldset className="setup-progress">
+          <legend className="sr-only">Setup progress</legend>
           <span className={step === 'username' ? 'active' : ''}>1 Username</span>
           <span className={step === 'league' ? 'active' : ''}>2 League</span>
           <span className={step === 'team' ? 'active' : ''}>3 Team</span>
-        </div>
+        </fieldset>
 
         {step === 'username' ? (
           <form
