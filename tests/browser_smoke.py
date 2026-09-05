@@ -273,9 +273,10 @@ def main() -> None:
         assert "10.0" in alpha_row.inner_text()
         assert "17.0" in alpha_row.inner_text()
         assert "25.0" in alpha_row.inner_text()
-        page.get_by_role(
-            "img", name="Fantasy points survival probability comparison", exact=False
-        ).wait_for()
+        chart = page.locator(".probability-chart")
+        chart.wait_for()
+        chart_label = chart.get_attribute("aria-label") or ""
+        assert chart_label.startswith("Fantasy points survival probability comparison.")
 
         target_input = page.get_by_label("Target FP")
         target_input.fill("20")
