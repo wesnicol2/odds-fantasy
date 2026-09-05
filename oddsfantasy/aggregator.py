@@ -1,12 +1,16 @@
 """Normalize Odds API event payloads into per-player, per-book market lines.
 
-No projection math lives here.  The methodology engine consumes the raw book
-lines directly, de-vigs each book, and builds consensus anchors itself.
+No projection math lives here. The methodology engine consumes the raw book
+lines directly, de-vigs each book, and builds consensus anchors itself. Player
+position is carried as non-market metadata so position-dependent league scoring
+can interpret an anytime touchdown without changing the sportsbook evidence.
 """
 
 from __future__ import annotations
 
 import re
+
+PLAYER_POSITION_META_KEY = "__player_position__"
 
 
 def _norm_name(value: str) -> str:
@@ -91,17 +95,30 @@ def aggregate_players_from_event(
 def aggregate_by_week(
     event_odds_by_game: dict[str, object], planned_games: dict[str, object]
 ) -> dict[str, dict]:
-    """Merge normalized player odds across all planned games in a week."""
+    """Merge normalized player odds across all planned games in a week.
+
+    Position is copied from the already-resolved game plan into each book's
+    market dictionary under :data:`PLAYER_POSITION_META_KEY`. It is metadata,
+    not a market: the odds math ignores unknown keys, while the scoring layer
+    can use it to distinguish receiving from rushing touchdown scoring.
+    """
     output: dict[str, dict] = {}
     for game_id, event_odds in (event_odds_by_game or {}).items():
         game_plan = planned_games.get(game_id)
         if not game_plan:
             continue
         aliases = {player["alias"] for player in game_plan.players}
+        position_by_alias = {
+            player["alias"]: str(player.get("primary_position") or "").upper()
+            for player in game_plan.players
+        }
         event_players = aggregate_players_from_event(event_odds, aliases)
         for alias, books in event_players.items():
             player_out = output.setdefault(alias, {})
             for book_key, markets in books.items():
                 book_out = player_out.setdefault(book_key, {})
                 book_out.update(markets)
+                position = position_by_alias.get(alias)
+                if position:
+                    book_out[PLAYER_POSITION_META_KEY] = {"value": position}
     return output
