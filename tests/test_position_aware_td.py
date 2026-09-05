@@ -2,7 +2,7 @@
 
 import unittest
 
-from oddsfantasy.aggregator import aggregate_by_week, PLAYER_POSITION_META_KEY
+import oddsfantasy.aggregator
 from oddsfantasy.planner import PlannedGame
 from oddsfantasy.projection import project_player
 
@@ -50,21 +50,30 @@ def plan(alias: str, position: str) -> PlannedGame:
 class PositionMetadataTest(unittest.TestCase):
     def test_aggregator_carries_position_inside_each_book_without_new_book(self):
         player = "Beta Receiver"
-        odds = aggregate_by_week({"g1": anytime_event(player)}, {"g1": plan(player, "WR")})
+        odds = oddsfantasy.aggregator.aggregate_by_week(
+            {"g1": anytime_event(player)}, {"g1": plan(player, "WR")}
+        )
         self.assertEqual(set(odds[player]), {"bookA"})
-        self.assertEqual(odds[player]["bookA"][PLAYER_POSITION_META_KEY], {"value": "WR"})
+        self.assertEqual(
+            odds[player]["bookA"][oddsfantasy.aggregator.PLAYER_POSITION_META_KEY],
+            {"value": "WR"},
+        )
         self.assertIn("player_anytime_td", odds[player]["bookA"])
 
     def test_receiver_projection_uses_receiving_td_value_from_metadata(self):
         player = "Beta Receiver"
-        odds = aggregate_by_week({"g1": anytime_event(player)}, {"g1": plan(player, "WR")})
+        odds = oddsfantasy.aggregator.aggregate_by_week(
+            {"g1": anytime_event(player)}, {"g1": plan(player, "WR")}
+        )
         projection = project_player(odds[player], SCORING)
         self.assertAlmostEqual(projection.stats["player_anytime_td"].expected_points, 4.0)
         self.assertEqual(sorted(set(projection.samples)), [0.0, 8.0])
 
     def test_running_back_projection_uses_rushing_td_value_from_metadata(self):
         player = "Alpha Runner"
-        odds = aggregate_by_week({"g1": anytime_event(player)}, {"g1": plan(player, "RB")})
+        odds = oddsfantasy.aggregator.aggregate_by_week(
+            {"g1": anytime_event(player)}, {"g1": plan(player, "RB")}
+        )
         projection = project_player(odds[player], SCORING)
         self.assertAlmostEqual(projection.stats["player_anytime_td"].expected_points, 2.5)
         self.assertEqual(sorted(set(projection.samples)), [0.0, 5.0])
