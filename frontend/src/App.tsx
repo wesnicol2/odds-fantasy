@@ -49,15 +49,23 @@ export function App() {
           setSelectedPlayers(graphed);
           initializedWeekRef.current = week;
         }
-        if (!payload.players.some((player) => player.name === selectedPlayer)) {
-          selectPlayer(payload.players.find((player) => player.has_projection)?.name ?? payload.players[0]?.name ?? null);
+
+        const currentSelectedPlayer = useWorkspaceStore.getState().selectedPlayer;
+        if (!payload.players.some((player) => player.name === currentSelectedPlayer)) {
+          selectPlayer(
+            payload.players.find((player) => player.has_projection)?.name ??
+              payload.players[0]?.name ??
+              null,
+          );
         }
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
         setReport(null);
         if (reason instanceof MissingIdentityError) {
-          setError('No saved Sleeper league was found. Use the current app setup flow once, then return here.');
+          setError(
+            'No saved Sleeper league was found. Use the current app setup flow once, then return here.',
+          );
         } else {
           setError(reason instanceof Error ? reason.message : 'Could not load projections.');
         }
@@ -67,7 +75,7 @@ export function App() {
       });
 
     return () => controller.abort();
-  }, [week, selectPlayer, selectedPlayer, setSelectedPlayers, setSelectedPositions]);
+  }, [week, selectPlayer, setSelectedPlayers, setSelectedPositions]);
 
   const players = report?.players ?? [];
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
@@ -167,7 +175,11 @@ export function App() {
                 onSelectPlayer={selectPlayer}
                 onToggleComparedPlayer={toggleComparedPlayer}
                 onTogglePosition={togglePosition}
-                onSelectAll={() => setSelectedPlayers(players.filter((player) => player.curve.length).map((player) => player.name))}
+                onSelectAll={() =>
+                  setSelectedPlayers(
+                    players.filter((player) => player.curve.length).map((player) => player.name),
+                  )
+                }
                 onSelectNone={() => setSelectedPlayers([])}
                 onHoverPlayer={setHoveredPlayer}
               />
@@ -179,7 +191,9 @@ export function App() {
               <div>
                 <span className="eyebrow">Probability</span>
                 <h2>Fantasy points survival</h2>
-                <p className="pane-description">Chance of scoring at least each fantasy-point threshold.</p>
+                <p className="pane-description">
+                  Chance of scoring at least each fantasy-point threshold.
+                </p>
               </div>
               <div className="target-controls">
                 <label className="target-control">
@@ -204,7 +218,9 @@ export function App() {
               </div>
             </div>
             <div className="chart-instruction">
-              {target === null ? 'Click and drag in the chart to set a target.' : 'Drag the dashed target line or type an exact value.'}
+              {target === null
+                ? 'Click and drag in the chart to set a target.'
+                : 'Drag the dashed target line or type an exact value.'}
             </div>
             <ProbabilityChart
               series={graphSeries}
