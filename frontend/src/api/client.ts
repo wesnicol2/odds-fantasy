@@ -46,10 +46,10 @@ export async function fetchProjections(
   params.set('week', week);
   params.set('mode', 'auto');
 
-  const response = await fetch(`/projections?${params.toString()}`, {
-    headers: { Accept: 'application/json' },
-    signal,
-  });
+  const request: RequestInit = { headers: { Accept: 'application/json' } };
+  if (signal) request.signal = signal;
+
+  const response = await fetch(`/projections?${params.toString()}`, request);
 
   const payload = (await response.json()) as ProjectionResponse;
   if (!response.ok) {
