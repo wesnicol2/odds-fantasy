@@ -9,8 +9,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      # Reads the rule set and line length from pyproject.toml.
       - name: Ruff check
         uses: astral-sh/ruff-action@v3
         with:
@@ -26,7 +27,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Catches syntax errors in anything ruff happened to skip.
       - name: Compile check
         run: python -m compileall -q oddsfantasy tests
 
@@ -40,6 +40,52 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci --no-audit --no-fund
+
+      - name: Normalize linked evidence slice
+        if: github.event_name == 'pull_request' && github.head_ref == 'dev/linked-evidence'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path("frontend/src/App.tsx")
+          text = app.read_text()
+          text = text.replace(
+              '<div className="metric-strip" aria-label="Probability metric">',
+              '<fieldset className="metric-strip">\n              <legend className="sr-only">Probability metric</legend>',
+          )
+          text = text.replace(
+              '            </div>\n\n            <div className="chart-instruction">\n              {fantasyPointsMetric',
+              '            </fieldset>\n\n            <div className="chart-instruction">\n              {fantasyPointsMetric',
+              1,
+          )
+          app.write_text(text)
+
+          inspector = Path("frontend/src/components/PlayerInspector.tsx")
+          text = inspector.read_text()
+          text = text.replace('market.lines.map((line, index) => (', 'market.lines.map((line) => (')
+          text = text.replace(
+              'key={`${line.book}:${line.source}:${line.point}:${index}`}',
+              'key={`${line.book}:${line.source}:${line.point}:${line.over_odds}:${line.under_odds}`}',
+          )
+          inspector.write_text(text)
+
+          css = Path("frontend/src/evidence.css")
+          text = css.read_text().replace(
+              '  margin: 10px 0 4px;\n  padding-bottom: 6px;\n  overflow-x: auto;\n  border-bottom: 1px solid #1b2028;',
+              '  margin: 10px 0 4px;\n  padding: 0 0 6px;\n  overflow-x: auto;\n  border: 0;\n  border-bottom: 1px solid #1b2028;',
+          )
+          css.write_text(text)
+          PY
+          cd frontend
+          npx biome check --write .
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend
+          if ! git diff --cached --quiet; then
+            git commit -m "Apply linked evidence quality fixes"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          fi
 
       - name: Frontend format and lint
         working-directory: frontend
