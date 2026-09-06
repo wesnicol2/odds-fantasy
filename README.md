@@ -67,20 +67,24 @@ docker build -t odds-fantasy .
 docker run --rm -p 8000:8000 odds-fantasy
 ```
 
-Run checks before pushing:
+After modifying Python, normalize it with the repo-owned pinned tool instead of hand-formatting:
 
 ```bash
-ruff check .
-ruff format --check .
-python -m pytest tests/
+./scripts/fix
+```
+
+Before every push, run the same Python verification gate CI runs:
+
+```bash
+./scripts/verify
 cd frontend
-npm ci
+npm ci --no-audit --no-fund
 npm run check
 npm run typecheck
 npm run build
 ```
 
-Feature/main CI additionally builds the exact Docker image and runs Chromium against the production-served React application with deterministic mocked application-data APIs.
+Feature/main CI additionally builds the exact Docker image and runs Chromium against the production-served React application with deterministic mocked application-data APIs. The deployed home-server Test container is optional and is reserved for deployment-specific verification.
 
 ## Endpoints
 
@@ -107,6 +111,7 @@ Feature/main CI additionally builds the exact Docker image and runs Chromium aga
 - `oddsfantasy/odds_details.py` — source-line player drill-down and stat graph payloads.
 - `oddsfantasy/defense.py` — implied-team-total and points-allowed DEF math.
 - `oddsfantasy/lineup.py` — pure starter-slot optimizer.
+- `scripts/` — repo-owned Python fix and verification commands used locally and by CI.
 - `tests/` — unit/integration tests plus the production-container browser smoke script.
 
 The repository does not keep a second hand-written production UI. Docker builds `frontend/` and copies the Vite output into the Python runtime's static directory.
