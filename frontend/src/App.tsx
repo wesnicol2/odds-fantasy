@@ -60,9 +60,7 @@ export function App() {
   const setSelectedPositions = useWorkspaceStore((state) => state.setSelectedPositions);
 
   const [identity, setIdentity] = useState(savedLeagueIdentity);
-  const [setupOpen, setSetupOpen] = useState(
-    () => !Boolean(identity.leagueId && identity.rosterId),
-  );
+  const [setupOpen, setSetupOpen] = useState(() => !(identity.leagueId && identity.rosterId));
   const [leagueContext, setLeagueContext] = useState<string | null>(null);
   const [report, setReport] = useState<ProjectionResponse | null>(null);
   const [loading, setLoading] = useState(() => Boolean(identity.leagueId && identity.rosterId));
@@ -446,9 +444,15 @@ export function App() {
             <div className="pane-heading split">
               <div>
                 <span className="eyebrow">Probability</span>
-                <h2>{activeMetricLabel} survival</h2>
+                <h2>
+                  {fantasyPointsMetric
+                    ? `${activeMetricLabel} distribution`
+                    : `${activeMetricLabel} survival`}
+                </h2>
                 <p className="pane-description">
-                  Chance of reaching or exceeding each {activeMetricLabel.toLowerCase()} threshold.
+                  {fantasyPointsMetric
+                    ? 'Chance of landing in each one-point fantasy-score bucket.'
+                    : `Chance of reaching or exceeding each ${activeMetricLabel.toLowerCase()} threshold.`}
                 </p>
               </div>
               {fantasyPointsMetric ? (
@@ -503,7 +507,9 @@ export function App() {
               activePlayerId={hoveredPlayer ?? selectedPlayer}
               metric={metric}
               xAxisName={activeMetricLabel}
-              yAxisName={`P(${activeMetricLabel} ≥ x)`}
+              yAxisName={
+                fantasyPointsMetric ? `P(${activeMetricLabel} = x)` : `P(${activeMetricLabel} ≥ x)`
+              }
               targetEnabled={fantasyPointsMetric}
               stepCurve={!fantasyPointsMetric && isCountMetric(metric)}
               evidence={chartEvidence}
