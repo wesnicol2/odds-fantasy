@@ -29,20 +29,24 @@ No direct commits to `feature/*` or `main`.
 ## Workflow
 
 1. Create the feature branch from `main` if needed, then a `dev/*` branch from it.
-2. Make the change and run the same deterministic gates CI runs:
-   - `ruff check .`
-   - `ruff format --check .`
-   - `python -m pytest tests/`
+2. Make the change. After modifying Python, run `./scripts/fix`; do not manually
+   guess Ruff formatting. Before every push, run `./scripts/verify`. Then run the
+   frontend gates when frontend code or its build contract is in scope:
    - `cd frontend && npm ci --no-audit --no-fund`
    - `npm run check`
    - `npm run typecheck`
    - `npm run build`
-3. Push the dev branch. Red CI is a hard stop.
+3. Push the dev branch. CI reruns `./scripts/verify` plus the frontend gates. CI is
+   confirmation of local verification, not the normal Ruff/format/unit-test feedback loop.
 4. PR `dev/*` → `feature/*`; merge only when green, then delete the dev branch.
 5. Feature CI builds the real Docker image and runs the automated container/browser
    smoke test. This is the required pre-production runtime gate.
 6. PR `feature/*` → `main` for owner review. Merge only when all CI is green, then
    delete the feature branch.
+
+A checkout with a Python runtime and shell is sufficient to validate Ruff, formatting,
+tracked-Python syntax and unit tests through `./scripts/verify`; access to the deployed
+home-server Test environment is not required for those checks.
 
 `frontend/package-lock.json` is committed and authoritative. Use `npm ci`, not
 `npm install`, for validation and CI. Direct package/version changes must update the
@@ -68,15 +72,17 @@ likely failure and explicitly flag anything that was not verified.
 `ci.yml` is the only entrypoint. It runs on pushes to `dev/**`, `feature/**`, and
 `main`, on pull requests, and via `workflow_dispatch`.
 
-1. `lint.yml`: Ruff lint, Ruff format check, Python syntax compile, then a locked
-   Node install plus Biome check, strict TypeScript check and production Vite build.
-2. `test.yml`: deterministic unit/integration tests.
-3. `smoke.yml`: for feature/main and PRs targeting main, build the actual
+1. `verify.yml`: installs the pinned Python development tooling and runs
+   `./scripts/verify`, the same Ruff/format/syntax/pytest gate agents run locally;
+   then performs the locked Node install, Biome check, strict TypeScript check and
+   production Vite build. Ruff is exactly pinned in `pyproject.toml` so formatter
+   behavior cannot drift between local agents and CI.
+2. `smoke.yml`: for feature/main and PRs targeting main, build the actual
    Dockerfile, start the image, verify `/health` and `/`, then use Chromium via
    Playwright to exercise the player report, player drill-down, Compare Curves,
    defense comparison, and Best Lineup. Sleeper/Odds responses are intercepted
    with deterministic fixtures, so smoke CI spends no Odds API quota.
-4. `publish.yml`: after all required gates pass, `feature/**` publishes `:test`
+3. `publish.yml`: after all required gates pass, `feature/**` publishes `:test`
    and `main` publishes `:latest`. Pull requests never publish.
 
 A green smoke test proves the built application boots and its primary browser

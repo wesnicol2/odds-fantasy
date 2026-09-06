@@ -32,14 +32,11 @@ jobs:
           echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
           echo "ref=$REF -> tag=${tag:-<none>}"
 
-  lint:
-    uses: ./.github/workflows/lint.yml
-
-  test:
-    uses: ./.github/workflows/test.yml
+  verify:
+    uses: ./.github/workflows/verify.yml
 
   smoke:
-    needs: [lint, test]
+    needs: [verify]
     if: >-
       startsWith(github.ref, 'refs/heads/feature/') ||
       github.ref == 'refs/heads/main' ||
@@ -47,13 +44,12 @@ jobs:
     uses: ./.github/workflows/smoke.yml
 
   publish:
-    needs: [tag, lint, test, smoke]
+    needs: [tag, verify, smoke]
     if: >-
       always() &&
       github.event_name == 'push' &&
       needs.tag.outputs.image_tag != '' &&
-      needs.lint.result == 'success' &&
-      needs.test.result == 'success' &&
+      needs.verify.result == 'success' &&
       needs.smoke.result == 'success'
     uses: ./.github/workflows/publish.yml
     with:

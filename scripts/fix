@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -u
+
+# Never hand-format code to satisfy Ruff. Let the pinned repo tool do it.
+# --exit-zero allows formatting to continue even when Ruff finds a lint issue
+# that cannot be auto-fixed; scripts/verify will surface anything remaining.
+ruff check --fix --exit-zero .
+ruff format .
