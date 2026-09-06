@@ -415,32 +415,41 @@ Interactive charts should expose exact values through hover, focus, tap, keyboar
 
 Important information must remain accessible without requiring pointer hover.
 
-### One probability grammar
+### Probability semantics
 
-Where possible, Odds Fantasy should use a consistent survival-probability grammar across metrics:
+Odds Fantasy uses two probability views over canonical model data because they answer different questions.
 
-**P(metric ≥ x)**
+The primary fantasy-points comparison visualization shows score probability mass:
 
-This lets the user ask the same question across fantasy points and individual player statistics: "What is the chance this player reaches at least this value?"
+**P(Fantasy Points = x)**
 
-For individual statistics this is the canonical stat-survival interpretation.
+In practice, `x` denotes a one-point fantasy-score bucket centered on the displayed value. Exact equality on a continuous Monte Carlo sample is not a stable visual quantity, so the bucket is the user-facing meaning of equality.
 
-For fantasy points, the primary comparison visualization should likewise present:
+Individual-stat visualizations show survival probability:
 
-**P(Fantasy Points ≥ x)**
+**P(stat ≥ x)**
 
-using the canonical backend fantasy-point distribution/survival data. This is a presentation choice, not a replacement model.
+Target mode also remains a survival-probability question:
 
-### Fantasy-point survival comparison
+**P(Fantasy Points ≥ target)**
 
-Fantasy-point graphs compare players by the probability of reaching or exceeding each fantasy-score threshold.
+These are different presentations of the same canonical backend distributions. The frontend may derive display-only fantasy-point buckets from the backend-supplied fantasy survival curve, but it must not fit or sample a replacement projection model.
+
+### Fantasy-point probability-mass comparison
+
+Fantasy-point graphs compare players by the probability of landing near each fantasy score rather than by a monotonically descending exceedance curve.
 
 Therefore:
 
-- x-axis = fantasy-point threshold;
-- y-axis = probability of scoring at least that many fantasy points.
+- x-axis = fantasy-score bucket center;
+- y-axis = probability of landing in the one-point bucket centered on that score;
+- the y-axis begins at zero and scales to the visible probability mass rather than being fixed to 100%;
+- the default x-axis focuses on the central 99% of each compared player's displayed probability mass so extreme near-zero tails do not compress the informative region;
+- when a manually selected Target FP lies outside that focused range, the graph expands enough to keep the target reference visible.
 
-The graph must make relative downside, median region, upside, and tail behavior easier to understand than Floor / Mid / Ceiling alone.
+The distribution will often be single-peaked and bell-like, but skew, discrete scoring, bonuses, or mixed stat distributions may legitimately make it asymmetric or multi-peaked. The UI must not force a mathematically false normal curve merely for appearance.
+
+The graph must make relative downside, median region, upside, and distribution shape easier to understand than Floor / Mid / Ceiling alone.
 
 Multiple players may be compared simultaneously.
 
@@ -460,7 +469,7 @@ It answers:
 
 **"What is the probability this player scores at least X fantasy points?"**
 
-The user chooses a fantasy-point threshold through direct manipulation of the fantasy-point survival graph, an accessible numeric control, or both.
+The user chooses a fantasy-point threshold through direct manipulation of the fantasy-point distribution graph, an accessible numeric control, or both.
 
 The visualization should show the selected threshold as a clear vertical reference line or equivalent marker.
 
@@ -472,7 +481,7 @@ That probability should also be available in the ranking/list so the user can ra
 
 Changing the target should update already-loaded results immediately and must not trigger sportsbook refetches merely because the display threshold moved.
 
-The target value is an analytical lens over the canonical fantasy-point distribution. The frontend must not estimate a separate distribution to support it.
+The target value is an analytical lens over the canonical fantasy-point distribution. Its probability remains derived from the backend-supplied fantasy survival curve; the probability-mass chart does not redefine Target semantics.
 
 ### Target interaction requirements
 
@@ -836,7 +845,7 @@ Can core workflows be completed with keyboard and touch, and are states perceiva
 
 ### Visualization semantics
 
-Do chart axes, survival-probability meaning, markers, series identities, Target probabilities, and evidence still represent the canonical backend data correctly?
+Do chart axes, fantasy-point probability-mass meaning, stat survival-probability meaning, markers, series identities, Target probabilities, and evidence still represent the canonical backend data correctly?
 
 ### Regression
 
