@@ -60,9 +60,7 @@ export function App() {
   const setSelectedPositions = useWorkspaceStore((state) => state.setSelectedPositions);
 
   const [identity, setIdentity] = useState(savedLeagueIdentity);
-  const [setupOpen, setSetupOpen] = useState(
-    () => !(identity.leagueId && identity.rosterId),
-  );
+  const [setupOpen, setSetupOpen] = useState(() => !(identity.leagueId && identity.rosterId));
   const [leagueContext, setLeagueContext] = useState<string | null>(null);
   const [report, setReport] = useState<ProjectionResponse | null>(null);
   const [loading, setLoading] = useState(() => Boolean(identity.leagueId && identity.rosterId));
@@ -509,7 +507,9 @@ export function App() {
               activePlayerId={hoveredPlayer ?? selectedPlayer}
               metric={metric}
               xAxisName={activeMetricLabel}
-              yAxisName={fantasyPointsMetric ? `P(${activeMetricLabel} = x)` : `P(${activeMetricLabel} ≥ x)`}
+              yAxisName={
+                fantasyPointsMetric ? `P(${activeMetricLabel} = x)` : `P(${activeMetricLabel} ≥ x)`
+              }
               targetEnabled={fantasyPointsMetric}
               stepCurve={!fantasyPointsMetric && isCountMetric(metric)}
               evidence={chartEvidence}
