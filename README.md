@@ -16,7 +16,7 @@ The projection engine reconstructs a distribution for each priced stat from book
 - **Mid** — 50th percentile fantasy points
 - **Ceiling** — 90th percentile fantasy points
 
-The browser does not create a second projection model. Fantasy-points and individual-stat charts display survival probability: the x-axis is the threshold and the y-axis is the chance of reaching or exceeding it. Setting **Target FP** derives `P(FP ≥ target)` from the backend-supplied fantasy-points curve and ranks the visible players by that probability.
+The browser does not create a second projection model. The fantasy-points chart converts the dense backend-supplied survival curve into one-point probability-mass buckets, so the x-axis is the fantasy score and the y-axis is the chance of landing in the one-point bucket centered on that score. The chart focuses on the central 99% of each compared player's mass so extreme low-probability tails do not compress the useful shape. Individual-stat charts remain survival probability because their sportsbook evidence is expressed as the chance of reaching or exceeding a threshold. Setting **Target FP** still derives `P(FP ≥ target)` from the backend-supplied fantasy-points curve and ranks the visible players by that probability.
 
 For stat metrics, consensus de-vigged sportsbook anchors are shown as diamonds on the fitted curve and exact source-book thresholds are marked along the x-axis. **Explain betting lines** expands the same evidence into consensus probabilities and raw book/line/over/under prices for the selected player.
 
