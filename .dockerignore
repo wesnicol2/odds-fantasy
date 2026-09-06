@@ -6,5 +6,7 @@ __pycache__/
 .env
 /data/
 /tests/
+frontend/node_modules/
+frontend/dist/
 tmp_*
 __tmp_patch.txt

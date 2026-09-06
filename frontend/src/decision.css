@@ -1,0 +1,176 @@
+.decision-view {
+  min-height: calc(100vh - 104px);
+  padding: 18px;
+  background: #0a0c0f;
+}
+
+.decision-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+}
+
+.decision-heading h2 {
+  margin: 2px 0 3px;
+  color: #f1f4f7;
+  font-size: 20px;
+}
+
+.decision-heading p,
+.decision-note {
+  margin: 0;
+  color: #778290;
+  font-size: 11px;
+}
+
+.decision-meta {
+  color: #687382;
+  font-size: 10px;
+}
+
+.decision-loading {
+  padding: 16px 0;
+  color: #9ba5b2;
+  font-size: 11px;
+}
+
+.decision-table-scroll {
+  overflow: auto;
+  border-top: 1px solid #232932;
+  border-bottom: 1px solid #232932;
+}
+
+.decision-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.decision-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 9px;
+  background: #0d1014;
+  color: #687382;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.decision-table td {
+  padding: 8px 9px;
+  border-top: 1px solid #1b2129;
+  color: #cbd3dc;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.decision-table tbody tr:hover {
+  background: #10151b;
+}
+
+.decision-table tr.unavailable {
+  opacity: 0.48;
+}
+
+.row-secondary {
+  display: block;
+  margin-top: 2px;
+  color: #687382;
+  font-size: 9px;
+}
+
+.decision-table td.primary-decision-value {
+  color: #f1f4f7;
+  font-weight: 700;
+}
+
+.ownership {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid #303844;
+  border-radius: 999px;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.ownership.available {
+  color: #9bc6ad;
+}
+
+.ownership.yours {
+  border-color: #3b628d;
+  color: #8fc1ff;
+}
+
+.ownership.taken {
+  color: #858f9b;
+}
+
+.decision-note {
+  margin-top: 9px;
+}
+
+.lineup-targets {
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.lineup-targets button {
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #8a94a3;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.lineup-targets button.active {
+  border-color: #30445e;
+  background: #131b24;
+  color: #f1f4f7;
+}
+
+.lineup-total {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 0 12px;
+  color: #8f9aa8;
+  font-size: 11px;
+}
+
+.lineup-total strong {
+  color: #f1f4f7;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 780px) {
+  .decision-view {
+    padding: 12px;
+  }
+
+  .decision-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .lineup-targets {
+    width: 100%;
+  }
+
+  .lineup-targets button {
+    flex: 1;
+  }
+}
