@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This is the local pre-push gate and the CI Python verification command.
+# If this passes locally with the repo's dev dependencies installed, CI should
+# not discover a new Ruff, syntax, or unit-test failure.
+ruff check .
+ruff format --check .
+
+while IFS= read -r file; do
+  python -m py_compile "$file"
+done < <(git ls-files '*.py')
+
+python -m pytest tests/ -q
