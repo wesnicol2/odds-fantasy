@@ -28,13 +28,33 @@ CURVE_B = [
     {"x": 28, "survival": 0.10},
 ]
 RUSH_GRAPH = {
-    "kind": "survival",
+    "kind": "continuous_density",
     "points": [
-        {"x": 40, "probability": 0.90},
-        {"x": 60, "probability": 0.74},
-        {"x": 80, "probability": 0.47},
-        {"x": 100, "probability": 0.21},
-        {"x": 120, "probability": 0.06},
+        {"x": 40, "probability": 0.003},
+        {"x": 60, "probability": 0.009},
+        {"x": 80, "probability": 0.013},
+        {"x": 100, "probability": 0.008},
+        {"x": 120, "probability": 0.002},
+    ],
+}
+RECEPTIONS_GRAPH = {
+    "kind": "discrete_pmf",
+    "points": [
+        {"x": 0, "probability": 0.02},
+        {"x": 1, "probability": 0.08},
+        {"x": 2, "probability": 0.16},
+        {"x": 3, "probability": 0.24},
+        {"x": 4, "probability": 0.23},
+        {"x": 5, "probability": 0.16},
+        {"x": 6, "probability": 0.08},
+        {"x": 7, "probability": 0.03},
+    ],
+}
+ANYTIME_TD_GRAPH = {
+    "kind": "threshold_gauge",
+    "points": [
+        {"x": 1, "probability": 0.62},
+        {"x": 2, "probability": 0.20},
     ],
 }
 
@@ -63,9 +83,28 @@ def projection_player(
         "mean": mid + 0.5,
         "curve": curve,
         "books_used": 2,
-        "markets_used": 1,
+        "markets_used": 3,
         "has_projection": True,
     }
+
+
+def market_lines(point_a: float, point_b: float) -> list[dict]:
+    return [
+        {
+            "book": "draftkings",
+            "source": "main",
+            "point": point_a,
+            "over_odds": 1.91,
+            "under_odds": 1.91,
+        },
+        {
+            "book": "fanduel",
+            "source": "alternate",
+            "point": point_b,
+            "over_odds": 2.10,
+            "under_odds": 1.72,
+        },
+    ]
 
 
 def api_fixture(route: Route) -> None:
@@ -142,23 +181,28 @@ def api_fixture(route: Route) -> None:
                             {"threshold": 64.5, "survival": 0.68},
                             {"threshold": 84.5, "survival": 0.39},
                         ],
-                        "lines": [
-                            {
-                                "book": "draftkings",
-                                "source": "main",
-                                "point": 64.5,
-                                "over_odds": 1.91,
-                                "under_odds": 1.91,
-                            },
-                            {
-                                "book": "fanduel",
-                                "source": "alternate",
-                                "point": 84.5,
-                                "over_odds": 2.10,
-                                "under_odds": 1.72,
-                            },
+                        "lines": market_lines(64.5, 84.5),
+                    },
+                    "player_receptions": {
+                        "stat_range": [2, 4, 6],
+                        "expected_points": 0.0,
+                        "graph": RECEPTIONS_GRAPH,
+                        "anchors": [
+                            {"threshold": 3.5, "survival": 0.58},
+                            {"threshold": 4.5, "survival": 0.35},
                         ],
-                    }
+                        "lines": market_lines(3.5, 4.5),
+                    },
+                    "player_anytime_td": {
+                        "stat_range": [0, 1, 2],
+                        "expected_points": 3.7,
+                        "graph": ANYTIME_TD_GRAPH,
+                        "anchors": [
+                            {"threshold": 0.0, "survival": 0.62},
+                            {"threshold": 2.0, "survival": 0.20},
+                        ],
+                        "lines": market_lines(0.0, 2.0),
+                    },
                 },
                 "ratelimit": "Odds API · 499 remaining",
             },
@@ -285,7 +329,7 @@ def main() -> None:
         inspector.get_by_text("50%", exact=True).wait_for()
         assert "≥ 20.0" in ranking.locator("thead").inner_text()
 
-        # Stat exploration reuses the same workspace and exposes inspectable evidence.
+        # Continuous stat exploration uses probability density and keeps evidence inspectable.
         page.get_by_role("button", name="Rushing yards").wait_for()
         page.get_by_role("button", name="Rushing yards").click()
         inspector.get_by_text("Rushing yards evidence", exact=True).wait_for()
@@ -293,14 +337,36 @@ def main() -> None:
         inspector.get_by_text("2 source lines", exact=True).wait_for()
         inspector.get_by_text("2 books", exact=True).wait_for()
         page.get_by_text(
-            "Diamonds show consensus market anchors; x-axis ticks show exact sportsbook thresholds for the selected player.",
+            "Exact sportsbook thresholds are marked on the x-axis. Consensus P(≥x) anchors remain in the inspector because this chart shows P(x).",
             exact=True,
         ).wait_for()
+        chart.wait_for()
+        assert "continuous probability density" in (chart.get_attribute("aria-label") or "")
         inspector.get_by_text("Explain betting lines", exact=True).click()
         inspector.get_by_text("Consensus anchors", exact=True).wait_for()
         inspector.get_by_text("Exact sportsbook lines", exact=True).wait_for()
         inspector.get_by_text("draftkings", exact=True).wait_for()
         inspector.get_by_text("fanduel", exact=True).wait_for()
+
+        # High-granularity discrete stats show exact P(X=x) with smoothed connecting lines.
+        page.get_by_role("button", name="Receptions").click()
+        page.get_by_text(
+            "Chance of each exact receptions value; the line is smoothed only between integer outcomes.",
+            exact=True,
+        ).wait_for()
+        chart.wait_for()
+        assert "exact-outcome probability" in (chart.get_attribute("aria-label") or "")
+
+        # Low-granularity discrete stats use threshold thermometers with P(X>=x).
+        page.get_by_role("button", name="Anytime TD").click()
+        gauge_chart = page.locator(".threshold-gauge-chart")
+        gauge_chart.wait_for()
+        gauge_chart.get_by_text("1+", exact=True).wait_for()
+        gauge_chart.get_by_text("2+", exact=True).wait_for()
+        assert "threshold probability comparison" in (gauge_chart.get_attribute("aria-label") or "")
+        gauge_chart.get_by_role(
+            "button", name="Alpha Runner 1 or more: 62%", exact=True
+        ).wait_for()
 
         # Cache mode is operational state and must be sent to the API, not just styled locally.
         page.get_by_text("Settings", exact=True).click()
