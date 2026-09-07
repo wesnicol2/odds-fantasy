@@ -16,9 +16,11 @@ The projection engine reconstructs a distribution for each priced stat from book
 - **Mid** — 50th percentile fantasy points
 - **Ceiling** — 90th percentile fantasy points
 
-The browser does not create a second projection model. The fantasy-points chart converts the dense backend-supplied survival curve into one-point probability-mass buckets, so the x-axis is the fantasy score and the y-axis is the chance of landing in the one-point bucket centered on that score. The chart focuses on the central 99% of each compared player's mass so extreme low-probability tails do not compress the useful shape. Individual-stat charts remain survival probability because their sportsbook evidence is expressed as the chance of reaching or exceeding a threshold. Setting **Target FP** still derives `P(FP ≥ target)` from the backend-supplied fantasy-points curve and ranks the visible players by that probability.
+The browser does not create a second projection model. The fantasy-points chart converts the dense backend-supplied survival curve into one-point probability-mass buckets, so the x-axis is the fantasy score and the y-axis is the chance of landing in the one-point bucket centered on that score. The chart focuses on the central 99% of each compared player's mass so extreme low-probability tails do not compress the useful shape. Setting **Target FP** still derives `P(FP ≥ target)` from the backend-supplied fantasy-points curve and ranks the visible players by that probability.
 
-For stat metrics, consensus de-vigged sportsbook anchors are shown as diamonds on the fitted curve and exact source-book thresholds are marked along the x-axis. **Explain betting lines** expands the same evidence into consensus probabilities and raw book/line/over/under prices for the selected player.
+Individual-stat charts re-express the same backend-fitted sportsbook distributions according to the metric's support. Yardage uses a continuous probability-density view (`x = value`, `y = P(x)`). High-granularity integer stats such as receptions use exact probability mass at each integer (`P(X = x)`) with visible points and a smoothed connecting line. Low-granularity counts such as passing TDs, anytime TDs and interceptions use one vertical threshold gauge per value, with each player's marker showing `P(X ≥ x)`.
+
+Sportsbook evidence stays mathematically consistent with those views. Exact source-book thresholds can be marked on the x-axis of `P(x)` charts, while de-vigged consensus anchors remain inspectable in **Explain betting lines** because they are cumulative `P(X ≥ x)` quantities and therefore do not share the density/PMF y-axis. Low-granularity gauges already use the same cumulative threshold semantics directly.
 
 A player with no usable priced markets stays visible with dashes and a `no priced markets` state. Missing one optional market does not hide an otherwise valid projection.
 
@@ -30,7 +32,7 @@ The header quota readout is refreshed independently of the odds cache. It uses T
 2. Choose **This week** or **Next week**.
 3. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. Choose a metric above the graph to move between fantasy points and priced stats.
 4. Enter or drag **Target FP** to compare each visible player's chance of reaching a specific fantasy score.
-5. For a stat metric, use **Explain betting lines** to inspect the consensus anchors and exact sportsbook prices behind the fitted curve.
+5. For a stat metric, use **Explain betting lines** to inspect the consensus anchors and exact sportsbook prices behind the fitted distribution.
 6. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken.
 7. In **Best lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.
 
@@ -102,7 +104,7 @@ Feature/main CI additionally builds the exact Docker image and runs Chromium aga
 - `oddsfantasy/aggregator.py` — normalizes raw per-book market data.
 - `oddsfantasy/market_math.py` — de-vigging and stat-distribution reconstruction.
 - `oddsfantasy/projection.py` — canonical fantasy-points sampling/curve.
-- `oddsfantasy/graph_data.py` — display-only survival curves from canonical fitted stat distributions.
+- `oddsfantasy/graph_data.py` — display-only density, PMF and threshold-gauge data from canonical fitted stat distributions.
 - `oddsfantasy/scoring.py` — Sleeper scoring-rule translation.
 - `oddsfantasy/odds_details.py` — source-line player drill-down and stat graph payloads.
 - `oddsfantasy/defense.py` — implied-team-total and points-allowed DEF math.
