@@ -96,6 +96,14 @@
   transform: translateX(-50%);
 }
 
+.threshold-marker-layer {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  bottom: 18px;
+  left: 0;
+}
+
 .threshold-marker {
   position: absolute;
   right: 0;
