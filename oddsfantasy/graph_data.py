@@ -21,9 +21,7 @@ HIGH_GRANULARITY_COUNT_MARKETS = {
 
 def _is_high_granularity_count_market(market_key: str) -> bool:
     key = (market_key or "").lower()
-    return key in HIGH_GRANULARITY_COUNT_MARKETS or key.endswith(
-        ("_rush_attempts", "_touches")
-    )
+    return key in HIGH_GRANULARITY_COUNT_MARKETS or key.endswith(("_rush_attempts", "_touches"))
 
 
 def _discrete_probability_graph(distribution: CountDistribution) -> dict:
