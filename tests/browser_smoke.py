@@ -341,7 +341,7 @@ def main() -> None:
             exact=True,
         ).wait_for()
         chart.wait_for()
-        assert "continuous probability density" in (chart.get_attribute("aria-label") or "")
+        assert chart.get_attribute("data-chart-kind") == "continuous_density"
         inspector.get_by_text("Explain betting lines", exact=True).click()
         inspector.get_by_text("Consensus anchors", exact=True).wait_for()
         inspector.get_by_text("Exact sportsbook lines", exact=True).wait_for()
@@ -355,7 +355,7 @@ def main() -> None:
             exact=True,
         ).wait_for()
         chart.wait_for()
-        assert "exact-outcome probability" in (chart.get_attribute("aria-label") or "")
+        assert chart.get_attribute("data-chart-kind") == "discrete_pmf"
 
         # Low-granularity discrete stats use threshold thermometers with P(X>=x).
         page.get_by_role("button", name="Anytime TD").click()
@@ -363,7 +363,8 @@ def main() -> None:
         gauge_chart.wait_for()
         gauge_chart.get_by_text("1+", exact=True).wait_for()
         gauge_chart.get_by_text("2+", exact=True).wait_for()
-        assert "threshold probability comparison" in (gauge_chart.get_attribute("aria-label") or "")
+        assert gauge_chart.get_attribute("data-chart-kind") == "threshold_gauge"
+        assert gauge_chart.get_attribute("role") == "group"
         gauge_chart.get_by_role("button", name="Alpha Runner 1 or more: 62%", exact=True).wait_for()
 
         # Cache mode is operational state and must be sent to the API, not just styled locally.
