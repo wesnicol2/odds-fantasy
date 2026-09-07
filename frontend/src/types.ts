@@ -32,14 +32,17 @@ export interface ProbabilityPoint {
   probability: number;
 }
 
+export type StatGraphKind = 'continuous_density' | 'discrete_pmf' | 'threshold_gauge';
+
 export interface ProbabilitySeries {
   id: string;
   label: string;
   points: ProbabilityPoint[];
+  kind?: StatGraphKind;
 }
 
 export interface StatGraph {
-  kind: 'survival' | 'survival_step';
+  kind: StatGraphKind;
   points: ProbabilityPoint[];
 }
 
