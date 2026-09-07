@@ -1,0 +1,173 @@
+.threshold-gauge-chart {
+  min-height: 360px;
+  padding: 0.75rem 0.25rem 0.25rem;
+  overflow-x: auto;
+}
+
+.threshold-gauge-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(190px, 1fr);
+  gap: 1rem;
+  min-width: max-content;
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.threshold-gauge {
+  min-width: 190px;
+}
+
+.threshold-gauge h3 {
+  margin: 0 0 0.4rem;
+  color: #f1f4f7;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.threshold-gauge-plot {
+  position: relative;
+  height: 270px;
+  margin: 0 auto;
+}
+
+.threshold-gauge-scale {
+  position: absolute;
+  inset: 2px auto 18px 0;
+  width: 36px;
+  color: #687382;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.threshold-gauge-scale span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.threshold-gauge-scale span:nth-child(1) {
+  top: 0;
+  transform: none;
+}
+
+.threshold-gauge-scale span:nth-child(2) {
+  top: 25%;
+}
+
+.threshold-gauge-scale span:nth-child(3) {
+  top: 50%;
+}
+
+.threshold-gauge-scale span:nth-child(4) {
+  top: 75%;
+}
+
+.threshold-gauge-scale span:nth-child(5) {
+  top: 100%;
+  transform: translateY(-100%);
+}
+
+.threshold-thermometer {
+  position: absolute;
+  top: 2px;
+  bottom: 18px;
+  left: 52px;
+  width: 14px;
+  border: 1px solid #3a4451;
+  border-radius: 999px 999px 6px 6px;
+  background:
+    linear-gradient(to bottom, transparent 24.5%, #232932 25%, transparent 25.5%),
+    linear-gradient(to bottom, transparent 49.5%, #232932 50%, transparent 50.5%),
+    linear-gradient(to bottom, transparent 74.5%, #232932 75%, transparent 75.5%), #12171d;
+}
+
+.threshold-thermometer::after {
+  position: absolute;
+  bottom: -17px;
+  left: 50%;
+  width: 27px;
+  height: 27px;
+  border: 1px solid #3a4451;
+  border-radius: 50%;
+  background: #12171d;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.threshold-marker-layer {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  bottom: 18px;
+  left: 0;
+}
+
+.threshold-marker {
+  position: absolute;
+  right: 0;
+  left: 38px;
+  display: block;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 1;
+  transform: translateY(-50%);
+  transition: opacity 100ms ease;
+}
+
+.threshold-marker.muted {
+  opacity: 0.38;
+}
+
+.threshold-marker:hover,
+.threshold-marker:focus-visible {
+  z-index: 3;
+  opacity: 1;
+}
+
+.threshold-marker-line {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 48px;
+  height: 3px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.threshold-marker-label {
+  position: absolute;
+  top: 50%;
+  left: 62px;
+  max-width: 110px;
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.threshold-marker-label strong {
+  font-weight: 650;
+}
+
+.threshold-gauge-note {
+  margin: 0.4rem 0.75rem 0;
+  color: #687382;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 760px) {
+  .threshold-gauge-chart {
+    min-height: 330px;
+  }
+
+  .threshold-gauge-grid {
+    grid-auto-columns: minmax(175px, 78vw);
+  }
+}
