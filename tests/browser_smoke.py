@@ -364,9 +364,7 @@ def main() -> None:
         gauge_chart.get_by_text("1+", exact=True).wait_for()
         gauge_chart.get_by_text("2+", exact=True).wait_for()
         assert "threshold probability comparison" in (gauge_chart.get_attribute("aria-label") or "")
-        gauge_chart.get_by_role(
-            "button", name="Alpha Runner 1 or more: 62%", exact=True
-        ).wait_for()
+        gauge_chart.get_by_role("button", name="Alpha Runner 1 or more: 62%", exact=True).wait_for()
 
         # Cache mode is operational state and must be sent to the API, not just styled locally.
         page.get_by_text("Settings", exact=True).click()
