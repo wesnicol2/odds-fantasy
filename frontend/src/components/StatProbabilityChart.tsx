@@ -210,6 +210,7 @@ function DistributionChart({
       <div
         ref={elementRef}
         className="probability-chart"
+        data-chart-kind={kind}
         role="img"
         aria-label={
           kind === 'discrete_pmf'
@@ -239,7 +240,8 @@ function ThresholdGaugeChart({
     <div className="chart-shell">
       <div
         className="threshold-gauge-chart"
-        role="img"
+        data-chart-kind="threshold_gauge"
+        role="group"
         aria-label={`${xAxisName} threshold probability comparison. Each vertical gauge shows the chance of reaching or exceeding its labeled value.`}
       >
         <div className="threshold-gauge-grid">
