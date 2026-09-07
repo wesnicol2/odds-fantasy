@@ -19,7 +19,7 @@
 
 .threshold-gauge h3 {
   margin: 0 0 0.4rem;
-  color: var(--text-primary);
+  color: #f1f4f7;
   font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -35,7 +35,7 @@
   position: absolute;
   inset: 2px auto 18px 0;
   width: 36px;
-  color: var(--text-subtle);
+  color: #687382;
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
 }
@@ -74,13 +74,13 @@
   bottom: 18px;
   left: 52px;
   width: 14px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid #3a4451;
   border-radius: 999px 999px 6px 6px;
   background:
-    linear-gradient(to bottom, transparent 24.5%, var(--border) 25%, transparent 25.5%),
-    linear-gradient(to bottom, transparent 49.5%, var(--border) 50%, transparent 50.5%),
-    linear-gradient(to bottom, transparent 74.5%, var(--border) 75%, transparent 75.5%),
-    var(--surface-secondary);
+    linear-gradient(to bottom, transparent 24.5%, #232932 25%, transparent 25.5%),
+    linear-gradient(to bottom, transparent 49.5%, #232932 50%, transparent 50.5%),
+    linear-gradient(to bottom, transparent 74.5%, #232932 75%, transparent 75.5%),
+    #12171d;
 }
 
 .threshold-thermometer::after {
@@ -89,9 +89,9 @@
   left: 50%;
   width: 27px;
   height: 27px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid #3a4451;
   border-radius: 50%;
-  background: var(--surface-secondary);
+  background: #12171d;
   content: '';
   transform: translateX(-50%);
 }
@@ -151,7 +151,7 @@
 
 .threshold-gauge-note {
   margin: 0.4rem 0.75rem 0;
-  color: var(--text-subtle);
+  color: #687382;
   font-size: 0.75rem;
 }
 
