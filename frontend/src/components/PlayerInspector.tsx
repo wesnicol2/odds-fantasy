@@ -105,9 +105,9 @@ export function PlayerInspector({
                     <span>{sportsbookCount} books</span>
                   </div>
                   <p className="evidence-explainer">
-                    Diamonds are de-vigged cross-book consensus anchors. Small x-axis ticks are
-                    exact sportsbook thresholds. The fitted survival curve is the backend model
-                    constrained by that evidence.
+                    Consensus thresholds are de-vigged cross-book P(≥x) evidence. Exact sportsbook
+                    lines show the source prices. The chart re-expresses the same backend-fitted
+                    distribution using the visualization appropriate for this stat.
                   </p>
                   <details className="evidence-details">
                     <summary>Explain betting lines</summary>
