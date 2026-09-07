@@ -8,7 +8,7 @@
 
 The application has three selectable weekly decision views:
 
-1. **Players** — one linked analytical workstation: roster ranking, Floor / Mid / Ceiling, fantasy/stat survival curves, position/player comparison filters, Target FP and a persistent evidence inspector.
+1. **Players** — one linked analytical workstation: roster ranking, Floor / Mid / Ceiling, fantasy/stat probability visualizations, position/player comparison filters, Target FP and a persistent evidence inspector.
 2. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
 3. **Best lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots.
 
@@ -79,17 +79,23 @@ Cross-stat correlation is still assumed independent because the market feed does
 
 ## Visualizations are presentation-only canonical data
 
-`PlayerProjection.samples` is the source of truth for the fantasy-points distribution. `survival_curve()` downsamples the same samples used for Floor/Mid/Ceiling into `P(FP >= x)` points.
+`PlayerProjection.samples` is the source of truth for the fantasy-points distribution. `survival_curve()` downsamples the same samples used for Floor/Mid/Ceiling into `P(FP >= x)` points. The browser converts that supplied curve into the existing one-point fantasy-score probability-mass display; Target FP continues to interpolate the canonical survival curve.
 
-For individual stat graphs, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution` and emits a display-only survival curve. Continuous stats evaluate the fitted distribution's own survival function across its central range, including fitted anchor x-values. Count stats expose cumulative `P(count >= x)` values as a step curve. This graph helper must never refit sportsbook lines or participate in projection sampling/scoring.
+For individual stats, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution` and chooses one of three display projections without refitting anything:
 
-`/player/odds` includes stat graph points alongside consensus anchors and exact source sportsbook lines. The linked player workspace places those three pieces on one explainability surface:
+- **continuous density** — yardage-like metrics are displayed as `x = value`, `y = P(x)` using a finite-width density derived from the fitted distribution's own survival function across its central range;
+- **discrete PMF** — high-granularity count metrics such as receptions expose exact `P(X = x)` at integer values; the frontend may visually smooth the connecting line, but the displayed point values remain the backend PMF;
+- **threshold gauge** — low-granularity count metrics such as passing TDs, anytime TDs and interceptions expose `P(X >= x)` for each useful integer threshold.
 
-- solid player-colored line = fitted survival curve;
-- diamond = de-vigged cross-book consensus anchor at its sportsbook threshold;
-- short x-axis tick = exact source-book line location.
+`graph_data` is display-only. It must never refit sportsbook lines or participate in projection sampling, fantasy scoring, percentiles, means or distribution fitting. The same rule applies to `StatProbabilityChart`: ECharts/CSS map backend values to pixels and interaction affordances; they do not create a probability model.
 
-The graph y-axis is probability and x-axis is the fantasy/stat threshold. `Explain betting lines` expands the same payload into consensus probabilities plus raw book/line/over/under prices. ECharts maps backend evidence to pixels; it does not calculate a replacement probability model.
+`/player/odds` includes graph points alongside de-vigged consensus anchors and exact source sportsbook lines. Their units matter:
+
+- exact sportsbook line locations are x-axis evidence and may be marked on continuous-density or PMF charts;
+- consensus anchors are cumulative `P(X >= x)` evidence, so they remain in the inspector when the active chart's y-axis is density or PMF rather than being plotted at incompatible y-values;
+- low-granularity gauges already use cumulative threshold semantics, so their player marker height directly represents `P(X >= threshold)`.
+
+`Explain betting lines` expands the same payload into consensus probabilities plus raw book/line/over/under prices. Evidence remains linked to the selected player without introducing a second representation of the fitted distribution.
 
 Target FP is also display-only. The browser interpolates the supplied fantasy-point survival curve to show/rank `P(FP >= target)`; changing Target FP must not make a provider request or modify Floor / Mid / Ceiling.
 
@@ -153,6 +159,7 @@ The runtime smoke covers:
 
 - fresh-browser username → league → team setup and cookie persistence;
 - linked player ranking/chart/inspector behavior and Target FP;
+- continuous yardage density, discrete exact-value PMF and low-granularity threshold-gauge rendering;
 - stat metric evidence, consensus/source-line explanation and sportsbook rows;
 - operational odds data mode reaching API requests;
 - Change league preserving the active identity when canceled;
