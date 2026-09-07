@@ -79,8 +79,7 @@
   background:
     linear-gradient(to bottom, transparent 24.5%, #232932 25%, transparent 25.5%),
     linear-gradient(to bottom, transparent 49.5%, #232932 50%, transparent 50.5%),
-    linear-gradient(to bottom, transparent 74.5%, #232932 75%, transparent 75.5%),
-    #12171d;
+    linear-gradient(to bottom, transparent 74.5%, #232932 75%, transparent 75.5%), #12171d;
 }
 
 .threshold-thermometer::after {
@@ -92,7 +91,7 @@
   border: 1px solid #3a4451;
   border-radius: 50%;
   background: #12171d;
-  content: '';
+  content: "";
   transform: translateX(-50%);
 }
 
