@@ -238,10 +238,9 @@ function ThresholdGaugeChart({
 
   return (
     <div className="chart-shell">
-      <div
+      <fieldset
         className="threshold-gauge-chart"
         data-chart-kind="threshold_gauge"
-        role="group"
         aria-label={`${xAxisName} threshold probability comparison. Each vertical gauge shows the chance of reaching or exceeding its labeled value.`}
       >
         <div className="threshold-gauge-grid">
@@ -299,7 +298,7 @@ function ThresholdGaugeChart({
         {series.length > 0 ? (
           <p className="threshold-gauge-note">Each marker is P(player ≥ threshold).</p>
         ) : null}
-      </div>
+      </fieldset>
       {series.length === 0 ? (
         <div className="chart-empty">No selected players have data for this metric.</div>
       ) : null}
