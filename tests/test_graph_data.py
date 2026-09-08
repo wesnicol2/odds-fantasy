@@ -34,11 +34,13 @@ def test_high_granularity_count_graph_uses_exact_probability_mass():
     ]
 
 
-def test_yardage_graph_is_probability_density_over_values():
+def test_yardage_graph_is_probability_density_over_focused_range():
     graph = distribution_graph(UniformHundredDistribution(), "player_rush_yds")
 
     assert graph["kind"] == "continuous_density"
     assert len(graph["points"]) == 101
+    assert graph["points"][0]["x"] == 0.5
+    assert graph["points"][-1]["x"] == 95.0
     midpoint = min(graph["points"], key=lambda point: abs(point["x"] - 50.0))
     assert abs(midpoint["probability"] - 0.01) < 0.001
     assert all(point["probability"] >= 0 for point in graph["points"])
