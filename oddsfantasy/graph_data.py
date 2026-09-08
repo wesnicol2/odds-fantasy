@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from .market_math import CountDistribution
 
 LOWER_GRAPH_QUANTILE = 0.005
@@ -9,7 +11,8 @@ LOWER_GRAPH_QUANTILE = 0.005
 # Heavy-tailed fits can place the 99th+ percentile hundreds of yards beyond the
 # useful comparison range even when that tail contains very little probability.
 UPPER_GRAPH_QUANTILE = 0.95
-CONTINUOUS_GRAPH_POINTS = 101
+CONTINUOUS_GRAPH_POINTS = 181
+CONTINUOUS_KDE_SAMPLES = 257
 LOW_GRANULARITY_MAX_THRESHOLD = 4
 
 # These count metrics have enough useful integer support to compare exact outcomes.
@@ -52,10 +55,72 @@ def _threshold_gauge_graph(distribution: CountDistribution) -> dict:
     return {"kind": "threshold_gauge", "points": points}
 
 
+def _continuous_samples(quantile: object) -> list[float]:
+    if not callable(quantile):
+        return []
+    samples: list[float] = []
+    for index in range(CONTINUOUS_KDE_SAMPLES):
+        u = (index + 0.5) / CONTINUOUS_KDE_SAMPLES
+        try:
+            value = max(0.0, float(quantile(u)))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(value):
+            samples.append(value)
+    return samples
+
+
+def _continuous_bandwidth(
+    samples: list[float],
+    quantile: object,
+    step: float,
+    span: float,
+) -> float:
+    if not samples:
+        return max(step, 1e-6)
+
+    mean = sum(samples) / len(samples)
+    variance = sum((value - mean) ** 2 for value in samples) / len(samples)
+    std = math.sqrt(max(0.0, variance))
+
+    iqr_scale = 0.0
+    if callable(quantile):
+        try:
+            q25 = float(quantile(0.25))
+            q75 = float(quantile(0.75))
+            if math.isfinite(q25) and math.isfinite(q75) and q75 > q25:
+                iqr_scale = (q75 - q25) / 1.34
+        except (TypeError, ValueError, OverflowError):
+            pass
+
+    positive_scales = [value for value in (std, iqr_scale) if value > 0]
+    scale = min(positive_scales) if positive_scales else max(span / 8.0, step)
+    silverman = 0.9 * scale * (len(samples) ** -0.2)
+
+    # The graph is a display projection, so the bandwidth deliberately spans more
+    # than one render step. This removes narrow spikes/holes caused by sparse or
+    # locally flat sportsbook anchors without changing the canonical distribution
+    # used for projections, means, percentiles, or scoring.
+    minimum = max(step * 1.5, 0.75)
+    maximum = max(minimum, span * 0.08)
+    return min(max(silverman, minimum), maximum)
+
+
+def _reflected_gaussian_density(x: float, samples: list[float], bandwidth: float) -> float:
+    if not samples or bandwidth <= 0:
+        return 0.0
+    inverse = 1.0 / (len(samples) * bandwidth * math.sqrt(2.0 * math.pi))
+    total = 0.0
+    for value in samples:
+        direct = (x - value) / bandwidth
+        reflected = (x + value) / bandwidth
+        total += math.exp(-0.5 * direct * direct) + math.exp(-0.5 * reflected * reflected)
+    return max(0.0, total * inverse)
+
+
 def _continuous_density_graph(distribution: object) -> dict:
-    sf = getattr(distribution, "sf", None)
     quantile = getattr(distribution, "quantile", None)
-    if not callable(sf) or not callable(quantile):
+    if not callable(quantile):
         return {"kind": "continuous_density", "points": []}
 
     try:
@@ -64,26 +129,25 @@ def _continuous_density_graph(distribution: object) -> dict:
     except (TypeError, ValueError, OverflowError):
         return {"kind": "continuous_density", "points": []}
 
-    if upper <= lower:
+    if not math.isfinite(lower) or not math.isfinite(upper) or upper <= lower:
+        return {"kind": "continuous_density", "points": []}
+
+    samples = _continuous_samples(quantile)
+    if not samples:
         return {"kind": "continuous_density", "points": []}
 
     step = (upper - lower) / (CONTINUOUS_GRAPH_POINTS - 1)
-    half_width = max(step / 2.0, 1e-6)
-    fitted_xs = [float(value) for value in getattr(distribution, "xs", [])]
-    xs = {lower + i * step for i in range(CONTINUOUS_GRAPH_POINTS)}
-    xs.update(value for value in fitted_xs if lower <= value <= upper)
-
-    points = []
-    for x in sorted(xs):
-        left = max(0.0, x - half_width)
-        right = x + half_width
-        width = right - left
-        try:
-            mass = max(0.0, float(sf(left)) - float(sf(right)))
-        except (TypeError, ValueError, OverflowError):
-            continue
-        density = mass / width if width > 0 else 0.0
-        points.append({"x": round(x, 2), "probability": round(density, 6)})
+    bandwidth = _continuous_bandwidth(samples, quantile, step, upper - lower)
+    points = [
+        {
+            "x": round(lower + index * step, 2),
+            "probability": round(
+                _reflected_gaussian_density(lower + index * step, samples, bandwidth),
+                6,
+            ),
+        }
+        for index in range(CONTINUOUS_GRAPH_POINTS)
+    ]
     return {"kind": "continuous_density", "points": points}
 
 
@@ -93,7 +157,7 @@ def distribution_graph(distribution: object, market_key: str) -> dict:
     The backend distribution remains canonical. This helper only changes how that
     already-fitted distribution is projected for comparison:
 
-    * yardage-like continuous stats -> probability density over values;
+    * yardage-like continuous stats -> smoothed probability density over values;
     * high-granularity count stats -> exact discrete probability mass P(X = x);
     * low-granularity count stats -> threshold probabilities P(X >= x).
 
