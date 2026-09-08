@@ -2,10 +2,11 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type TouchEvent,
-  type WheelEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
+  type WheelEvent,
 } from 'react';
 import { sourceThresholdX } from '../analysis/metrics';
 import '../stat-probability-chart.css';
@@ -208,12 +209,7 @@ function axisTouchDistance(axis: AxisKey, first: Touch, second: Touch): number {
   return Math.abs(axis === 'x' ? first.clientX - second.clientX : first.clientY - second.clientY);
 }
 
-function axisAnchor(
-  axis: AxisKey,
-  clientX: number,
-  clientY: number,
-  rect: DOMRect,
-): number {
+function axisAnchor(axis: AxisKey, clientX: number, clientY: number, rect: DOMRect): number {
   if (axis === 'x') {
     return clampUnit((clientX - rect.left) / Math.max(1, rect.width));
   }
@@ -260,14 +256,14 @@ function DistributionChart({
     [kind, series, sourceThresholds],
   );
 
-  const recordZoomRange = (axis: AxisKey, range: ZoomRange) => {
+  const recordZoomRange = useCallback((axis: AxisKey, range: ZoomRange) => {
     zoomRef.current[axis] = range;
     const element = elementRef.current;
     if (!element) return;
     const value = `${range.start.toFixed(2)}:${range.end.toFixed(2)}`;
     if (axis === 'x') element.dataset.xZoom = value;
     else element.dataset.yZoom = value;
-  };
+  }, []);
 
   const applyZoomRange = (axis: AxisKey, range: ZoomRange) => {
     recordZoomRange(axis, range);
@@ -345,11 +341,13 @@ function DistributionChart({
   };
 
   useEffect(() => {
+    const zoomScope = `${kind}:${metric}`;
     zoomRef.current = { x: fullZoomRange(), y: fullZoomRange() };
     pinchRef.current = null;
     recordZoomRange('x', zoomRef.current.x);
     recordZoomRange('y', zoomRef.current.y);
-  }, [kind, metric]);
+    if (elementRef.current) elementRef.current.dataset.zoomScope = zoomScope;
+  }, [kind, metric, recordZoomRange]);
 
   useEffect(() => {
     const element = elementRef.current;
