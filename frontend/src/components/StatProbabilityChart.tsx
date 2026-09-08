@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useRef } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef } from 'react';
 import { sourceThresholdX } from '../analysis/metrics';
 import '../stat-probability-chart.css';
 import type { ChartEvidence, ProbabilitySeries, StatGraphKind } from '../types';
@@ -53,6 +53,87 @@ function formatThreshold(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function densityQuantileX(points: ProbabilitySeries['points'], quantile: number): number | null {
+  const sorted = points
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.probability))
+    .slice()
+    .sort((left, right) => left.x - right.x);
+  if (sorted.length === 0) return null;
+  if (sorted.length === 1) return sorted.at(0)?.x ?? null;
+
+  const segments: Array<{ leftX: number; rightX: number; area: number }> = [];
+  let totalArea = 0;
+  for (let index = 1; index < sorted.length; index += 1) {
+    const left = sorted[index - 1];
+    const right = sorted[index];
+    if (!left || !right) continue;
+    const width = right.x - left.x;
+    if (width <= 0) continue;
+    const area = (width * (Math.max(0, left.probability) + Math.max(0, right.probability))) / 2;
+    if (area <= 0) continue;
+    segments.push({ leftX: left.x, rightX: right.x, area });
+    totalArea += area;
+  }
+
+  if (totalArea <= 0) return sorted.at(-1)?.x ?? null;
+  const targetArea = totalArea * Math.max(0, Math.min(1, quantile));
+  let accumulatedArea = 0;
+  for (const segment of segments) {
+    if (accumulatedArea + segment.area >= targetArea) {
+      const fraction = (targetArea - accumulatedArea) / segment.area;
+      return segment.leftX + (segment.rightX - segment.leftX) * fraction;
+    }
+    accumulatedArea += segment.area;
+  }
+
+  return sorted.at(-1)?.x ?? null;
+}
+
+function focusedDensityMax(
+  series: ProbabilitySeries[],
+  sourceThresholds: number[],
+): number | undefined {
+  const finitePoints = series.flatMap((item) =>
+    item.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.probability)),
+  );
+  if (finitePoints.length === 0) return undefined;
+
+  const rawMax = Math.max(...finitePoints.map((point) => point.x));
+  const meaningfulMaxes = series.flatMap((item) => {
+    const points = item.points
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.probability))
+      .slice()
+      .sort((left, right) => left.x - right.x);
+    const lastPoint = points.at(-1);
+    if (!lastPoint) return [];
+
+    const peak = Math.max(...points.map((point) => Math.max(0, point.probability)));
+    if (peak <= 0) return [lastPoint.x];
+
+    const signalFloor = peak * 0.005;
+    const lastSignalPoint = points
+      .slice()
+      .reverse()
+      .find((point) => Math.max(0, point.probability) >= signalFloor);
+    const signalMax = lastSignalPoint?.x ?? lastPoint.x;
+    const quantileMax = densityQuantileX(points, 0.99);
+    return [quantileMax === null ? signalMax : Math.min(signalMax, quantileMax)];
+  });
+
+  if (meaningfulMaxes.length === 0) return rawMax;
+  let focusMax = Math.max(...meaningfulMaxes);
+  const nearbyThresholds = sourceThresholds.filter(
+    (threshold) => Number.isFinite(threshold) && threshold >= 0 && threshold <= focusMax * 1.2,
+  );
+  if (nearbyThresholds.length > 0) {
+    focusMax = Math.max(focusMax, ...nearbyThresholds);
+  }
+
+  const paddedMax = focusMax + Math.max(5, focusMax * 0.08);
+  const roundedMax = Math.ceil(paddedMax / 10) * 10;
+  return Math.min(rawMax, roundedMax);
+}
+
 interface DistributionChartProps extends StatProbabilityChartProps {
   kind: 'continuous_density' | 'discrete_pmf';
 }
@@ -69,6 +150,24 @@ function DistributionChart({
 }: DistributionChartProps) {
   const elementRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<EChartsType | null>(null);
+  const sourceThresholds = useMemo(
+    () =>
+      evidence
+        ? [
+            ...new Set(
+              evidence.lines
+                .map((line) => line.point)
+                .filter((point): point is number => point !== null)
+                .map((point) => sourceThresholdX(metric, point)),
+            ),
+          ]
+        : [],
+    [evidence, metric],
+  );
+  const xAxisMax = useMemo(
+    () => (kind === 'continuous_density' ? focusedDensityMax(series, sourceThresholds) : undefined),
+    [kind, series, sourceThresholds],
+  );
 
   useEffect(() => {
     const element = elementRef.current;
@@ -112,14 +211,6 @@ function DistributionChart({
 
     const evidenceSeries = [];
     if (evidence) {
-      const sourceThresholds = [
-        ...new Set(
-          evidence.lines
-            .map((line) => line.point)
-            .filter((point): point is number => point !== null)
-            .map((point) => sourceThresholdX(metric, point)),
-        ),
-      ];
       evidenceSeries.push({
         id: `${evidence.playerId}::source-lines`,
         name: 'Sportsbook thresholds',
@@ -159,6 +250,12 @@ function DistributionChart({
         nameLocation: 'middle',
         nameGap: 36,
         ...(probabilityMass ? { minInterval: 1 } : {}),
+        ...(kind === 'continuous_density'
+          ? {
+              min: 0,
+              ...(xAxisMax === undefined ? {} : { max: xAxisMax }),
+            }
+          : {}),
         axisLabel: { color: '#8a94a3' },
         axisLine: { lineStyle: { color: '#303844' } },
         splitLine: { lineStyle: { color: '#1d242d' } },
@@ -179,7 +276,7 @@ function DistributionChart({
     };
 
     chart.setOption(option, { notMerge: true });
-  }, [activePlayerId, evidence, kind, metric, series, xAxisName]);
+  }, [activePlayerId, evidence, kind, series, sourceThresholds, xAxisMax, xAxisName]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -211,11 +308,12 @@ function DistributionChart({
         ref={elementRef}
         className="probability-chart"
         data-chart-kind={kind}
+        data-x-axis-max={xAxisMax}
         role="img"
         aria-label={
           kind === 'discrete_pmf'
             ? `${xAxisName} exact-outcome probability comparison with smoothed lines between integer values.`
-            : `${xAxisName} continuous probability density comparison.`
+            : `${xAxisName} continuous probability density comparison focused on meaningful probability mass.`
         }
       />
       {series.length === 0 ? (
