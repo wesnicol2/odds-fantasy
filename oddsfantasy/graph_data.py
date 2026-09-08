@@ -5,7 +5,10 @@ from __future__ import annotations
 from .market_math import CountDistribution
 
 LOWER_GRAPH_QUANTILE = 0.005
-UPPER_GRAPH_QUANTILE = 0.995
+# Keep the comparison chart focused on the main body of the fitted distribution.
+# Heavy-tailed fits can place the 99th+ percentile hundreds of yards beyond the
+# useful comparison range even when that tail contains very little probability.
+UPPER_GRAPH_QUANTILE = 0.95
 CONTINUOUS_GRAPH_POINTS = 101
 LOW_GRANULARITY_MAX_THRESHOLD = 4
 
