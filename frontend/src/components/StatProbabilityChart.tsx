@@ -59,13 +59,14 @@ function densityQuantileX(points: ProbabilitySeries['points'], quantile: number)
     .slice()
     .sort((left, right) => left.x - right.x);
   if (sorted.length === 0) return null;
-  if (sorted.length === 1) return sorted[0].x;
+  if (sorted.length === 1) return sorted.at(0)?.x ?? null;
 
   const segments: Array<{ leftX: number; rightX: number; area: number }> = [];
   let totalArea = 0;
   for (let index = 1; index < sorted.length; index += 1) {
     const left = sorted[index - 1];
     const right = sorted[index];
+    if (!left || !right) continue;
     const width = right.x - left.x;
     if (width <= 0) continue;
     const area = (width * (Math.max(0, left.probability) + Math.max(0, right.probability))) / 2;
@@ -74,7 +75,7 @@ function densityQuantileX(points: ProbabilitySeries['points'], quantile: number)
     totalArea += area;
   }
 
-  if (totalArea <= 0) return sorted[sorted.length - 1].x;
+  if (totalArea <= 0) return sorted.at(-1)?.x ?? null;
   const targetArea = totalArea * Math.max(0, Math.min(1, quantile));
   let accumulatedArea = 0;
   for (const segment of segments) {
@@ -85,7 +86,7 @@ function densityQuantileX(points: ProbabilitySeries['points'], quantile: number)
     accumulatedArea += segment.area;
   }
 
-  return sorted[sorted.length - 1].x;
+  return sorted.at(-1)?.x ?? null;
 }
 
 function focusedDensityMax(
@@ -103,17 +104,18 @@ function focusedDensityMax(
       .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.probability))
       .slice()
       .sort((left, right) => left.x - right.x);
-    if (points.length === 0) return [];
+    const lastPoint = points.at(-1);
+    if (!lastPoint) return [];
 
     const peak = Math.max(...points.map((point) => Math.max(0, point.probability)));
-    if (peak <= 0) return [points[points.length - 1].x];
+    if (peak <= 0) return [lastPoint.x];
 
     const signalFloor = peak * 0.005;
     const lastSignalPoint = points
       .slice()
       .reverse()
       .find((point) => Math.max(0, point.probability) >= signalFloor);
-    const signalMax = lastSignalPoint?.x ?? points[points.length - 1].x;
+    const signalMax = lastSignalPoint?.x ?? lastPoint.x;
     const quantileMax = densityQuantileX(points, 0.99);
     return [quantileMax === null ? signalMax : Math.min(signalMax, quantileMax)];
   });
