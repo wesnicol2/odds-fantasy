@@ -271,6 +271,18 @@ def api_fixture(route: Route) -> None:
                     }
                 ],
                 "total_points": values[target],
+                "bench_pressure": [
+                    {
+                        "name": "Beta Receiver",
+                        "pos": "WR",
+                        "team": "Miami Dolphins",
+                        "points": 15,
+                        "delta_to_lineup": 2,
+                        "slot": "WR",
+                        "displaces": "Alpha Runner",
+                        "displaces_slot": "RB",
+                    }
+                ],
                 "unmodeled_slots": ["K"],
                 "unfilled_slots": [],
                 "defense_note": "DEF ranges use only the points-allowed component.",
@@ -310,7 +322,20 @@ def main() -> None:
         assert cookies["league_id"] == "L1"
         assert cookies["roster_id"] == "7"
 
-        # The default player view is one linked ranking/chart/inspector workspace.
+        # Dashboard is the low-noise landing page: current lineup, bench pressure, two-week DEF plan.
+        dashboard = page.get_by_role("main", name="Dashboard")
+        dashboard.get_by_text("Lineup & pickups", exact=True).wait_for()
+        dashboard.get_by_text("Alpha Runner", exact=True).wait_for()
+        dashboard.get_by_text("Beta Receiver", exact=True).wait_for()
+        dashboard.get_by_text("2.0", exact=True).wait_for()
+        assert dashboard.get_by_text("LAC", exact=True).count() == 2
+
+        primary_nav = page.get_by_role("navigation", name="Primary navigation")
+        primary_nav.get_by_role("button", name="Players", exact=True).click()
+        assert "view=players" in page.url
+        assert "week=this" in page.url
+
+        # Players remains one linked ranking/chart/inspector workspace.
         ranking = page.get_by_role("complementary", name="Player ranking")
         ranking.get_by_text("Alpha Runner", exact=True).wait_for()
         alpha_row = ranking.locator("tbody tr").filter(has_text="Alpha Runner").first
@@ -386,22 +411,26 @@ def main() -> None:
         setup.wait_for(state="hidden")
         page.get_by_text("Smoke League · Smoke Team", exact=True).wait_for()
 
-        # Defense comparison remains a dense, market-ranked decision table.
-        page.get_by_role("button", name="Defenses").click()
+        # Defense comparison remains a dense, market-ranked drill-down.
+        primary_nav.get_by_role("button", name="Defenses", exact=True).click()
         defense_view = page.get_by_role("main", name="Defense analysis")
         defense_view.get_by_text("LAC", exact=True).wait_for()
         first_defense = defense_view.locator("tbody tr").first
         assert "17.3" in first_defense.inner_text()
         assert "Available" in first_defense.inner_text()
 
-        # Best Lineup keeps the canonical optimizer and exposes unsupported slots explicitly.
-        page.get_by_role("button", name="Best lineup").click()
+        # Lineup remains the detailed optimizer and exposes unsupported slots explicitly.
+        primary_nav.get_by_role("button", name="Lineup", exact=True).click()
         lineup_view = page.get_by_role("main", name="Best lineup")
         lineup_view.get_by_text("Alpha Runner", exact=True).wait_for()
         lineup_view.get_by_role("button", name="Ceiling").click()
         lineup_view.get_by_text("Projected Ceiling", exact=True).wait_for()
         assert "25.0" in lineup_view.inner_text()
         lineup_view.get_by_text("Not modeled: K.", exact=False).wait_for()
+
+        # Browser history restores the previous section/week context without a reload.
+        page.go_back()
+        defense_view.get_by_text("LAC", exact=True).wait_for()
 
         browser.close()
 
