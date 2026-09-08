@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type KeyboardEvent,
+  type Touch,
   type TouchEvent,
   useCallback,
   useEffect,
