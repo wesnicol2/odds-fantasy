@@ -127,11 +127,23 @@ export interface LineupRow {
   ceiling: number | null;
 }
 
+export interface BenchPressureRow {
+  name: string;
+  pos: string;
+  team: string | null;
+  points: number;
+  delta_to_lineup: number;
+  slot: string | null;
+  displaces: string | null;
+  displaces_slot: string | null;
+}
+
 export interface LineupResponse {
   week: string;
   target: 'floor' | 'mid' | 'ceiling';
   lineup: LineupRow[];
   total_points: number;
+  bench_pressure: BenchPressureRow[];
   unmodeled_slots: string[];
   unfilled_slots: string[];
   defense_note?: string;
