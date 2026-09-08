@@ -63,9 +63,7 @@ def test_continuous_density_smooths_sparse_anchor_gaps():
     )
 
     graph = distribution_graph(distribution, "player_rush_yds")
-    interior = [
-        point["probability"] for point in graph["points"] if 15.0 <= point["x"] <= 75.0
-    ]
+    interior = [point["probability"] for point in graph["points"] if 15.0 <= point["x"] <= 75.0]
 
     assert graph["kind"] == "continuous_density"
     assert len(graph["points"]) == 181
