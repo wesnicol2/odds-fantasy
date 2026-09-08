@@ -19,7 +19,7 @@ import { ProbabilityChart } from './components/ProbabilityChart';
 import { StatProbabilityChart } from './components/StatProbabilityChart';
 import { savedLeagueIdentity } from './identity';
 import './navigation.css';
-import { type WeekWindow, type WorkspaceView, useWorkspaceStore } from './state/workspace';
+import { useWorkspaceStore, type WeekWindow, type WorkspaceView } from './state/workspace';
 import type {
   BenchPressureRow,
   ChartEvidence,
