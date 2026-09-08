@@ -15,10 +15,15 @@ interface StatProbabilityChartProps {
   onPlayerSelect: (playerId: string) => void;
 }
 
-function playerColor(id: string): string {
+const SECONDARY_SERIES_BRIGHTNESS = 0.85;
+const PLAYER_COLOR_LIGHTNESS = 62;
+
+function playerColor(id: string, brightness = 1): string {
   let hash = 0;
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return `hsl(${hash % 360} 68% 62%)`;
+  const clampedBrightness = Math.max(0, Math.min(1, brightness));
+  const lightness = PLAYER_COLOR_LIGHTNESS * clampedBrightness;
+  return `hsl(${hash % 360} 68% ${lightness}%)`;
 }
 
 function playerSeriesId(seriesId?: string): string | null {
@@ -191,6 +196,8 @@ function DistributionChart({
 
     const playerSeries = series.map((item) => {
       const isActive = activePlayerId === null || item.id === activePlayerId;
+      const brightness = isActive ? 1 : SECONDARY_SERIES_BRIGHTNESS;
+      const color = playerColor(item.id, brightness);
       return {
         id: item.id,
         name: item.label,
@@ -198,12 +205,12 @@ function DistributionChart({
         showSymbol: kind === 'discrete_pmf',
         symbolSize: kind === 'discrete_pmf' ? 6 : 0,
         smooth: kind === 'discrete_pmf' ? 0.36 : 0.24,
-        color: playerColor(item.id),
+        color,
         lineStyle: {
-          width: item.id === activePlayerId ? 3.5 : 2,
-          opacity: isActive ? 1 : 0.42,
+          width: 2.5,
+          opacity: 1,
         },
-        itemStyle: { opacity: isActive ? 1 : 0.42 },
+        itemStyle: { color, opacity: 1 },
         emphasis: { focus: 'series' as const, lineStyle: { width: 4 } },
         data: item.points.map((point) => [point.x, point.probability]),
       };
