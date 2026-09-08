@@ -19,11 +19,7 @@ import { ProbabilityChart } from './components/ProbabilityChart';
 import { StatProbabilityChart } from './components/StatProbabilityChart';
 import { savedLeagueIdentity } from './identity';
 import './navigation.css';
-import {
-  type WeekWindow,
-  type WorkspaceView,
-  useWorkspaceStore,
-} from './state/workspace';
+import { type WeekWindow, type WorkspaceView, useWorkspaceStore } from './state/workspace';
 import type {
   BenchPressureRow,
   ChartEvidence,
@@ -389,7 +385,9 @@ export function App() {
           setSetupOpen(true);
           setDashboardError(null);
         } else {
-          setDashboardError(reason instanceof Error ? reason.message : 'Could not build dashboard.');
+          setDashboardError(
+            reason instanceof Error ? reason.message : 'Could not build dashboard.',
+          );
         }
       })
       .finally(() => {
@@ -489,8 +487,8 @@ export function App() {
   };
 
   const compareBenchPlayer = (pressure: BenchPressureRow) => {
-    const comparison = [pressure.name, pressure.displaces].filter(
-      (name): name is string => Boolean(name),
+    const comparison = [pressure.name, pressure.displaces].filter((name): name is string =>
+      Boolean(name),
     );
     pendingComparisonRef.current = {
       week: 'this',
@@ -537,7 +535,7 @@ export function App() {
           : lineupLoading;
   const activeRatelimit =
     view === 'dashboard'
-      ? dashboardLineup?.ratelimit ?? dashboardDefensesNext?.ratelimit
+      ? (dashboardLineup?.ratelimit ?? dashboardDefensesNext?.ratelimit)
       : view === 'players'
         ? report?.ratelimit
         : view === 'defenses'
@@ -578,7 +576,7 @@ export function App() {
       </nav>
 
       {view !== 'dashboard' ? (
-        <div className="view-context" aria-label="Week context">
+        <div className="view-context">
           <span className="view-context-label">Week</span>
           <fieldset className="week-switch">
             <legend className="sr-only">Week window</legend>
