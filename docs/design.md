@@ -105,7 +105,7 @@ The product derives information from betting markets.
 
 Users should be able to move naturally from:
 
-**projection → curve → consensus market evidence → individual sportsbook lines**
+**projection → distribution → consensus market evidence → individual sportsbook lines**
 
 without encountering a second, contradictory representation of the same model.
 
@@ -415,32 +415,43 @@ Interactive charts should expose exact values through hover, focus, tap, keyboar
 
 Important information must remain accessible without requiring pointer hover.
 
-### One probability grammar
+### Probability semantics
 
-Where possible, Odds Fantasy should use a consistent survival-probability grammar across metrics:
+Odds Fantasy uses different display forms because the support of each modeled outcome is different. All forms are presentations of the same canonical backend distributions.
 
-**P(metric ≥ x)**
+The primary fantasy-points comparison visualization shows score probability mass:
 
-This lets the user ask the same question across fantasy points and individual player statistics: "What is the chance this player reaches at least this value?"
+**P(Fantasy Points = x)**
 
-For individual statistics this is the canonical stat-survival interpretation.
+In practice, `x` denotes a one-point fantasy-score bucket centered on the displayed value. Exact equality on a continuous Monte Carlo sample is not a stable visual quantity, so the bucket is the user-facing meaning of equality.
 
-For fantasy points, the primary comparison visualization should likewise present:
+Individual-stat visualization semantics are determined by the metric taxonomy:
 
-**P(Fantasy Points ≥ x)**
+- continuous yardage metrics show a probability-density view over value;
+- high-granularity count metrics show exact discrete probability mass `P(X = x)` at integer values;
+- low-granularity count metrics show cumulative threshold probability `P(X ≥ x)`.
 
-using the canonical backend fantasy-point distribution/survival data. This is a presentation choice, not a replacement model.
+Target mode remains a survival-probability question:
 
-### Fantasy-point survival comparison
+**P(Fantasy Points ≥ target)**
 
-Fantasy-point graphs compare players by the probability of reaching or exceeding each fantasy-score threshold.
+The frontend may visually transform canonical backend payloads only where the contract explicitly allows it, such as one-point fantasy-score buckets or smoothing the connecting line between discrete PMF points. It must not fit or sample a replacement projection model.
+
+### Fantasy-point probability-mass comparison
+
+Fantasy-point graphs compare players by the probability of landing near each fantasy score rather than by a monotonically descending exceedance curve.
 
 Therefore:
 
-- x-axis = fantasy-point threshold;
-- y-axis = probability of scoring at least that many fantasy points.
+- x-axis = fantasy-score bucket center;
+- y-axis = probability of landing in the one-point bucket centered on that score;
+- the y-axis begins at zero and scales to the visible probability mass rather than being fixed to 100%;
+- the default x-axis focuses on the central 99% of each compared player's displayed probability mass so extreme near-zero tails do not compress the informative region;
+- when a manually selected Target FP lies outside that focused range, the graph expands enough to keep the target reference visible.
 
-The graph must make relative downside, median region, upside, and tail behavior easier to understand than Floor / Mid / Ceiling alone.
+The distribution will often be single-peaked and bell-like, but skew, discrete scoring, bonuses, or mixed stat distributions may legitimately make it asymmetric or multi-peaked. The UI must not force a mathematically false normal curve merely for appearance.
+
+The graph must make relative downside, median region, upside, and distribution shape easier to understand than Floor / Mid / Ceiling alone.
 
 Multiple players may be compared simultaneously.
 
@@ -460,7 +471,7 @@ It answers:
 
 **"What is the probability this player scores at least X fantasy points?"**
 
-The user chooses a fantasy-point threshold through direct manipulation of the fantasy-point survival graph, an accessible numeric control, or both.
+The user chooses a fantasy-point threshold through direct manipulation of the fantasy-point distribution graph, an accessible numeric control, or both.
 
 The visualization should show the selected threshold as a clear vertical reference line or equivalent marker.
 
@@ -472,7 +483,7 @@ That probability should also be available in the ranking/list so the user can ra
 
 Changing the target should update already-loaded results immediately and must not trigger sportsbook refetches merely because the display threshold moved.
 
-The target value is an analytical lens over the canonical fantasy-point distribution. The frontend must not estimate a separate distribution to support it.
+The target value is an analytical lens over the canonical fantasy-point distribution. Its probability remains derived from the backend-supplied fantasy survival curve; the probability-mass chart does not redefine Target semantics.
 
 ### Target interaction requirements
 
@@ -487,50 +498,70 @@ Target mode is a player-analysis lens. It does **not** implicitly add a new Best
 
 ---
 
-## Stat survival curves
+## Stat chart taxonomy
 
-Individual-stat graphs represent:
+Individual stat metrics use one of three visualization classes.
 
-**P(stat ≥ x)**
+### Continuous
 
-unless the underlying metric explicitly has different semantics.
+Use for yardage metrics.
 
-Therefore:
+- x-axis = stat value;
+- y-axis = `P(x)` probability density;
+- player series are smooth curves;
+- the y-axis begins at zero and scales to the visible density rather than being fixed to 100%.
 
-- x-axis = stat threshold;
-- y-axis = probability of reaching or exceeding that threshold.
+A continuous density is not a cumulative probability. Do not plot `P(X ≥ x)` sportsbook consensus anchors at their probability heights on this y-axis.
 
-The y-axis should use a consistent probability scale so graphs are comparable.
+### Discrete high granularity
 
-Count statistics should retain their discrete/step semantics instead of being visually smoothed into continuous measurements.
+Use for integer-count metrics with enough useful support to compare distribution shape, including receptions and any supported rush-attempt/touch metrics.
+
+- x-axis = integer stat value;
+- y-axis = exact probability mass `P(X = x)`;
+- each integer outcome must retain an explicit point marker;
+- the connecting line should be visually smoothed between integer points to make multiple players easier to compare;
+- smoothing is presentation only and must not imply probability mass at non-integer outcomes.
+
+The y-axis begins at zero and scales to the visible probability mass rather than being fixed to 100%.
+
+### Discrete low granularity
+
+Use for sparse count metrics such as passing TDs, anytime TDs and interceptions.
+
+The primary visual form is a set of narrow vertical threshold gauges that resemble thermometers.
+
+- each gauge represents one useful integer threshold such as `1+`, `2+` or `3+`;
+- each gauge uses a 0%–100% vertical probability scale;
+- every compared player has a short horizontal marker across the gauge at `P(X ≥ threshold)`;
+- the player identity and exact percentage must be directly inspectable and should be labeled when space allows;
+- thresholds should stop once additional gauges are no longer decision-useful rather than extending a long near-zero tail.
+
+These gauges are analytical comparison scales, not decorative KPI speedometers. They should remain visually restrained and preserve stable player identity across thresholds.
 
 ---
 
 ## Betting-market evidence
 
-The visualization has three conceptually different elements.
+The visualization and inspector expose three conceptually different pieces of information.
 
-### Fitted curve
+### Fitted distribution presentation
 
-The continuous or step line represents the modeled probability distribution.
-
-It is the primary visual element.
+The active line chart or threshold-gauge set is the primary visualization of the canonical fitted distribution. Its exact semantics come from the stat chart taxonomy above.
 
 ### Consensus anchors
 
-Consensus sportsbook thresholds are displayed as distinct point markers.
+Consensus sportsbook thresholds are de-vigged cross-book `P(X ≥ x)` evidence constraining the fitted distribution.
 
-These represent de-vigged cross-book evidence constraining the fitted distribution.
-
-They must be visually distinguishable from the curve itself.
+They may be plotted directly only when the active visualization uses compatible cumulative-probability y-semantics. When the active chart shows probability density or exact PMF, consensus anchors remain in the inspector rather than being placed at mathematically incompatible y-values.
 
 ### Exact sportsbook thresholds
 
-Individual sportsbook line locations are displayed as lighter secondary markers along the relevant threshold axis.
+Individual sportsbook line locations may be displayed as lighter secondary markers along the relevant x/threshold axis.
 
-They communicate where source evidence exists without visually overpowering the consensus or fitted model.
+They communicate where source evidence exists without visually overpowering the fitted distribution.
 
-The graph must include a compact visual key explaining these encodings.
+The interface must include concise explanatory copy or an equivalent visual key so the user can distinguish fitted output, consensus evidence and exact source lines.
 
 ---
 
@@ -555,11 +586,11 @@ The graph and evidence should be linked where doing so reduces mental lookup wor
 
 Examples of desirable coordinated behavior:
 
-- selecting a consensus marker reveals or emphasizes the corresponding consensus evidence;
-- inspecting an individual sportsbook line emphasizes its threshold location on the graph;
+- selecting compatible threshold evidence reveals or emphasizes the corresponding consensus evidence;
+- inspecting an individual sportsbook line emphasizes its threshold location on the graph where applicable;
 - changing the selected player updates evidence without destroying the graph's metric/filter context.
 
-The interface should explain the relationship between raw prices, consensus anchors, and the displayed fitted curve in concise language.
+The interface should explain the relationship between raw prices, consensus anchors, and the displayed fitted distribution in concise language.
 
 Raw evidence should never visually compete with the primary graph until the user requests it.
 
@@ -691,6 +722,7 @@ On narrow screens:
 - the inspector may become an inline section or sheet;
 - detailed evidence may become a dedicated lower section;
 - graphs must remain readable without requiring arbitrary fixed-width desktop canvases;
+- threshold gauges may scroll horizontally as a compact comparison set rather than being squeezed until labels become unreadable;
 - Target mode must remain usable by touch and accessible numeric input.
 
 Do not convert every table row into a large card unless that demonstrably improves readability.
@@ -711,6 +743,7 @@ At minimum:
 - text and essential graphics have adequate contrast;
 - color is never the only indicator of state;
 - charts expose meaningful textual values or equivalent accessible inspection;
+- threshold-gauge player markers expose player, threshold and probability through accessible names;
 - Target threshold manipulation has a keyboard-operable equivalent;
 - touch targets are large enough for mobile interaction.
 
@@ -782,7 +815,7 @@ Do not introduce the following without a specific product reason:
 - glassmorphism;
 - 3D charts;
 - pie charts for probability distributions;
-- gauges or speedometers;
+- decorative gauges or speedometers that do not support direct analytical comparison;
 - traffic-light coloring of every value;
 - excessive badges;
 - animation for visual spectacle;
@@ -836,7 +869,7 @@ Can core workflows be completed with keyboard and touch, and are states perceiva
 
 ### Visualization semantics
 
-Do chart axes, survival-probability meaning, markers, series identities, Target probabilities, and evidence still represent the canonical backend data correctly?
+Do chart axes, fantasy-point probability-mass meaning, continuous density, high-granularity exact PMF, low-granularity threshold probabilities, series identities, Target probabilities, and sportsbook evidence still represent the canonical backend data correctly?
 
 ### Regression
 

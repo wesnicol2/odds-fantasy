@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { sourceThresholdX } from '../analysis/metrics';
-import type { ChartEvidence, ProbabilitySeries } from '../types';
+import type { ChartEvidence, ProbabilityPoint, ProbabilitySeries } from '../types';
 import type { EChartsOption, EChartsType } from '../visualization/echarts';
 import { echarts } from '../visualization/echarts';
 
@@ -19,6 +19,9 @@ interface ProbabilityChartProps {
   onPlayerSelect: (playerId: string) => void;
 }
 
+const FANTASY_POINT_BUCKET_WIDTH = 1;
+const CENTRAL_TAIL_PROBABILITY = 0.005;
+
 function playerColor(id: string): string {
   let hash = 0;
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
@@ -32,6 +35,113 @@ function roundedTarget(value: number): number {
 function playerSeriesId(seriesId?: string): string | null {
   if (!seriesId || seriesId.includes('::')) return null;
   return seriesId;
+}
+
+function probabilityAtX(points: ProbabilityPoint[], x: number): number {
+  if (points.length === 0) return 0;
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (!first || !last) return 0;
+  if (x <= first.x) return first.probability;
+  if (x > last.x) return 0;
+
+  let low = 0;
+  let high = points.length - 1;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const point = points[mid];
+    if (!point || point.x < x) low = mid + 1;
+    else high = mid;
+  }
+
+  const upper = points[low];
+  const lower = points[Math.max(0, low - 1)];
+  if (!upper || !lower) return upper?.probability ?? 0;
+  return x - lower.x <= upper.x - x ? lower.probability : upper.probability;
+}
+
+function fantasyPointMass(points: ProbabilityPoint[]): ProbabilityPoint[] {
+  if (points.length === 0) return [];
+  const sorted = [...points].sort((a, b) => a.x - b.x);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (!first || !last) return [];
+
+  const width = FANTASY_POINT_BUCKET_WIDTH;
+  const start = Math.floor(first.x / width) * width;
+  const end = Math.ceil(last.x / width) * width;
+  const output: ProbabilityPoint[] = [];
+
+  for (let x = start; x <= end + width / 2; x += width) {
+    const lowerSurvival = probabilityAtX(sorted, x - width / 2);
+    const upperSurvival = probabilityAtX(sorted, x + width / 2);
+    output.push({
+      x: Math.round(x * 100) / 100,
+      probability: Math.max(0, Math.min(1, lowerSurvival - upperSurvival)),
+    });
+  }
+  return output;
+}
+
+function centralBounds(points: ProbabilityPoint[]): [number, number] | null {
+  if (points.length === 0) return null;
+  const sorted = [...points].sort((a, b) => a.x - b.x);
+  const total = sorted.reduce((sum, point) => sum + Math.max(0, point.probability), 0);
+  if (total <= 0) {
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    return first && last ? [first.x, last.x] : null;
+  }
+
+  const lowerCutoff = total * CENTRAL_TAIL_PROBABILITY;
+  const upperCutoff = total * (1 - CENTRAL_TAIL_PROBABILITY);
+  let cumulative = 0;
+  let lower = sorted[0]?.x ?? 0;
+  let upper = sorted[sorted.length - 1]?.x ?? lower;
+  let lowerFound = false;
+
+  for (const point of sorted) {
+    cumulative += Math.max(0, point.probability);
+    if (!lowerFound && cumulative >= lowerCutoff) {
+      lower = point.x;
+      lowerFound = true;
+    }
+    if (cumulative >= upperCutoff) {
+      upper = point.x;
+      break;
+    }
+  }
+
+  return [lower, upper];
+}
+
+function combinedCentralDomain(
+  series: ProbabilitySeries[],
+  target: number | null,
+): [number, number] | null {
+  const bounds = series
+    .map((item) => centralBounds(item.points))
+    .filter((value): value is [number, number] => value !== null);
+  if (bounds.length === 0) return null;
+
+  let lower = Math.min(...bounds.map(([value]) => value));
+  let upper = Math.max(...bounds.map(([, value]) => value));
+  const span = Math.max(FANTASY_POINT_BUCKET_WIDTH, upper - lower);
+  const padding = Math.max(FANTASY_POINT_BUCKET_WIDTH, span * 0.04);
+  lower -= padding;
+  upper += padding;
+
+  if (target !== null) {
+    lower = Math.min(lower, target - FANTASY_POINT_BUCKET_WIDTH);
+    upper = Math.max(upper, target + FANTASY_POINT_BUCKET_WIDTH);
+  }
+
+  return [Math.floor(lower * 2) / 2, Math.ceil(upper * 2) / 2];
+}
+
+function formatChartProbability(value: number): string {
+  const percent = value * 100;
+  return `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}%`;
 }
 
 export function ProbabilityChart({
@@ -73,14 +183,20 @@ export function ProbabilityChart({
     const chart = chartRef.current;
     if (!chart) return;
 
-    const playerSeries = series.map((item, index) => {
+    const distributionMode = metric === 'fantasy_points';
+    const displaySeries = distributionMode
+      ? series.map((item) => ({ ...item, points: fantasyPointMass(item.points) }))
+      : series;
+    const xDomain = distributionMode ? combinedCentralDomain(displaySeries, target) : null;
+
+    const playerSeries = displaySeries.map((item, index) => {
       const isActive = activePlayerId === null || item.id === activePlayerId;
       return {
         id: item.id,
         name: item.label,
         type: 'line' as const,
         showSymbol: false,
-        smooth: false,
+        smooth: distributionMode ? 0.28 : false,
         ...(stepCurve ? { step: 'end' as const } : {}),
         color: playerColor(item.id),
         lineStyle: {
@@ -153,7 +269,7 @@ export function ProbabilityChart({
         trigger: 'axis',
         axisPointer: { type: 'line' },
         valueFormatter: (value) =>
-          typeof value === 'number' ? `${Math.round(value * 100)}%` : String(value ?? ''),
+          typeof value === 'number' ? formatChartProbability(value) : String(value ?? ''),
       },
       legend: {
         top: 8,
@@ -165,23 +281,36 @@ export function ProbabilityChart({
         name: xAxisName,
         nameLocation: 'middle',
         nameGap: 36,
+        ...(xDomain ? { min: xDomain[0], max: xDomain[1] } : {}),
         axisLabel: { color: '#8a94a3' },
         axisLine: { lineStyle: { color: '#303844' } },
         splitLine: { lineStyle: { color: '#1d242d' } },
       },
-      yAxis: {
-        type: 'value',
-        name: yAxisName,
-        min: 0,
-        max: 1,
-        interval: 0.25,
-        axisLabel: {
-          color: '#8a94a3',
-          formatter: (value: number) => `${Math.round(value * 100)}%`,
-        },
-        axisLine: { lineStyle: { color: '#303844' } },
-        splitLine: { lineStyle: { color: '#1d242d' } },
-      },
+      yAxis: distributionMode
+        ? {
+            type: 'value',
+            name: 'P(FP = x)',
+            min: 0,
+            axisLabel: {
+              color: '#8a94a3',
+              formatter: (value: number) => formatChartProbability(value),
+            },
+            axisLine: { lineStyle: { color: '#303844' } },
+            splitLine: { lineStyle: { color: '#1d242d' } },
+          }
+        : {
+            type: 'value',
+            name: yAxisName,
+            min: 0,
+            max: 1,
+            interval: 0.25,
+            axisLabel: {
+              color: '#8a94a3',
+              formatter: (value: number) => `${Math.round(value * 100)}%`,
+            },
+            axisLine: { lineStyle: { color: '#303844' } },
+            splitLine: { lineStyle: { color: '#1d242d' } },
+          },
       series: [...playerSeries, ...evidenceSeries],
     };
 
@@ -276,13 +405,18 @@ export function ProbabilityChart({
     };
   }, [series.length, target, targetEnabled, onTargetChange]);
 
+  const distributionMode = metric === 'fantasy_points';
   return (
     <div className="chart-shell">
       <div
         ref={elementRef}
         className="probability-chart"
         role="img"
-        aria-label={`${xAxisName} survival probability comparison.${targetEnabled ? ' Drag the target line or use the numeric target control.' : ''}`}
+        aria-label={
+          distributionMode
+            ? `${xAxisName} probability distribution in one-point score buckets.${targetEnabled ? ' Drag the target line or use the numeric target control.' : ''}`
+            : `${xAxisName} survival probability comparison.${targetEnabled ? ' Drag the target line or use the numeric target control.' : ''}`
+        }
       />
       {series.length === 0 ? (
         <div className="chart-empty">No selected players have data for this metric.</div>

@@ -15,6 +15,7 @@ import { LineupView } from './components/LineupView';
 import { PlayerInspector } from './components/PlayerInspector';
 import { PlayerRanking } from './components/PlayerRanking';
 import { ProbabilityChart } from './components/ProbabilityChart';
+import { StatProbabilityChart } from './components/StatProbabilityChart';
 import { savedLeagueIdentity } from './identity';
 import { useWorkspaceStore } from './state/workspace';
 import type {
@@ -60,9 +61,7 @@ export function App() {
   const setSelectedPositions = useWorkspaceStore((state) => state.setSelectedPositions);
 
   const [identity, setIdentity] = useState(savedLeagueIdentity);
-  const [setupOpen, setSetupOpen] = useState(
-    () => !Boolean(identity.leagueId && identity.rosterId),
-  );
+  const [setupOpen, setSetupOpen] = useState(() => !(identity.leagueId && identity.rosterId));
   const [leagueContext, setLeagueContext] = useState<string | null>(null);
   const [report, setReport] = useState<ProjectionResponse | null>(null);
   const [loading, setLoading] = useState(() => Boolean(identity.leagueId && identity.rosterId));
@@ -302,7 +301,14 @@ export function App() {
         const market =
           detailsByKey[detailsKey(identityKey, dataMode, week, player.name)]?.markets[metric];
         if (!market?.graph.points.length) return [];
-        return [{ id: player.name, label: player.name, points: market.graph.points }];
+        return [
+          {
+            id: player.name,
+            label: player.name,
+            points: market.graph.points,
+            kind: market.graph.kind,
+          },
+        ];
       });
   }, [
     dataMode,
@@ -356,6 +362,10 @@ export function App() {
 
   const fantasyPointsMetric = metric === 'fantasy_points';
   const activeMetricLabel = metricLabel(metric);
+  const lowGranularityMetric =
+    !fantasyPointsMetric && isCountMetric(metric) && metric !== 'player_receptions';
+  const highGranularityMetric =
+    !fantasyPointsMetric && isCountMetric(metric) && metric === 'player_receptions';
 
   return (
     <div className="app-frame">
@@ -446,9 +456,21 @@ export function App() {
             <div className="pane-heading split">
               <div>
                 <span className="eyebrow">Probability</span>
-                <h2>{activeMetricLabel} survival</h2>
+                <h2>
+                  {fantasyPointsMetric
+                    ? `${activeMetricLabel} distribution`
+                    : lowGranularityMetric
+                      ? `${activeMetricLabel} thresholds`
+                      : `${activeMetricLabel} distribution`}
+                </h2>
                 <p className="pane-description">
-                  Chance of reaching or exceeding each {activeMetricLabel.toLowerCase()} threshold.
+                  {fantasyPointsMetric
+                    ? 'Chance of landing in each one-point fantasy-score bucket.'
+                    : lowGranularityMetric
+                      ? `Chance of meeting or exceeding each ${activeMetricLabel.toLowerCase()} count threshold.`
+                      : highGranularityMetric
+                        ? `Chance of each exact ${activeMetricLabel.toLowerCase()} value; the line is smoothed only between integer outcomes.`
+                        : `Probability density across the fitted ${activeMetricLabel.toLowerCase()} distribution.`}
                 </p>
               </div>
               {fantasyPointsMetric ? (
@@ -495,22 +517,34 @@ export function App() {
                 ? target === null
                   ? 'Click and drag in the chart to set a target.'
                   : 'Drag the dashed target line or type an exact value.'
-                : 'Diamonds show consensus market anchors; x-axis ticks show exact sportsbook thresholds for the selected player.'}
+                : lowGranularityMetric
+                  ? `Each thermometer shows P(${activeMetricLabel} ≥ threshold); player markers are fitted probabilities derived from sportsbook lines.`
+                  : 'Exact sportsbook thresholds are marked on the x-axis. Consensus P(≥x) anchors remain in the inspector because this chart shows P(x).'}
             </div>
-            <ProbabilityChart
-              series={graphSeries}
-              target={fantasyPointsMetric ? target : null}
-              activePlayerId={hoveredPlayer ?? selectedPlayer}
-              metric={metric}
-              xAxisName={activeMetricLabel}
-              yAxisName={`P(${activeMetricLabel} ≥ x)`}
-              targetEnabled={fantasyPointsMetric}
-              stepCurve={!fantasyPointsMetric && isCountMetric(metric)}
-              evidence={chartEvidence}
-              onTargetChange={setTarget}
-              onPlayerHover={setHoveredPlayer}
-              onPlayerSelect={selectPlayer}
-            />
+            {fantasyPointsMetric ? (
+              <ProbabilityChart
+                series={graphSeries}
+                target={target}
+                activePlayerId={hoveredPlayer ?? selectedPlayer}
+                metric={metric}
+                xAxisName={activeMetricLabel}
+                yAxisName={`P(${activeMetricLabel} = x)`}
+                targetEnabled
+                onTargetChange={setTarget}
+                onPlayerHover={setHoveredPlayer}
+                onPlayerSelect={selectPlayer}
+              />
+            ) : (
+              <StatProbabilityChart
+                series={graphSeries}
+                activePlayerId={hoveredPlayer ?? selectedPlayer}
+                metric={metric}
+                xAxisName={activeMetricLabel}
+                evidence={chartEvidence}
+                onPlayerHover={setHoveredPlayer}
+                onPlayerSelect={selectPlayer}
+              />
+            )}
           </section>
 
           <aside className="inspector-pane" aria-label="Player inspector">

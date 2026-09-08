@@ -1,0 +1,242 @@
+.axis-zoom-zone {
+  position: absolute;
+  z-index: 9;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.axis-zoom-zone:focus-visible {
+  border-radius: 4px;
+  outline: 1px dashed #5aa2ff;
+  outline-offset: -2px;
+  background: rgb(90 162 255 / 5%);
+}
+
+.axis-zoom-zone-x {
+  right: 28px;
+  bottom: 0;
+  left: 66px;
+  height: 56px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.axis-zoom-zone-y {
+  top: 48px;
+  bottom: 56px;
+  left: 0;
+  width: 66px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.threshold-gauge-chart {
+  min-width: 0;
+  min-height: 360px;
+  margin: 0;
+  padding: 0.75rem 0.25rem 0.25rem;
+  overflow-x: auto;
+  border: 0;
+}
+
+.threshold-gauge-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 132px;
+  justify-content: start;
+  gap: 0.3rem;
+  min-width: max-content;
+  padding: 0.5rem 0.35rem 0.25rem;
+}
+
+.threshold-gauge {
+  min-width: 132px;
+}
+
+.threshold-gauge h3 {
+  margin: 0 0 0.4rem;
+  color: #f1f4f7;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.threshold-gauge-plot {
+  position: relative;
+  height: 270px;
+  margin: 0 auto;
+}
+
+.threshold-gauge-scale {
+  position: absolute;
+  inset: 2px auto 18px 0;
+  width: 28px;
+  color: #687382;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.threshold-gauge-scale span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.threshold-gauge-scale span:nth-child(1) {
+  top: 0;
+  transform: none;
+}
+
+.threshold-gauge-scale span:nth-child(2) {
+  top: 25%;
+}
+
+.threshold-gauge-scale span:nth-child(3) {
+  top: 50%;
+}
+
+.threshold-gauge-scale span:nth-child(4) {
+  top: 75%;
+}
+
+.threshold-gauge-scale span:nth-child(5) {
+  top: 100%;
+  transform: translateY(-100%);
+}
+
+.threshold-thermometer {
+  position: absolute;
+  top: 2px;
+  bottom: 18px;
+  left: 39px;
+  width: 12px;
+  border: 1px solid #3a4451;
+  border-radius: 999px 999px 6px 6px;
+  background:
+    linear-gradient(to bottom, transparent 24.5%, #232932 25%, transparent 25.5%),
+    linear-gradient(to bottom, transparent 49.5%, #232932 50%, transparent 50.5%),
+    linear-gradient(to bottom, transparent 74.5%, #232932 75%, transparent 75.5%), #12171d;
+}
+
+.threshold-thermometer::after {
+  position: absolute;
+  bottom: -15px;
+  left: 50%;
+  width: 23px;
+  height: 23px;
+  border: 1px solid #3a4451;
+  border-radius: 50%;
+  background: #12171d;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.threshold-marker-layer {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  bottom: 18px;
+  left: 0;
+}
+
+.threshold-marker {
+  position: absolute;
+  right: 0;
+  left: 28px;
+  display: block;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 1;
+  transform: translateY(-50%);
+  transition: filter 100ms ease;
+}
+
+.threshold-marker.muted {
+  filter: brightness(0.85);
+}
+
+.threshold-marker:hover,
+.threshold-marker:focus-visible {
+  z-index: 3;
+  filter: brightness(1);
+}
+
+.threshold-marker-line {
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  width: 38px;
+  height: 3px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.threshold-marker-label {
+  position: absolute;
+  top: 50%;
+  left: 48px;
+  max-width: 80px;
+  overflow: hidden;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.threshold-marker-label strong {
+  font-weight: 650;
+}
+
+.threshold-gauge-note {
+  margin: 0.4rem 0.35rem 0;
+  color: #687382;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 760px) {
+  .threshold-gauge-chart {
+    min-height: 330px;
+  }
+
+  .threshold-gauge-grid {
+    grid-auto-columns: 118px;
+    gap: 0.2rem;
+    padding-inline: 0.15rem;
+  }
+
+  .threshold-gauge {
+    min-width: 118px;
+  }
+
+  .threshold-gauge-scale {
+    width: 24px;
+    font-size: 0.62rem;
+  }
+
+  .threshold-thermometer {
+    left: 33px;
+  }
+
+  .threshold-marker {
+    left: 24px;
+  }
+
+  .threshold-marker-line {
+    width: 34px;
+  }
+
+  .threshold-marker-label {
+    left: 43px;
+    max-width: 72px;
+    font-size: 0.65rem;
+  }
+}
