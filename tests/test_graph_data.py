@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 from oddsfantasy.graph_data import distribution_graph
 from oddsfantasy.market_math import Anchor, ContinuousDistribution, CountDistribution
 
@@ -72,4 +74,4 @@ def test_continuous_density_smooths_sparse_anchor_gaps():
     assert interior
     assert min(interior) > 0.0
     peak = max(interior)
-    assert max(abs(right - left) for left, right in zip(interior, interior[1:])) < peak * 0.2
+    assert max(abs(right - left) for left, right in pairwise(interior)) < peak * 0.2
