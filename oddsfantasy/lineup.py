@@ -168,9 +168,7 @@ def build_best_lineup(
         displaced_indices = [
             choice
             for choice in choices
-            if choice is not None
-            and choice not in forced_indices
-            and choice < len(candidates)
+            if choice is not None and choice not in forced_indices and choice < len(candidates)
         ]
         displaced_index = displaced_indices[0] if displaced_indices else None
         forced_slot = next(
