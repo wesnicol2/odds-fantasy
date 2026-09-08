@@ -364,7 +364,7 @@ def main() -> None:
         gauge_chart.get_by_text("1+", exact=True).wait_for()
         gauge_chart.get_by_text("2+", exact=True).wait_for()
         assert gauge_chart.get_attribute("data-chart-kind") == "threshold_gauge"
-        assert gauge_chart.get_attribute("role") == "group"
+        assert gauge_chart.evaluate("element => element.tagName") == "FIELDSET"
         gauge_chart.get_by_role("button", name="Alpha Runner 1 or more: 62%", exact=True).wait_for()
 
         # Cache mode is operational state and must be sent to the API, not just styled locally.
