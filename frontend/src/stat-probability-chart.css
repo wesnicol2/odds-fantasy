@@ -119,17 +119,17 @@
   cursor: pointer;
   opacity: 1;
   transform: translateY(-50%);
-  transition: opacity 100ms ease;
+  transition: filter 100ms ease;
 }
 
 .threshold-marker.muted {
-  opacity: 0.38;
+  filter: brightness(0.85);
 }
 
 .threshold-marker:hover,
 .threshold-marker:focus-visible {
   z-index: 3;
-  opacity: 1;
+  filter: brightness(1);
 }
 
 .threshold-marker-line {
