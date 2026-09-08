@@ -9,6 +9,7 @@ import {
   MissingIdentityError,
 } from './api/client';
 import { AppSettings } from './components/AppSettings';
+import { DashboardView } from './components/DashboardView';
 import { DefenseView } from './components/DefenseView';
 import { type LeagueSelectionSummary, LeagueSetup } from './components/LeagueSetup';
 import { LineupView } from './components/LineupView';
@@ -17,8 +18,10 @@ import { PlayerRanking } from './components/PlayerRanking';
 import { ProbabilityChart } from './components/ProbabilityChart';
 import { StatProbabilityChart } from './components/StatProbabilityChart';
 import { savedLeagueIdentity } from './identity';
-import { useWorkspaceStore } from './state/workspace';
+import './navigation.css';
+import { useWorkspaceStore, type WeekWindow, type WorkspaceView } from './state/workspace';
 import type {
+  BenchPressureRow,
   ChartEvidence,
   DefenseResponse,
   LineupResponse,
@@ -26,18 +29,43 @@ import type {
   ProjectionResponse,
 } from './types';
 
-const views = [
+const views: ReadonlyArray<readonly [WorkspaceView, string]> = [
+  ['dashboard', 'Dashboard'],
   ['players', 'Players'],
   ['defenses', 'Defenses'],
-  ['lineup', 'Best lineup'],
-] as const;
+  ['lineup', 'Lineup'],
+];
 
 function detailsKey(identity: string, mode: string, week: string, player: string): string {
   return `${identity}:${mode}:${week}:${player}`;
 }
 
+function defenseKey(identity: string, mode: string, week: string): string {
+  return `${identity}:${mode}:${week}`;
+}
+
 function lineupKey(identity: string, mode: string, week: string, target: string): string {
   return `${identity}:${mode}:${week}:${target}`;
+}
+
+function routeFromLocation(): { view: WorkspaceView; week: WeekWindow } {
+  const params = new URLSearchParams(window.location.search);
+  const requestedView = params.get('view');
+  const view = views.some(([value]) => value === requestedView)
+    ? (requestedView as WorkspaceView)
+    : 'dashboard';
+  const week = params.get('week') === 'next' ? 'next' : 'this';
+  return { view, week };
+}
+
+function routeUrl(view: WorkspaceView, week: WeekWindow): string {
+  const url = new URL(window.location.href);
+  url.search = '';
+  if (view !== 'dashboard') {
+    url.searchParams.set('view', view);
+    url.searchParams.set('week', week);
+  }
+  return `${url.pathname}${url.search}`;
 }
 
 export function App() {
@@ -64,7 +92,7 @@ export function App() {
   const [setupOpen, setSetupOpen] = useState(() => !(identity.leagueId && identity.rosterId));
   const [leagueContext, setLeagueContext] = useState<string | null>(null);
   const [report, setReport] = useState<ProjectionResponse | null>(null);
-  const [loading, setLoading] = useState(() => Boolean(identity.leagueId && identity.rosterId));
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
   const [detailsByKey, setDetailsByKey] = useState<Record<string, PlayerOddsDetails>>({});
@@ -75,14 +103,34 @@ export function App() {
   const [lineupPayload, setLineupPayload] = useState<LineupResponse | null>(null);
   const [lineupLoading, setLineupLoading] = useState(false);
   const [lineupError, setLineupError] = useState<string | null>(null);
+  const [dashboardLineup, setDashboardLineup] = useState<LineupResponse | null>(null);
+  const [dashboardDefensesThis, setDashboardDefensesThis] = useState<DefenseResponse | null>(null);
+  const [dashboardDefensesNext, setDashboardDefensesNext] = useState<DefenseResponse | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const detailsRef = useRef<Record<string, PlayerOddsDetails>>({});
   const detailInflightRef = useRef(new Set<string>());
   const defensesRef = useRef<Record<string, DefenseResponse>>({});
   const lineupsRef = useRef<Record<string, LineupResponse>>({});
   const initializedWeekRef = useRef<string | null>(null);
+  const pendingComparisonRef = useRef<{
+    week: WeekWindow;
+    players: string[];
+    selected: string;
+  } | null>(null);
 
   const identityReady = Boolean(identity.leagueId && identity.rosterId);
   const identityKey = `${identity.leagueId ?? ''}:${identity.rosterId ?? ''}`;
+
+  const navigateTo = useCallback(
+    (nextView: WorkspaceView, nextWeek: WeekWindow = week) => {
+      setView(nextView);
+      if (nextView !== 'dashboard') setWeek(nextWeek);
+      window.history.pushState({}, '', routeUrl(nextView, nextWeek));
+      window.scrollTo({ top: 0 });
+    },
+    [setView, setWeek, week],
+  );
 
   const loadPlayerDetails = useCallback(
     async (name: string) => {
@@ -104,6 +152,17 @@ export function App() {
     },
     [dataMode, identityKey, identityReady, week],
   );
+
+  useEffect(() => {
+    const syncRoute = () => {
+      const route = routeFromLocation();
+      setView(route.view);
+      if (route.view !== 'dashboard') setWeek(route.week);
+    };
+    syncRoute();
+    window.addEventListener('popstate', syncRoute);
+    return () => window.removeEventListener('popstate', syncRoute);
+  }, [setView, setWeek]);
 
   useEffect(() => {
     if (!identity.leagueId || !identity.rosterId) {
@@ -128,6 +187,10 @@ export function App() {
   }, [identity.leagueId, identity.rosterId]);
 
   useEffect(() => {
+    if (view !== 'players') {
+      setLoading(false);
+      return;
+    }
     if (!identityReady) {
       setLoading(false);
       setReport(null);
@@ -153,6 +216,21 @@ export function App() {
           setSelectedPositions(positions);
           setSelectedPlayers(graphed);
           initializedWeekRef.current = initializationKey;
+        }
+
+        const pendingComparison = pendingComparisonRef.current;
+        if (pendingComparison?.week === week) {
+          const validPlayers = pendingComparison.players.filter((name) =>
+            payload.players.some((player) => player.name === name),
+          );
+          setSelectedPlayers(validPlayers);
+          selectPlayer(
+            payload.players.some((player) => player.name === pendingComparison.selected)
+              ? pendingComparison.selected
+              : (validPlayers[0] ?? null),
+          );
+          pendingComparisonRef.current = null;
+          return;
         }
 
         const currentSelectedPlayer = useWorkspaceStore.getState().selectedPlayer;
@@ -183,27 +261,30 @@ export function App() {
     identityKey,
     identityReady,
     week,
+    view,
     selectPlayer,
     setSelectedPlayers,
     setSelectedPositions,
   ]);
 
   useEffect(() => {
-    if (selectedPlayer) void loadPlayerDetails(selectedPlayer);
-  }, [selectedPlayer, loadPlayerDetails]);
+    if (view !== 'players' || !selectedPlayer) return;
+    void loadPlayerDetails(selectedPlayer);
+  }, [selectedPlayer, loadPlayerDetails, view]);
 
   useEffect(() => {
-    if (metric === 'fantasy_points') return;
+    if (view !== 'players' || metric === 'fantasy_points') return;
     for (const player of selectedPlayers) void loadPlayerDetails(player);
-  }, [metric, selectedPlayers, loadPlayerDetails]);
+  }, [metric, selectedPlayers, loadPlayerDetails, view]);
 
   useEffect(() => {
     if (view !== 'defenses' || !identityReady) return;
-    const key = `${identityKey}:${dataMode}:${week}`;
+    const key = defenseKey(identityKey, dataMode, week);
     const cached = defensesRef.current[key];
     if (cached) {
       setDefensePayload(cached);
       setDefenseError(null);
+      setDefenseLoading(false);
       return;
     }
 
@@ -233,6 +314,7 @@ export function App() {
     if (cached) {
       setLineupPayload(cached);
       setLineupError(null);
+      setLineupLoading(false);
       return;
     }
 
@@ -254,6 +336,66 @@ export function App() {
       });
     return () => controller.abort();
   }, [dataMode, identityKey, identityReady, lineupTarget, view, week]);
+
+  useEffect(() => {
+    if (view !== 'dashboard' || !identityReady) {
+      setDashboardLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setDashboardLoading(true);
+    setDashboardError(null);
+
+    const loadDefense = async (targetWeek: WeekWindow) => {
+      const key = defenseKey(identityKey, dataMode, targetWeek);
+      const cached = defensesRef.current[key];
+      if (cached) return cached;
+      const payload = await fetchDefenses(targetWeek, dataMode, controller.signal);
+      defensesRef.current = { ...defensesRef.current, [key]: payload };
+      return payload;
+    };
+
+    const loadMidLineup = async () => {
+      const key = lineupKey(identityKey, dataMode, 'this', 'mid');
+      const cached = lineupsRef.current[key];
+      if (cached) return cached;
+      const payload = await fetchBestLineup('this', 'mid', dataMode, controller.signal);
+      lineupsRef.current = { ...lineupsRef.current, [key]: payload };
+      return payload;
+    };
+
+    const loadDashboard = async () => {
+      const nextDefensePromise = loadDefense('next');
+      const lineup = await loadMidLineup();
+      const thisDefense = await loadDefense('this');
+      const nextDefense = await nextDefensePromise;
+      return { lineup, thisDefense, nextDefense };
+    };
+
+    loadDashboard()
+      .then(({ lineup, thisDefense, nextDefense }) => {
+        setDashboardLineup(lineup);
+        setDashboardDefensesThis(thisDefense);
+        setDashboardDefensesNext(nextDefense);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        if (reason instanceof MissingIdentityError) {
+          setSetupOpen(true);
+          setDashboardError(null);
+        } else {
+          setDashboardError(
+            reason instanceof Error ? reason.message : 'Could not build dashboard.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDashboardLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [dataMode, identityKey, identityReady, view]);
 
   const players = report?.players ?? [];
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
@@ -344,16 +486,33 @@ export function App() {
     );
   };
 
+  const compareBenchPlayer = (pressure: BenchPressureRow) => {
+    const comparison = [pressure.name, pressure.displaces].filter((name): name is string =>
+      Boolean(name),
+    );
+    pendingComparisonRef.current = {
+      week: 'this',
+      players: [...new Set(comparison)],
+      selected: pressure.name,
+    };
+    setMetric('fantasy_points');
+    navigateTo('players', 'this');
+  };
+
   const completeLeagueSetup = (summary: LeagueSelectionSummary) => {
     detailsRef.current = {};
     detailInflightRef.current.clear();
     defensesRef.current = {};
     lineupsRef.current = {};
     initializedWeekRef.current = null;
+    pendingComparisonRef.current = null;
     setDetailsByKey({});
     setLoadingDetailKeys([]);
     setDefensePayload(null);
     setLineupPayload(null);
+    setDashboardLineup(null);
+    setDashboardDefensesThis(null);
+    setDashboardDefensesNext(null);
     setReport(null);
     setLeagueContext(`${summary.leagueName} · ${summary.teamName}`);
     setIdentity(savedLeagueIdentity());
@@ -366,6 +525,22 @@ export function App() {
     !fantasyPointsMetric && isCountMetric(metric) && metric !== 'player_receptions';
   const highGranularityMetric =
     !fantasyPointsMetric && isCountMetric(metric) && metric === 'player_receptions';
+  const activeLoading =
+    view === 'dashboard'
+      ? dashboardLoading
+      : view === 'players'
+        ? loading
+        : view === 'defenses'
+          ? defenseLoading
+          : lineupLoading;
+  const activeRatelimit =
+    view === 'dashboard'
+      ? (dashboardLineup?.ratelimit ?? dashboardDefensesNext?.ratelimit)
+      : view === 'players'
+        ? report?.ratelimit
+        : view === 'defenses'
+          ? defensePayload?.ratelimit
+          : lineupPayload?.ratelimit;
 
   return (
     <div className="app-frame">
@@ -376,25 +551,8 @@ export function App() {
           {leagueContext ? <div className="league-context">{leagueContext}</div> : null}
         </div>
         <div className="header-status">
-          {loading ? <span className="loading-dot">Loading projections…</span> : null}
-          {!loading && report?.ratelimit ? <span>{report.ratelimit}</span> : null}
-          <fieldset className="topbar-controls">
-            <legend className="sr-only">Week window</legend>
-            <button
-              className={week === 'this' ? 'active' : ''}
-              onClick={() => setWeek('this')}
-              type="button"
-            >
-              This week
-            </button>
-            <button
-              className={week === 'next' ? 'active' : ''}
-              onClick={() => setWeek('next')}
-              type="button"
-            >
-              Next week
-            </button>
-          </fieldset>
+          {activeLoading ? <span className="loading-dot">Updating…</span> : null}
+          {!activeLoading && activeRatelimit ? <span>{activeRatelimit}</span> : null}
           <AppSettings
             dataMode={dataMode}
             onDataModeChange={setDataMode}
@@ -403,18 +561,58 @@ export function App() {
         </div>
       </header>
 
-      <nav className="primary-nav" aria-label="Analysis view">
+      <nav className="primary-nav" aria-label="Primary navigation">
         {views.map(([value, label]) => (
           <button
             key={value}
             className={view === value ? 'active' : ''}
-            onClick={() => setView(value)}
+            onClick={() => navigateTo(value)}
             type="button"
+            aria-current={view === value ? 'page' : undefined}
           >
             {label}
           </button>
         ))}
       </nav>
+
+      {view !== 'dashboard' ? (
+        <div className="view-context">
+          <span className="view-context-label">Week</span>
+          <fieldset className="week-switch">
+            <legend className="sr-only">Week window</legend>
+            <button
+              className={week === 'this' ? 'active' : ''}
+              onClick={() => navigateTo(view, 'this')}
+              type="button"
+            >
+              This week
+            </button>
+            <button
+              className={week === 'next' ? 'active' : ''}
+              onClick={() => navigateTo(view, 'next')}
+              type="button"
+            >
+              Next week
+            </button>
+          </fieldset>
+        </div>
+      ) : null}
+
+      {view === 'dashboard' ? (
+        <DashboardView
+          lineup={dashboardLineup}
+          defensesThisWeek={dashboardDefensesThis}
+          defensesNextWeek={dashboardDefensesNext}
+          loading={dashboardLoading}
+          error={dashboardError}
+          onOpenLineup={() => {
+            setLineupTarget('mid');
+            navigateTo('lineup', 'this');
+          }}
+          onOpenDefenses={(targetWeek) => navigateTo('defenses', targetWeek)}
+          onCompareBenchPlayer={compareBenchPlayer}
+        />
+      ) : null}
 
       {view === 'players' ? (
         <main className="workspace">

@@ -54,6 +54,17 @@ class BestLineupTest(unittest.TestCase):
         self.assertIn("RB 3", starters)
         self.assertIn("WR 2", starters)
 
+    def test_bench_pressure_is_optimizer_opportunity_cost(self):
+        result = build_best_lineup(
+            self.players, target="mid", roster_positions=self.slots, defenses=self.defenses
+        )
+        pressure = result["bench_pressure"]
+        self.assertEqual([row["name"] for row in pressure], ["QB Boom"])
+        self.assertEqual(pressure[0]["delta_to_lineup"], 1.0)
+        self.assertEqual(pressure[0]["displaces"], "QB Safe")
+        self.assertEqual(pressure[0]["slot"], "QB")
+        self.assertEqual(pressure[0]["displaces_slot"], "QB")
+
 
 if __name__ == "__main__":
     unittest.main()
