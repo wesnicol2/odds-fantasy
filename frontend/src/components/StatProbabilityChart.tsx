@@ -53,10 +53,7 @@ function formatThreshold(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function densityQuantileX(
-  points: ProbabilitySeries['points'],
-  quantile: number,
-): number | null {
+function densityQuantileX(points: ProbabilitySeries['points'], quantile: number): number | null {
   const sorted = points
     .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.probability))
     .slice()
@@ -71,8 +68,7 @@ function densityQuantileX(
     const right = sorted[index];
     const width = right.x - left.x;
     if (width <= 0) continue;
-    const area =
-      (width * (Math.max(0, left.probability) + Math.max(0, right.probability))) / 2;
+    const area = (width * (Math.max(0, left.probability) + Math.max(0, right.probability))) / 2;
     if (area <= 0) continue;
     segments.push({ leftX: left.x, rightX: right.x, area });
     totalArea += area;
@@ -92,7 +88,10 @@ function densityQuantileX(
   return sorted[sorted.length - 1].x;
 }
 
-function focusedDensityMax(series: ProbabilitySeries[], sourceThresholds: number[]): number | undefined {
+function focusedDensityMax(
+  series: ProbabilitySeries[],
+  sourceThresholds: number[],
+): number | undefined {
   const finitePoints = series.flatMap((item) =>
     item.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.probability)),
   );
