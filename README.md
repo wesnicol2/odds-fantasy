@@ -2,11 +2,14 @@
 
 Odds Fantasy turns sportsbook markets into fantasy-football decision support for a selected Sleeper roster.
 
-The app has three focused views:
+The app has four focused destinations:
 
+- **Dashboard** — the default low-noise command center: this week's ideal Mid lineup, the bench players closest to cracking it, and the best available/owned defenses for this week and next week.
 - **Players** — a linked analytical workstation with roster ranking, Floor / Mid / Ceiling, probability curves, position/player filters, Target FP analysis and sportsbook evidence.
 - **Defenses** — every NFL defense ranked by its opponent's implied team total, with league ownership shown.
-- **Best lineup** — optimize your modeled starters for Floor, Mid, or Ceiling.
+- **Lineup** — optimize your modeled starters for Floor, Mid, or Ceiling.
+
+Dashboard intentionally summarizes conclusions rather than recreating projection logic. Its lineup and bench-pressure values come from the same backend optimizer used by Lineup, and its defense shortlists reuse the same ranked defense payload used by Defenses.
 
 ## What the player numbers mean
 
@@ -31,18 +34,22 @@ The header quota readout is refreshed independently of the odds cache. It uses T
 ## Using the app
 
 1. On a fresh browser, enter your Sleeper username, choose a league, then choose your team. The selection is saved in browser cookies.
-2. Choose **This week** or **Next week**.
-3. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. Choose a metric above the graph to move between fantasy points and priced stats.
-4. Enter or drag **Target FP** to compare each visible player's chance of reaching a specific fantasy score.
-5. For a stat metric, use **Explain betting lines** to inspect the consensus anchors and exact sportsbook prices behind the fitted distribution.
+2. Start on **Dashboard** for the current decision: ideal lineup, closest bench calls, and this/next-week defense targets.
+3. Use **Players**, **Defenses**, or **Lineup** when you want to drill down. Those destinations have their own **This week / Next week** context selector; Dashboard intentionally spans both defense weeks itself.
+4. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. Choose a metric above the graph to move between fantasy points and priced stats.
+5. Enter or drag **Target FP** to compare each visible player's chance of reaching a specific fantasy score. Use **Explain betting lines** when you want the consensus anchors and source sportsbook prices.
 6. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken.
-7. In **Best lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.
+7. In **Lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.
+
+Primary navigation preserves the analytical workspace in memory instead of rebuilding it as a set of disconnected pages. Browser Back/Forward restores the destination and week context. On desktop the primary navigation is a compact horizontal strip; on narrow screens it becomes a persistent bottom navigation bar so the Players visualization keeps its horizontal space.
+
+Dashboard bench pressure is an optimizer-derived opportunity cost. For each bench player, the backend forces that player into the best valid lineup and reports how much total projected value is lost versus the unconstrained ideal lineup. A small `FP back` value therefore means the player is close to cracking the ideal lineup without the browser needing to recreate roster-slot eligibility rules.
 
 **Settings** contains operational odds-data controls: Auto (cached), Cache only, and Force fresh. Changing modes changes subsequent API requests and does not change projection mathematics.
 
-Kickers are not currently projected from a trustworthy market model. If the league has a K slot, Best Lineup reports it as unmodeled rather than inventing a score.
+Kickers are not currently projected from a trustworthy market model. If the league has a K slot, Lineup reports it as unmodeled rather than inventing a score.
 
-Defense Floor/Mid/Ceiling used by Best Lineup is intentionally partial: it prices the points-allowed component from the opponent implied total. Sacks, turnovers and defensive touchdowns are not modeled.
+Defense Floor/Mid/Ceiling used by Lineup is intentionally partial: it prices the points-allowed component from the opponent implied total. Sacks, turnovers and defensive touchdowns are not modeled.
 
 ## Running locally
 
@@ -114,7 +121,7 @@ Feature/main CI additionally builds the exact Docker image and runs Chromium aga
 - `oddsfantasy/scoring.py` — Sleeper scoring-rule translation.
 - `oddsfantasy/odds_details.py` — source-line player drill-down and stat graph payloads.
 - `oddsfantasy/defense.py` — implied-team-total and points-allowed DEF math.
-- `oddsfantasy/lineup.py` — pure starter-slot optimizer.
+- `oddsfantasy/lineup.py` — pure starter-slot optimizer and optimizer-derived bench-pressure calculation.
 - `scripts/` — repo-owned Python fix and verification commands used locally and by CI.
 - `tests/` — unit/integration tests plus the production-container browser smoke script.
 

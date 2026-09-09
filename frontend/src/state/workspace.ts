@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type WorkspaceView = 'players' | 'defenses' | 'lineup';
+export type WorkspaceView = 'dashboard' | 'players' | 'defenses' | 'lineup';
 export type WeekWindow = 'this' | 'next';
 export type LineupTarget = 'floor' | 'mid' | 'ceiling';
 export type DataMode = 'auto' | 'cache' | 'fresh';
@@ -27,7 +27,7 @@ interface WorkspaceState {
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()((set) => ({
-  view: 'players',
+  view: 'dashboard',
   week: 'this',
   metric: 'fantasy_points',
   dataMode: 'auto',

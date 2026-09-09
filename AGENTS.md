@@ -6,13 +6,16 @@
 
 ## Product boundary
 
-The application has three selectable weekly decision views:
+The application has four primary destinations:
 
-1. **Players** — one linked analytical workstation: roster ranking, Floor / Mid / Ceiling, fantasy/stat probability visualizations, position/player comparison filters, Target FP and a persistent evidence inspector.
-2. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
-3. **Best lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots.
+1. **Dashboard** — the default low-noise command center. It synthesizes this week's ideal Mid lineup, optimizer-derived bench pressure, and the best available/owned defenses for this week and next week.
+2. **Players** — one linked analytical workstation: roster ranking, Floor / Mid / Ceiling, fantasy/stat probability visualizations, position/player comparison filters, Target FP and a persistent evidence inspector.
+3. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
+4. **Lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots.
 
-Player evidence is progressive disclosure inside the same workstation. There is no separate Graphs product surface and no alternate browser-side projection engine.
+Dashboard is synthesis, not a second analytical engine. It consumes the same backend optimizer and defense ranking used by the detailed Lineup and Defenses destinations. Player evidence remains progressive disclosure inside the Players workstation. There is no separate Graphs product surface and no alternate browser-side projection engine.
+
+The product-level simplicity rule is **decision first, detail on demand**. Default surfaces should contain only information needed for the next decision; raw evidence, additional metrics and configuration belong one level deeper. Prefer selection/reveal over adding permanent cards or controls.
 
 Pre-draft boards, model-comparison tools, book-coverage dashboards and alternate client-side projection engines remain removed.
 
@@ -25,19 +28,23 @@ The stack is deliberately small:
 - **React 19 + TypeScript** own components and interaction logic.
 - **Vite 8** owns development and production bundling.
 - **Apache ECharts 6** renders analytical visualizations.
-- **Zustand** owns the small shared workstation state that coordinates ranking, chart, filters and inspector.
+- **Zustand** owns the small shared workstation state that coordinates destination, week, ranking, chart, filters and inspector.
 - **Biome** is the whole JavaScript/TypeScript/CSS formatting and linting story. Do not add ESLint or Prettier unless an explicit owner decision changes that contract.
 
 React was chosen over Astro because the target UI is one coordinated interactive application rather than a mostly-static page with isolated interactive islands. Ranking selection, chart emphasis, metric/position filters, selected player and Target FP intentionally update one another continuously. Svelte was viable, but React was preferred for its mature ecosystem, predictable ECharts integration and broad agent familiarity.
 
 State ownership is strict:
 
-- Zustand owns canonical browser interaction state such as view, week, metric, selected player(s), position filters, Target threshold, data mode and lineup objective.
-- React components consume that state and API data.
+- Zustand owns canonical browser interaction state such as destination, week, metric, selected player(s), position filters, Target threshold, data mode and lineup objective.
+- The URL stores only meaningful navigation context. The app uses root query parameters (`view=players|defenses|lineup` and `week=this|next`) rather than adding a routing dependency; Dashboard is the clean root URL. Browser Back/Forward synchronizes those parameters back into Zustand.
+- Dashboard deliberately has no global week toggle because its defense plan spans both this and next week. Players, Defenses and Lineup treat week as page context rather than separate destinations.
+- React components consume shared state and API data.
 - ECharts receives data/options as a renderer and emits interaction events back to the application. It must not become the canonical owner of application state.
-- The Python backend remains canonical for projections, probability distributions, scoring and sportsbook modeling. Browser code may derive display-only quantities from canonical payloads (for example `P(FP >= target)` from the supplied fantasy-point curve) but must not refit sportsbook evidence or create a second projection model.
+- The Python backend remains canonical for projections, probability distributions, scoring, lineup eligibility and sportsbook modeling. Browser code may derive display-only quantities from canonical payloads (for example `P(FP >= target)` from the supplied fantasy-point curve) but must not refit sportsbook evidence or create a second projection/lineup model.
 
-Keep component boundaries recognizable: workspace/navigation, ranking pane, probability chart, Target control, inspector/evidence, league setup/settings, defense view and lineup view. Prefer focused components/state selectors over rebuilding a monolithic application component.
+Primary navigation is a compact horizontal strip on desktop and a persistent bottom bar on narrow screens so navigation does not consume the width needed by the Players visualization. Navigation keeps the React application mounted; switching destinations must not unnecessarily clear comparison/filter state or trigger provider work unrelated to the destination being opened.
+
+Keep component boundaries recognizable: application shell/navigation, dashboard, ranking pane, probability chart, Target control, inspector/evidence, league setup/settings, defense view and lineup view. Prefer focused components/state selectors over rebuilding a monolithic application component.
 
 ## Production frontend runtime
 
@@ -83,7 +90,7 @@ Cross-stat correlation is still assumed independent because the market feed does
 
 For individual stats, `oddsfantasy.graph_data.distribution_graph()` reads the already-fitted `StatProjection.distribution` and chooses one of three display projections without refitting anything:
 
-- **continuous density** — yardage-like metrics are displayed as `x = value`, `y = P(x)` using a finite-width density derived from the fitted distribution's own survival function across its central range;
+- **continuous density** — yardage-like metrics are displayed as `x = value`, `y = P(x)` using a dense, display-only density derived from the fitted distribution across its central range;
 - **discrete PMF** — high-granularity count metrics such as receptions expose exact `P(X = x)` at integer values; the frontend may visually smooth the connecting line, but the displayed point values remain the backend PMF;
 - **threshold gauge** — low-granularity count metrics such as passing TDs, anytime TDs and interceptions expose `P(X >= x)` for each useful integer threshold.
 
@@ -110,7 +117,7 @@ Target FP is also display-only. The browser interpolates the supplied fantasy-po
 5. normalize raw book lines;
 6. cache for `SERVICE_CACHE_TTL`.
 
-The report and player-evidence requests consume that same context, so evidence loading normally adds no fresh Odds API calls and cannot silently use different lines from the ranking row. Stat metric comparison may request details for multiple selected players, but those HTTP requests reuse the shared backend week context.
+The report, lineup and player-evidence requests consume that same context, so evidence loading normally adds no fresh Odds API calls and cannot silently use different lines from the ranking row. Stat metric comparison may request details for multiple selected players, but those HTTP requests reuse the shared backend week context.
 
 ## Missing coverage semantics
 
@@ -133,23 +140,29 @@ Defense ranking is intentionally separate from the player-prop model.
 
 `defense.py` owns the pure math. Lower opponent implied total is the ranking signal.
 
-Best Lineup also needs a DEF Floor/Mid/Ceiling value. That range uses only Sleeper's points-allowed scoring brackets, with a Normal team-score uncertainty around the market implied total. It does **not** estimate sacks, interceptions, fumble recoveries or defensive touchdowns. Keep that limitation explicit.
+Dashboard does not rerank defenses in the browser. It keeps the server order, removes defenses owned by another fantasy team, removes non-playable rows, and shows only the first few Available/Yours rows for each week. The full evidence/ranking remains in Defenses.
 
-## Best lineup
+Lineup also needs a DEF Floor/Mid/Ceiling value. That range uses only Sleeper's points-allowed scoring brackets, with a Normal team-score uncertainty around the market implied total. It does **not** estimate sacks, interceptions, fumble recoveries or defensive touchdowns. Keep that limitation explicit.
+
+## Best lineup and bench pressure
 
 `lineup.py` is pure and has no network knowledge. It accepts already-projected players, the selected roster's owned defenses, and Sleeper `roster_positions`.
 
 A memoized assignment search maximizes the requested target across eligible starter slots. It supports QB/RB/WR/TE/DEF plus FLEX, WRRB_FLEX, REC_FLEX and SUPER_FLEX. Bench/IR/TAXI slots are ignored.
 
+The optimizer also returns `bench_pressure`. For every modeled bench player, it solves the lineup again with that player required to occupy an eligible starter slot. `delta_to_lineup` is the optimal unconstrained lineup total minus that forced-lineup total. This is the authoritative "FP back" measure used by Dashboard; the browser must not approximate it by comparing raw player projections or recreating FLEX eligibility. The forced solution also identifies the starter displaced by that bench player when one exists.
+
 Unsupported starter slots (currently most importantly K) are returned as `unmodeled_slots`; the optimizer must not invent scores just to fill them. Starter positions with no priced candidate are returned as `unfilled_slots`.
 
 ## Odds API efficiency
 
-Player props and defense matchup data have separate caches because they use different market sets, but both avoid duplicate calls inside their flow. Defense comparison is loaded only when the user selects Defenses or Best Lineup; it is not an automatic cost on Players.
+Player props and defense matchup data have separate caches because they use different market sets, but both avoid duplicate calls inside their flow.
 
-Best Lineup calls `compute_projections()` and `list_defenses()`, which normally hit in-process caches if those flows are already loaded.
+Dashboard intentionally loads more than Players because its job is two-horizon planning. The frontend starts the next-week defense request, loads the current-week Mid lineup, then requests the current-week defense list. In normal/cache modes the lineup call has already populated the service's current-week defense cache, so the shortlist request reuses it instead of fetching the same games twice. `fresh` remains an explicit instruction to bypass reusable service data.
 
-The selected player's `/player/odds` evidence may preload so the inspector is immediately useful. That request shares `_load_week_context()` with `/projections`, so it normally reuses normalized current-week odds rather than triggering a sportsbook fetch for that player. Target movement is always client-only.
+Opening Players does not automatically load defense data. Opening Defenses/Lineup after Dashboard normally reuses the response/service caches for matching identity, mode and week.
+
+The selected player's `/player/odds` evidence may preload while Players is active so the inspector is immediately useful. That request shares `_load_week_context()` with `/projections`, so it normally reuses normalized current-week odds rather than triggering a sportsbook fetch for that player. Target movement is always client-only.
 
 ## Automated runtime gate
 
@@ -158,13 +171,15 @@ Feature/main CI builds the exact Dockerfile, runs the image, verifies `/health` 
 The runtime smoke covers:
 
 - fresh-browser username → league → team setup and cookie persistence;
+- Dashboard as the default destination, including ideal lineup, bench pressure and two-week defense summary;
+- primary navigation plus browser-history restoration of destination/week context;
 - linked player ranking/chart/inspector behavior and Target FP;
 - continuous yardage density, discrete exact-value PMF and low-granularity threshold-gauge rendering;
 - stat metric evidence, consensus/source-line explanation and sportsbook rows;
 - operational odds data mode reaching API requests;
 - Change league preserving the active identity when canceled;
 - defense comparison;
-- Floor/Mid/Ceiling Best Lineup switching and unsupported slots.
+- Floor/Mid/Ceiling Lineup switching and unsupported slots.
 
 This catches broken multi-stage Docker builds, compiled static assets, React wiring and primary interaction regressions. Watchtower/GHCR/Unraid-specific behavior remains an optional deployment smoke test when those systems themselves change.
 
