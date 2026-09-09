@@ -21,11 +21,15 @@ interface ProbabilityChartProps {
 
 const FANTASY_POINT_BUCKET_WIDTH = 1;
 const CENTRAL_TAIL_PROBABILITY = 0.005;
+const SECONDARY_SERIES_BRIGHTNESS = 0.85;
+const PLAYER_COLOR_LIGHTNESS = 62;
 
-function playerColor(id: string): string {
+function playerColor(id: string, brightness = 1): string {
   let hash = 0;
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return `hsl(${hash % 360} 68% 62%)`;
+  const clampedBrightness = Math.max(0, Math.min(1, brightness));
+  const lightness = PLAYER_COLOR_LIGHTNESS * clampedBrightness;
+  return `hsl(${hash % 360} 68% ${lightness}%)`;
 }
 
 function roundedTarget(value: number): number {
@@ -191,6 +195,8 @@ export function ProbabilityChart({
 
     const playerSeries = displaySeries.map((item, index) => {
       const isActive = activePlayerId === null || item.id === activePlayerId;
+      const brightness = isActive ? 1 : SECONDARY_SERIES_BRIGHTNESS;
+      const color = playerColor(item.id, brightness);
       return {
         id: item.id,
         name: item.label,
@@ -198,12 +204,13 @@ export function ProbabilityChart({
         showSymbol: false,
         smooth: distributionMode ? 0.28 : false,
         ...(stepCurve ? { step: 'end' as const } : {}),
-        color: playerColor(item.id),
+        color,
         lineStyle: {
-          width: item.id === activePlayerId ? 3.5 : 2,
-          opacity: isActive ? 1 : 0.42,
+          width: 2.5,
+          opacity: 1,
         },
-        emphasis: { focus: 'series' as const, lineStyle: { width: 4 } },
+        itemStyle: { color, opacity: 1 },
+        emphasis: { lineStyle: { width: 4 } },
         data: item.points.map((point) => [point.x, point.probability]),
         ...(index === 0 && targetEnabled && target !== null
           ? {
