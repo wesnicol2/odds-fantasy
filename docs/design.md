@@ -672,8 +672,12 @@ It should answer, as needed:
 - Which player is selected?
 - What are Floor / Mid / Ceiling?
 - What is the Target probability?
-- Which markets contributed?
+- Which stats contribute to the mean fantasy-point total, and by exactly how many expected points?
 - What sportsbook evidence supports the fit?
+
+When fantasy points is the active metric, show the selected player's additive per-stat expected-point contributions in the inspector. Order them by absolute impact so the primary sources are immediately obvious, retain signed values so penalties are explicit, and keep zero-point modeled stats visible. Selecting a contribution opens that stat's probability visualization and evidence; the stat drill-down retains its expected-point contribution and provides a direct return to the complete breakdown.
+
+Label this as a breakdown of the **mean**. Expected values add across stats; per-stat quantiles do not generally add to the player's Floor, Mid or Ceiling. The interface must not present a mathematically false quantile decomposition.
 
 Do not permanently expand raw sportsbook rows when the user only needs the projection.
 

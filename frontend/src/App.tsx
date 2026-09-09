@@ -755,6 +755,7 @@ export function App() {
               metric={metric}
               details={selectedDetails}
               detailsLoading={selectedDetailsLoading}
+              onMetricChange={setMetric}
             />
           </aside>
         </main>

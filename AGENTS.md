@@ -106,6 +106,8 @@ For individual stats, `oddsfantasy.graph_data.distribution_graph()` reads the al
 
 Target FP is also display-only. The browser interpolates the supplied fantasy-point survival curve to show/rank `P(FP >= target)`; changing Target FP must not make a provider request or modify Floor / Mid / Ceiling.
 
+The selected player's fantasy-point inspector presents `StatProjection.expected_points` as an additive mean-point breakdown. The browser may order and scale those values for display and use a contribution row to select the corresponding stat metric, but it must not estimate contributions from chart geometry. The breakdown applies to the mean because expected values are additive; it must not imply that independently computed per-stat quantiles add up to the player's Floor, Mid or Ceiling.
+
 ## Shared player week context
 
 `services._load_week_context()` caches the expensive roster/player-prop path for `(identity, week, region)`:

@@ -161,6 +161,7 @@ def api_fixture(route: Route) -> None:
         team = "Miami Dolphins" if is_receiver else "Buffalo Bills"
         curve = CURVE_B if is_receiver else CURVE_A
         floor, mid, ceiling = (8, 15, 24) if is_receiver else (10, 17, 25)
+        mean = mid + 0.5
         fulfill_json(
             route,
             {
@@ -169,13 +170,13 @@ def api_fixture(route: Route) -> None:
                     "floor": floor,
                     "mid": mid,
                     "ceiling": ceiling,
-                    "mean": mid + 0.5,
+                    "mean": mean,
                     "curve": curve,
                 },
                 "markets": {
                     "player_rush_yds": {
                         "stat_range": [45, 75, 115],
-                        "expected_points": 7.5,
+                        "expected_points": mean - 3.7,
                         "graph": RUSH_GRAPH,
                         "anchors": [
                             {"threshold": 64.5, "survival": 0.68},
@@ -354,10 +355,13 @@ def main() -> None:
         inspector.get_by_text("50%", exact=True).wait_for()
         assert "≥ 20.0" in ranking.locator("thead").inner_text()
 
+        # Mean fantasy points expose exact additive stat sources and drill into the chosen stat.
+        inspector.get_by_text("Mean point sources", exact=True).wait_for()
+        inspector.get_by_role("button", name="Analyze Rushing yards, +13.8 FP").click()
+
         # Continuous stat exploration uses probability density and keeps evidence inspectable.
-        page.get_by_role("button", name="Rushing yards").wait_for()
-        page.get_by_role("button", name="Rushing yards").click()
         inspector.get_by_text("Rushing yards evidence", exact=True).wait_for()
+        inspector.get_by_text("+13.8 FP", exact=True).wait_for()
         inspector.get_by_text("2 consensus thresholds", exact=True).wait_for()
         inspector.get_by_text("2 source lines", exact=True).wait_for()
         inspector.get_by_text("2 books", exact=True).wait_for()
@@ -372,6 +376,8 @@ def main() -> None:
         inspector.get_by_text("Exact sportsbook lines", exact=True).wait_for()
         inspector.get_by_text("draftkings", exact=True).wait_for()
         inspector.get_by_text("fanduel", exact=True).wait_for()
+        inspector.get_by_role("button", name="All point sources").click()
+        inspector.get_by_role("button", name="Analyze Receptions, 0.0 FP").wait_for()
 
         # High-granularity discrete stats show exact P(X=x) with smoothed connecting lines.
         page.get_by_role("button", name="Receptions").click()
