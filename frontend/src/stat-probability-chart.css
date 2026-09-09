@@ -155,17 +155,15 @@
   cursor: pointer;
   opacity: 1;
   transform: translateY(-50%);
-  transition: filter 100ms ease;
 }
 
-.threshold-marker.muted {
-  filter: brightness(0.85);
+.threshold-marker.active {
+  z-index: 2;
 }
 
 .threshold-marker:hover,
 .threshold-marker:focus-visible {
   z-index: 3;
-  filter: brightness(1);
 }
 
 .threshold-marker-line {
@@ -176,6 +174,12 @@
   height: 3px;
   border-radius: 999px;
   transform: translateY(-50%);
+}
+
+.threshold-marker.active .threshold-marker-line,
+.threshold-marker:hover .threshold-marker-line,
+.threshold-marker:focus-visible .threshold-marker-line {
+  height: 4px;
 }
 
 .threshold-marker-label {
@@ -190,6 +194,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   transform: translateY(-50%);
+}
+
+.threshold-marker.active .threshold-marker-label {
+  font-weight: 600;
 }
 
 .threshold-marker-label strong {
