@@ -377,10 +377,9 @@ def main() -> None:
         inspector.get_by_text("draftkings", exact=True).wait_for()
         inspector.get_by_text("fanduel", exact=True).wait_for()
         inspector.get_by_role("button", name="All point sources").click()
-        inspector.get_by_role("button", name="Analyze Receptions, 0.0 FP").wait_for()
+        inspector.get_by_role("button", name="Analyze Receptions, 0.0 FP").click()
 
         # High-granularity discrete stats show exact P(X=x) with smoothed connecting lines.
-        page.get_by_role("button", name="Receptions").click()
         page.get_by_text(
             "Chance of each exact receptions value; the line is smoothed only between integer outcomes.",
             exact=True,
