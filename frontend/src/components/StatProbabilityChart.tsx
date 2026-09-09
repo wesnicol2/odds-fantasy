@@ -25,7 +25,6 @@ interface StatProbabilityChartProps {
   onPlayerSelect: (playerId: string) => void;
 }
 
-const SECONDARY_SERIES_BRIGHTNESS = 0.85;
 const PLAYER_COLOR_LIGHTNESS = 62;
 const MIN_AXIS_ZOOM_SPAN = 5;
 const X_AXIS_ZOOM_ID = 'stat-x-axis-zoom';
@@ -45,12 +44,10 @@ interface PinchState {
   anchor: number;
 }
 
-function playerColor(id: string, brightness = 1): string {
+function playerColor(id: string): string {
   let hash = 0;
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  const clampedBrightness = Math.max(0, Math.min(1, brightness));
-  const lightness = PLAYER_COLOR_LIGHTNESS * clampedBrightness;
-  return `hsl(${hash % 360} 68% ${lightness}%)`;
+  return `hsl(${hash % 360} 68% ${PLAYER_COLOR_LIGHTNESS}%)`;
 }
 
 function playerSeriesId(seriesId?: string): string | null {
@@ -371,9 +368,8 @@ function DistributionChart({
     if (!chart) return;
 
     const playerSeries = series.map((item) => {
-      const isActive = activePlayerId === null || item.id === activePlayerId;
-      const brightness = isActive ? 1 : SECONDARY_SERIES_BRIGHTNESS;
-      const color = playerColor(item.id, brightness);
+      const isActive = item.id === activePlayerId;
+      const color = playerColor(item.id);
       return {
         id: item.id,
         name: item.label,
@@ -383,11 +379,12 @@ function DistributionChart({
         smooth: kind === 'discrete_pmf' ? 0.36 : 0.24,
         color,
         lineStyle: {
-          width: 2.5,
+          width: isActive ? 3.25 : 2.5,
           opacity: 1,
         },
         itemStyle: { color, opacity: 1 },
-        emphasis: { focus: 'series' as const, lineStyle: { width: 4 } },
+        emphasis: { lineStyle: { width: 4 } },
+        z: isActive ? 5 : 3,
         data: item.points.map((point) => [point.x, point.probability]),
       };
     });
@@ -595,14 +592,14 @@ function ThresholdGaugeChart({
                     if (!point) return [];
                     const probability = Math.max(0, Math.min(1, point.probability));
                     const color = playerColor(item.id);
-                    const isActive = activePlayerId === null || item.id === activePlayerId;
+                    const isActive = item.id === activePlayerId;
                     const markerStyle = {
                       top: `${(1 - probability) * 100}%`,
                     } satisfies CSSProperties;
                     return [
                       <button
                         key={`${threshold}:${item.id}`}
-                        className={`threshold-marker${isActive ? '' : ' muted'}`}
+                        className={`threshold-marker${isActive ? ' active' : ''}`}
                         style={markerStyle}
                         type="button"
                         aria-label={`${item.label} ${formatThreshold(threshold)} or more: ${formatProbability(probability)}`}
