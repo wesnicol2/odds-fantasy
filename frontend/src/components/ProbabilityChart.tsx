@@ -190,7 +190,7 @@ export function ProbabilityChart({
     const xDomain = distributionMode ? combinedCentralDomain(displaySeries, target) : null;
 
     const playerSeries = displaySeries.map((item, index) => {
-      const isActive = activePlayerId === null || item.id === activePlayerId;
+      const isActive = item.id === activePlayerId;
       return {
         id: item.id,
         name: item.label,
@@ -200,10 +200,11 @@ export function ProbabilityChart({
         ...(stepCurve ? { step: 'end' as const } : {}),
         color: playerColor(item.id),
         lineStyle: {
-          width: item.id === activePlayerId ? 3.5 : 2,
-          opacity: isActive ? 1 : 0.42,
+          width: isActive ? 3.25 : 2.5,
+          opacity: 1,
         },
-        emphasis: { focus: 'series' as const, lineStyle: { width: 4 } },
+        emphasis: { lineStyle: { width: 4 } },
+        z: isActive ? 5 : 3,
         data: item.points.map((point) => [point.x, point.probability]),
         ...(index === 0 && targetEnabled && target !== null
           ? {
