@@ -247,7 +247,22 @@ When available, identify which current starter the bench player would displace. 
 
 The browser must not recreate optimizer eligibility logic to derive this value.
 
-Selecting a bench-pressure row should drill into Players for **This week**, ideally comparing the bench player with the displaced starter while preserving the rest of the Players workstation.
+Selecting a bench-pressure row drills into Players for **This week** and opens a focused start/sit comparison between the bench player and the optimizer-identified starter they would displace. Preserve `FP back` as the optimizer's whole-lineup opportunity cost; do not relabel it as a raw difference between the two player projections.
+
+The comparison inspector should show:
+
+- the optimizer's current recommendation and lineup-level `FP back` context;
+- a weekly tie-breaker matrix with aligned Floor / Mid / Ceiling / Mean values for both players;
+- this game's opponent, kickoff, spread, total and team implied total when the market supplies them;
+- an aligned union of this week's modeled props with each stat's signed expected fantasy-point contribution and median;
+- a visible edge marker on the higher comparable value and a count of row wins;
+- missing markets as `—`, distinct from a modeled zero-point contribution;
+- a direct stat action that changes the shared chart to compare both fitted stat distributions;
+- a direct return from the stat drill-down to the full matrix.
+
+Every matrix input must apply directly to the selected week. Do not show ADP, draft rank, team season-win totals, rest-of-season projections, multi-week strength of schedule or any other draft/long-horizon statistic. Spread is context rather than a scored row because favorable game script is position-dependent. Tied or missing values award neither player a row win. Row-win counts are a transparent scan aid, not a confidence score and not a replacement for the backend optimizer.
+
+This is a focused explanation mode inside the existing Players workstation, not a separate destination or browser-side start/sit model. Exiting comparison restores the normal selected-player inspector without discarding the narrowed two-player chart context.
 
 ### Defense planning
 

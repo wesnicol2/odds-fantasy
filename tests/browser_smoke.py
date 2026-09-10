@@ -173,6 +173,15 @@ def api_fixture(route: Route) -> None:
                     "mean": mean,
                     "curve": curve,
                 },
+                "matchup": {
+                    "opponent": "New England Patriots" if is_receiver else "New York Jets",
+                    "venue": "away" if is_receiver else "home",
+                    "commence_time": "2026-09-13T17:00:00Z",
+                    "game_total": 44 if is_receiver else 48,
+                    "team_spread": 2 if is_receiver else -3,
+                    "team_implied_total": 21 if is_receiver else 25.5,
+                    "books_used": 6,
+                },
                 "markets": {
                     "player_rush_yds": {
                         "stat_range": [45, 75, 115],
@@ -331,10 +340,40 @@ def main() -> None:
         dashboard.get_by_text("2.0", exact=True).wait_for()
         assert dashboard.get_by_text("LAC", exact=True).count() == 2
 
-        primary_nav = page.get_by_role("navigation", name="Primary navigation")
-        primary_nav.get_by_role("button", name="Players", exact=True).click()
+        # A close bench call opens the optimizer-paired, side-by-side start/sit explanation.
+        dashboard.get_by_role(
+            "button", name="Compare Beta Receiver with Alpha Runner", exact=True
+        ).click()
         assert "view=players" in page.url
         assert "week=this" in page.url
+
+        inspector = page.get_by_role("complementary", name="Player inspector")
+        inspector.get_by_text("This week\u2019s tie-breaker matrix", exact=True).wait_for()
+        inspector.get_by_text("Start Alpha Runner", exact=True).wait_for()
+        inspector.get_by_text(
+            "Beta Receiver is 2.0 lineup FP back after re-optimizing every eligible slot.",
+            exact=True,
+        ).wait_for()
+        inspector.get_by_text(
+            "Alpha Runner leads 7\u20130 across 9 comparable weekly signals", exact=True
+        ).wait_for()
+        matrix = inspector.get_by_role("table", name="Weekly player comparison matrix")
+        assert "Beta Receiver" in matrix.inner_text()
+        assert "Alpha Runner" in matrix.inner_text()
+        assert "Team implied total" in matrix.inner_text()
+        assert "25.5 pts" in matrix.inner_text()
+        rushing_row = matrix.locator("tbody tr").filter(has_text="Rushing yards")
+        assert "+11.8 FP" in rushing_row.inner_text()
+        assert "+13.8 FP" in rushing_row.inner_text()
+        matrix.get_by_role("button", name="Compare Rushing yards distributions", exact=True).click()
+        rushing_comparison = inspector.get_by_role("region", name="Rushing yards comparison")
+        rushing_comparison.get_by_text("Rushing yards comparison", exact=True).wait_for()
+        assert "+11.8 FP" in rushing_comparison.inner_text()
+        assert "+13.8 FP" in rushing_comparison.inner_text()
+        inspector.get_by_role("button", name="Full matrix", exact=True).click()
+        inspector.get_by_role("button", name="Exit comparison", exact=True).click()
+
+        primary_nav = page.get_by_role("navigation", name="Primary navigation")
 
         # Players remains one linked ranking/chart/inspector workspace.
         ranking = page.get_by_role("complementary", name="Player ranking")
@@ -343,6 +382,7 @@ def main() -> None:
         assert "10.0" in alpha_row.inner_text()
         assert "17.0" in alpha_row.inner_text()
         assert "25.0" in alpha_row.inner_text()
+        alpha_row.locator(".player-name-button").click()
         chart = page.locator(".probability-chart")
         chart.wait_for()
         assert chart.get_attribute("role") == "img"
@@ -350,7 +390,6 @@ def main() -> None:
 
         target_input = page.get_by_label("Target FP")
         target_input.fill("20")
-        inspector = page.get_by_role("complementary", name="Player inspector")
         inspector.get_by_text("Chance of ≥ 20.0 FP", exact=True).wait_for()
         inspector.get_by_text("50%", exact=True).wait_for()
         assert "≥ 20.0" in ranking.locator("thead").inner_text()

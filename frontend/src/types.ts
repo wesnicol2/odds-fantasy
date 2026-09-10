@@ -80,6 +80,15 @@ export interface PlayerOddsDetails {
     mean: number;
     curve: FantasyCurvePoint[];
   } | null;
+  matchup?: {
+    opponent: string;
+    venue: 'home' | 'away';
+    commence_time: string;
+    game_total: number | null;
+    team_spread: number | null;
+    team_implied_total: number | null;
+    books_used: number;
+  } | null;
   markets: Record<string, MarketDetail>;
   message?: string;
   error?: string;

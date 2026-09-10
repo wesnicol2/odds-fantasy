@@ -36,7 +36,7 @@ The header quota readout is refreshed independently of the odds cache. It uses T
 ## Using the app
 
 1. On a fresh browser, enter your Sleeper username, choose a league, then choose your team. The selection is saved in browser cookies.
-2. Start on **Dashboard** for the current decision: ideal lineup, closest bench calls, and this/next-week defense targets.
+2. Start on **Dashboard** for the current decision: ideal lineup, closest bench calls, and this/next-week defense targets. Select a player under **Distance from the ideal lineup** to compare that bench option directly with the optimizer-identified starter they would displace.
 3. Use **Players**, **Defenses**, or **Lineup** when you want to drill down. Those destinations have their own **This week / Next week** context selector; Dashboard intentionally spans both defense weeks itself.
 4. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. The fantasy-points inspector breaks the player's mean into exact per-stat expected-point contributions; select any contribution to open that stat's distribution and betting-line evidence. You can also choose a metric above the graph directly.
 5. Enter or drag **Target FP** to compare each visible player's chance of reaching a specific fantasy score. Use **Explain betting lines** when you want the consensus anchors and source sportsbook prices.
@@ -45,7 +45,7 @@ The header quota readout is refreshed independently of the odds cache. It uses T
 
 Primary navigation preserves the analytical workspace in memory instead of rebuilding it as a set of disconnected pages. Browser Back/Forward restores the destination and week context. On desktop the primary navigation is a compact horizontal strip; on narrow screens it becomes a persistent bottom navigation bar so the Players visualization keeps its horizontal space.
 
-Dashboard bench pressure is an optimizer-derived opportunity cost. For each bench player, the backend forces that player into the best valid lineup and reports how much total projected value is lost versus the unconstrained ideal lineup. A small `FP back` value therefore means the player is close to cracking the ideal lineup without the browser needing to recreate roster-slot eligibility rules.
+Dashboard bench pressure is an optimizer-derived opportunity cost. For each bench player, the backend forces that player into the best valid lineup and reports how much total projected value is lost versus the unconstrained ideal lineup. A small `FP back` value therefore means the player is close to cracking the ideal lineup without the browser needing to recreate roster-slot eligibility rules. Selecting that row opens this week's tie-breaker matrix with the displaced starter: aligned projection ranges, game spread/total and team implied total, per-stat expected-point contributions, and one-click stat distribution drill-downs. The matrix deliberately excludes ADP, season-long rank, rest-of-season schedule and every other draft or multi-week input.
 
 **Settings** contains operational odds-data controls: Auto (cached), Cache only, and Force fresh. Changing modes changes subsequent API requests and does not change projection mathematics.
 

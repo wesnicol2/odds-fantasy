@@ -13,6 +13,7 @@ import { DashboardView } from './components/DashboardView';
 import { DefenseView } from './components/DefenseView';
 import { type LeagueSelectionSummary, LeagueSetup } from './components/LeagueSetup';
 import { LineupView } from './components/LineupView';
+import { PlayerComparisonInspector } from './components/PlayerComparisonInspector';
 import { PlayerInspector } from './components/PlayerInspector';
 import { PlayerRanking } from './components/PlayerRanking';
 import { ProbabilityChart } from './components/ProbabilityChart';
@@ -35,6 +36,13 @@ const views: ReadonlyArray<readonly [WorkspaceView, string]> = [
   ['defenses', 'Defenses'],
   ['lineup', 'Lineup'],
 ];
+
+interface StartSitComparison {
+  challenger: string;
+  starter: string;
+  lineupDelta: number;
+  week: WeekWindow;
+}
 
 function detailsKey(identity: string, mode: string, week: string, player: string): string {
   return `${identity}:${mode}:${week}:${player}`;
@@ -95,6 +103,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
+  const [comparisonContext, setComparisonContext] = useState<StartSitComparison | null>(null);
   const [detailsByKey, setDetailsByKey] = useState<Record<string, PlayerOddsDetails>>({});
   const [loadingDetailKeys, setLoadingDetailKeys] = useState<string[]>([]);
   const [defensePayload, setDefensePayload] = useState<DefenseResponse | null>(null);
@@ -273,6 +282,20 @@ export function App() {
   }, [selectedPlayer, loadPlayerDetails, view]);
 
   useEffect(() => {
+    if (
+      view !== 'players' ||
+      !comparisonContext ||
+      comparisonContext.week !== week ||
+      report?.week !== week ||
+      !report.players.some((player) => player.name === comparisonContext.challenger) ||
+      !report.players.some((player) => player.name === comparisonContext.starter)
+    )
+      return;
+    void loadPlayerDetails(comparisonContext.challenger);
+    void loadPlayerDetails(comparisonContext.starter);
+  }, [comparisonContext, loadPlayerDetails, report, view, week]);
+
+  useEffect(() => {
     if (view !== 'players' || metric === 'fantasy_points') return;
     for (const player of selectedPlayers) void loadPlayerDetails(player);
   }, [metric, selectedPlayers, loadPlayerDetails, view]);
@@ -405,6 +428,32 @@ export function App() {
   const selectedDetailsLoading = selectedPlayer
     ? loadingDetailKeys.includes(detailsKey(identityKey, dataMode, week, selectedPlayer))
     : false;
+  const comparisonChallenger = comparisonContext
+    ? (players.find((player) => player.name === comparisonContext.challenger) ?? null)
+    : null;
+  const comparisonStarter = comparisonContext
+    ? (players.find((player) => player.name === comparisonContext.starter) ?? null)
+    : null;
+  const activeComparison =
+    comparisonContext &&
+    comparisonContext.week === week &&
+    comparisonChallenger &&
+    comparisonStarter
+      ? {
+          context: comparisonContext,
+          challenger: comparisonChallenger,
+          starter: comparisonStarter,
+          challengerDetails:
+            detailsByKey[detailsKey(identityKey, dataMode, week, comparisonContext.challenger)] ??
+            null,
+          starterDetails:
+            detailsByKey[detailsKey(identityKey, dataMode, week, comparisonContext.starter)] ??
+            null,
+          detailsLoading: [comparisonContext.challenger, comparisonContext.starter].some((name) =>
+            loadingDetailKeys.includes(detailsKey(identityKey, dataMode, week, name)),
+          ),
+        }
+      : null;
 
   const availableMetrics = useMemo(() => {
     const metrics = new Set<string>(['fantasy_points']);
@@ -495,6 +544,16 @@ export function App() {
       players: [...new Set(comparison)],
       selected: pressure.name,
     };
+    setComparisonContext(
+      pressure.displaces
+        ? {
+            challenger: pressure.name,
+            starter: pressure.displaces,
+            lineupDelta: pressure.delta_to_lineup,
+            week: 'this',
+          }
+        : null,
+    );
     setMetric('fantasy_points');
     navigateTo('players', 'this');
   };
@@ -506,6 +565,7 @@ export function App() {
     lineupsRef.current = {};
     initializedWeekRef.current = null;
     pendingComparisonRef.current = null;
+    setComparisonContext(null);
     setDetailsByKey({});
     setLoadingDetailKeys([]);
     setDefensePayload(null);
@@ -615,7 +675,7 @@ export function App() {
       ) : null}
 
       {view === 'players' ? (
-        <main className="workspace">
+        <main className={activeComparison ? 'workspace comparison-workspace' : 'workspace'}>
           <aside className="ranking-pane" aria-label="Player ranking">
             <div className="pane-heading">
               <span className="eyebrow">Ranking</span>
@@ -749,14 +809,29 @@ export function App() {
             <div className="pane-heading">
               <span className="eyebrow">Inspector</span>
             </div>
-            <PlayerInspector
-              player={selected}
-              target={target}
-              metric={metric}
-              details={selectedDetails}
-              detailsLoading={selectedDetailsLoading}
-              onMetricChange={setMetric}
-            />
+            {activeComparison ? (
+              <PlayerComparisonInspector
+                challenger={activeComparison.challenger}
+                starter={activeComparison.starter}
+                challengerDetails={activeComparison.challengerDetails}
+                starterDetails={activeComparison.starterDetails}
+                detailsLoading={activeComparison.detailsLoading}
+                lineupDelta={activeComparison.context.lineupDelta}
+                target={target}
+                metric={metric}
+                onMetricChange={setMetric}
+                onExit={() => setComparisonContext(null)}
+              />
+            ) : (
+              <PlayerInspector
+                player={selected}
+                target={target}
+                metric={metric}
+                details={selectedDetails}
+                detailsLoading={selectedDetailsLoading}
+                onMetricChange={setMetric}
+              />
+            )}
           </aside>
         </main>
       ) : null}
