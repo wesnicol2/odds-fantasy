@@ -218,15 +218,22 @@ function MatrixCell({
   range,
   scale,
   thermometerLabel,
+  side,
 }: {
   display: string;
   winner: boolean;
   range: MatrixRange | null | undefined;
   scale: { minimum: number; maximum: number } | undefined;
   thermometerLabel: string;
+  side: MatrixSide;
 }) {
+  // A paired-bar row anchors its text over its own bar, so each player's
+  // numbers stay attached to the bar they describe.
+  const classes = [winner ? 'matrix-winner' : '', range && scale ? `range-cell-${side}` : '']
+    .filter(Boolean)
+    .join(' ');
   return (
-    <td className={winner ? 'matrix-winner' : undefined}>
+    <td className={classes || undefined}>
       <span>{display}</span>
       {range && scale ? (
         <RangeThermometer
@@ -236,7 +243,8 @@ function MatrixCell({
           minimum={scale.minimum}
           maximum={scale.maximum}
           label={thermometerLabel}
-          className="matrix-range-glyph"
+          className={`matrix-range-glyph glyph-${side}`}
+          orientation="vertical"
         />
       ) : null}
       {winner ? <small>Edge</small> : null}
@@ -278,6 +286,7 @@ function MatrixRows({
           )}
         </th>
         <MatrixCell
+          side="challenger"
           display={row.challengerDisplay}
           winner={winner === 'challenger'}
           range={row.challengerRange}
@@ -285,6 +294,7 @@ function MatrixRows({
           thermometerLabel={`${challengerName} ${row.label} floor ${formatValue(row.challengerRange?.floor)}, mid ${formatValue(row.challengerRange?.mid)}, ceiling ${formatValue(row.challengerRange?.ceiling)}${suffix ? ` ${suffix}` : ''}`}
         />
         <MatrixCell
+          side="starter"
           display={row.starterDisplay}
           winner={winner === 'starter'}
           range={row.starterRange}
@@ -678,9 +688,9 @@ export function PlayerComparisonInspector({
                 <tr>
                   <th>Stat value range</th>
                   {[
-                    { player: challenger, market: challengerMarket },
-                    { player: starter, market: starterMarket },
-                  ].map(({ player, market }) => {
+                    { player: challenger, market: challengerMarket, side: 'challenger' },
+                    { player: starter, market: starterMarket, side: 'starter' },
+                  ].map(({ player, market, side }) => {
                     const range = marketRange(market);
                     return (
                       <td key={player.name}>
@@ -692,7 +702,8 @@ export function PlayerComparisonInspector({
                             minimum={statScale.minimum}
                             maximum={statScale.maximum}
                             label={`${player.name} ${metricLabel(metric)} floor ${formatValue(range.floor)}, mid ${formatValue(range.mid)}, ceiling ${formatValue(range.ceiling)}`}
-                            className="matrix-range-glyph"
+                            className={`matrix-range-glyph glyph-${side}`}
+                            orientation="vertical"
                           />
                         ) : (
                           '—'

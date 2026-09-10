@@ -292,6 +292,18 @@
   margin-top: 4px;
 }
 
+/* Vertical bars only compare directly when they are close enough to read as
+   one pair, so each player's bar hugs the boundary between the two columns. */
+.matrix-range-glyph.glyph-challenger {
+  --range-glyph-x: calc(100% - 7px);
+}
+.matrix-range-glyph.glyph-starter {
+  --range-glyph-x: 7px;
+}
+.matrix-table td.range-cell-starter {
+  text-align: left;
+}
+
 .matrix-table td.matrix-winner {
   box-shadow: inset 2px 0 #4bc883;
   background: #10231d;

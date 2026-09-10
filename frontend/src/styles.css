@@ -395,6 +395,45 @@ input:focus-visible {
   transform: translateX(-2.5px);
 }
 
+/* Vertical thermometer: two of these side by side share one baseline, so
+   floor/mid/ceiling heights can be compared across players at a glance. */
+.range-glyph-vertical {
+  width: 100%;
+  height: 72px;
+  min-width: 0;
+}
+.range-glyph-vertical::before {
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: var(--range-glyph-x, 50%);
+  width: 1px;
+  height: auto;
+  transform: translateX(-0.5px);
+}
+.range-glyph-vertical .range-segment {
+  top: auto;
+  left: var(--range-glyph-x, 50%);
+  width: 5px;
+  min-width: 0;
+  min-height: 2px;
+  transform: translateX(-2.5px);
+}
+.range-glyph-vertical .range-end {
+  top: auto;
+  left: var(--range-glyph-x, 50%);
+  width: 11px;
+  height: 1px;
+  transform: translate(-5.5px, 0.5px);
+}
+.range-glyph-vertical .range-mid {
+  top: auto;
+  left: var(--range-glyph-x, 50%);
+  width: 7px;
+  height: 7px;
+  transform: translate(-3.5px, 3.5px);
+}
+
 .target-controls {
   display: flex;
   align-items: end;
