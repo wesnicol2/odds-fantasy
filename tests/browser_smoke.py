@@ -349,6 +349,14 @@ def main() -> None:
 
         inspector = page.get_by_role("complementary", name="Player inspector")
         inspector.get_by_text("This week\u2019s tie-breaker matrix", exact=True).wait_for()
+
+        def pane_order() -> list[str]:
+            return page.locator(".workspace > *").evaluate_all(
+                "nodes => nodes.map((node) => node.getAttribute('aria-label'))"
+            )
+
+        # Comparing leads with the decision: matrix, then chart, then the ranking checkboxes.
+        assert pane_order() == ["Player inspector", "Probability analysis", "Player ranking"]
         inspector.get_by_text("Start Alpha Runner", exact=True).wait_for()
         inspector.get_by_text(
             "Beta Receiver is 2.0 lineup FP back after re-optimizing every eligible slot.",
@@ -404,6 +412,9 @@ def main() -> None:
         rushing_comparison.get_by_text("Rushing yards comparison", exact=True).wait_for()
         inspector.get_by_role("button", name="Full matrix", exact=True).click()
         inspector.get_by_role("button", name="Exit comparison", exact=True).click()
+
+        # Exiting restores the normal ranking/chart/inspector workstation order.
+        assert pane_order() == ["Player ranking", "Probability analysis", "Player inspector"]
 
         primary_nav = page.get_by_role("navigation", name="Primary navigation")
 

@@ -269,6 +269,8 @@ Every matrix input must apply directly to the selected week. Do not show ADP, dr
 
 This is a focused explanation mode inside the existing Players workstation, not a separate destination or browser-side start/sit model. Exiting comparison restores the normal selected-player inspector without discarding the narrowed two-player chart context.
 
+While a comparison is open the workstation reorders to match what the user is deciding. The matrix leads full width, the probability chart follows as its supporting evidence, and the ranking/graph checkboxes come last. Reorder the DOM, not just the visual order, so reading order and keyboard tab order stay aligned with the layout; keep each pane keyed so moving it does not remount the chart. The default ranking/chart/inspector column order returns the moment comparison is exited.
+
 ### Defense planning
 
 Show two short ranked groups:
