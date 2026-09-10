@@ -3,7 +3,13 @@ import unittest
 from unittest.mock import patch
 
 from oddsfantasy import services
-from oddsfantasy.defense import defense_fantasy_range, implied_team_total, opponent_implied_total
+from oddsfantasy.defense import (
+    defense_fantasy_range,
+    defense_range_breakdown,
+    implied_team_total,
+    opponent_implied_breakdown,
+    opponent_implied_total,
+)
 
 DEF_SCORING = {
     "pts_allow_0": 10,
@@ -14,6 +20,90 @@ DEF_SCORING = {
     "pts_allow_28_34": -1,
     "pts_allow_35p": -4,
 }
+
+
+BOOK_LINES = {
+    "bookmakers": [
+        {
+            "key": "draftkings",
+            "markets": [
+                {"key": "totals", "outcomes": [{"name": "Over", "point": 47.5}]},
+                {"key": "spreads", "outcomes": [{"name": "Miami Dolphins", "point": 3.5}]},
+            ],
+        },
+        {
+            "key": "fanduel",
+            "markets": [
+                {"key": "totals", "outcomes": [{"name": "Over", "point": 48.5}]},
+                {"key": "spreads", "outcomes": [{"name": "Miami Dolphins", "point": 2.5}]},
+            ],
+        },
+    ]
+}
+
+
+class ImpliedBreakdownTest(unittest.TestCase):
+    """The evidence behind the number must be the evidence the number used."""
+
+    def setUp(self):
+        self.breakdown = opponent_implied_breakdown(BOOK_LINES, "Miami Dolphins")
+
+    def test_every_book_carries_the_inputs_and_its_own_result(self):
+        self.assertEqual(self.breakdown["book_count"], 2)
+        by_book = {row["book"]: row for row in self.breakdown["books"]}
+        self.assertEqual(
+            by_book["draftkings"],
+            {
+                "book": "draftkings",
+                "game_total": 47.5,
+                "opponent_spread": 3.5,
+                "implied_total": 22.0,
+            },
+        )
+        for row in self.breakdown["books"]:
+            self.assertAlmostEqual(
+                row["implied_total"],
+                implied_team_total(row["game_total"], row["opponent_spread"]),
+                places=2,
+            )
+
+    def test_median_matches_the_ranked_number(self):
+        implied, books = opponent_implied_total(BOOK_LINES, "Miami Dolphins")
+        self.assertEqual(self.breakdown["median"], implied)
+        self.assertEqual(self.breakdown["book_count"], books)
+
+    def test_no_usable_lines_is_none_with_no_rows(self):
+        empty = opponent_implied_breakdown({"bookmakers": []}, "Miami Dolphins")
+        self.assertIsNone(empty["median"])
+        self.assertEqual(empty["books"], [])
+
+
+class RangeBreakdownTest(unittest.TestCase):
+    def setUp(self):
+        self.breakdown = defense_range_breakdown(22.5, DEF_SCORING)
+
+    def test_breakdown_reproduces_the_ranked_range(self):
+        floor, mid, ceiling = defense_fantasy_range(22.5, DEF_SCORING)
+        self.assertAlmostEqual(self.breakdown["floor"]["points"], floor, places=2)
+        self.assertAlmostEqual(self.breakdown["mid"]["points"], mid, places=2)
+        self.assertAlmostEqual(self.breakdown["ceiling"]["points"], ceiling, places=2)
+
+    def test_floor_reads_the_high_opponent_percentile(self):
+        """A defense scores least when its opponent scores most."""
+        self.assertEqual(self.breakdown["floor"]["percentile"], 0.90)
+        self.assertEqual(self.breakdown["ceiling"]["percentile"], 0.10)
+        self.assertGreater(
+            self.breakdown["floor"]["opponent_points"],
+            self.breakdown["ceiling"]["opponent_points"],
+        )
+
+    def test_shown_contributions_add_up_to_the_shown_mid(self):
+        total = sum(row["contribution"] for row in self.breakdown["mid"]["brackets"])
+        self.assertAlmostEqual(total, self.breakdown["mid"]["points"], places=2)
+
+    def test_bracket_probabilities_cover_every_outcome_once(self):
+        total = sum(row["probability"] for row in self.breakdown["mid"]["brackets"])
+        self.assertAlmostEqual(total, 1.0, places=3)
 
 
 class DefenseMathTest(unittest.TestCase):
