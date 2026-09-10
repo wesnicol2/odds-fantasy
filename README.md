@@ -23,6 +23,8 @@ The browser does not create a second projection model. The fantasy-points chart 
 
 Individual-stat charts re-express the same backend-fitted sportsbook distributions according to the metric's support. Yardage uses a continuous probability-density view (`x = value`, `y = P(x)`) sampled densely from the canonical fitted distribution and kernel-smoothed for display so sparse sportsbook thresholds do not create artificial spikes or zero-probability holes. High-granularity integer stats such as receptions use exact probability mass at each integer (`P(X = x)`) with visible points and a smoothed connecting line. Low-granularity counts such as passing TDs, anytime TDs and interceptions use one vertical threshold gauge per value, with each player's marker showing `P(X ≥ x)`.
 
+Compared player series stay at full color and opacity even when another player is selected or hovered. Selection is indicated with a modestly heavier stroke and higher draw order instead of dimming the other players, so every compared curve remains readable.
+
 Continuous and high-granularity charts support axis-specific rescaling. On touch devices, pinch directly on the x-axis or y-axis to zoom only that axis while the chart updates continuously. Mouse-wheel or trackpad scrolling over an axis provides the same behavior on desktop; when an axis control is keyboard-focused, `+` and `-` zoom and `0` resets that axis.
 
 Sportsbook evidence stays mathematically consistent with those views. Exact source-book thresholds can be marked on the x-axis of `P(x)` charts, while de-vigged consensus anchors remain inspectable in **Explain betting lines** because they are cumulative `P(X ≥ x)` quantities and therefore do not share the density/PMF y-axis. Low-granularity gauges already use the same cumulative threshold semantics directly.
@@ -36,7 +38,7 @@ The header quota readout is refreshed independently of the odds cache. It uses T
 1. On a fresh browser, enter your Sleeper username, choose a league, then choose your team. The selection is saved in browser cookies.
 2. Start on **Dashboard** for the current decision: ideal lineup, closest bench calls, and this/next-week defense targets.
 3. Use **Players**, **Defenses**, or **Lineup** when you want to drill down. Those destinations have their own **This week / Next week** context selector; Dashboard intentionally spans both defense weeks itself.
-4. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. Choose a metric above the graph to move between fantasy points and priced stats.
+4. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. The fantasy-points inspector breaks the player's mean into exact per-stat expected-point contributions; select any contribution to open that stat's distribution and betting-line evidence. You can also choose a metric above the graph directly.
 5. Enter or drag **Target FP** to compare each visible player's chance of reaching a specific fantasy score. Use **Explain betting lines** when you want the consensus anchors and source sportsbook prices.
 6. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken.
 7. In **Lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.

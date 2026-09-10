@@ -8,6 +8,7 @@ interface PlayerInspectorProps {
   metric: string;
   details: PlayerOddsDetails | null;
   detailsLoading: boolean;
+  onMetricChange: (metric: string) => void;
 }
 
 function formatPoints(value: number | null): string {
@@ -23,12 +24,18 @@ function formatOdds(value: number | null): string {
   return value === null ? '—' : value.toFixed(2);
 }
 
+function formatContribution(value: number): string {
+  const normalized = Math.abs(value) < 0.05 ? 0 : value;
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)} FP`;
+}
+
 export function PlayerInspector({
   player,
   target,
   metric,
   details,
   detailsLoading,
+  onMetricChange,
 }: PlayerInspectorProps) {
   if (!player) {
     return <div className="empty-state">Select a player to inspect their projection.</div>;
@@ -39,6 +46,14 @@ export function PlayerInspector({
   const sportsbookCount = market
     ? new Set(market.lines.map((line) => line.book).filter(Boolean)).size
     : 0;
+  const contributions = Object.entries(details?.markets ?? {})
+    .map(([marketKey, detail]) => ({
+      marketKey,
+      label: metricLabel(marketKey),
+      points: detail.expected_points,
+    }))
+    .sort((left, right) => Math.abs(right.points) - Math.abs(left.points));
+  const largestContribution = Math.max(...contributions.map(({ points }) => Math.abs(points)), 0);
 
   return (
     <div className="inspector-content">
@@ -74,6 +89,59 @@ export function PlayerInspector({
             </div>
           ) : null}
 
+          {metric === 'fantasy_points' ? (
+            <div className="inspector-section contribution-section">
+              <div className="section-label">Mean point sources</div>
+              {detailsLoading && !details ? (
+                <p className="subtle evidence-status">Loading point sources…</p>
+              ) : null}
+              {!detailsLoading && contributions.length === 0 ? (
+                <div className="empty-state">No modeled stat contributions are available.</div>
+              ) : null}
+              {contributions.length ? (
+                <>
+                  <div className="contribution-total">
+                    <span>Mean fantasy points</span>
+                    <strong>{formatPoints(details?.projection?.mean ?? player.mean)}</strong>
+                  </div>
+                  <ul className="contribution-list" aria-label="Fantasy point contributions">
+                    {contributions.map(({ marketKey, label, points }) => (
+                      <li key={marketKey}>
+                        <button
+                          type="button"
+                          className="contribution-row"
+                          onClick={() => onMetricChange(marketKey)}
+                          aria-label={`Analyze ${label}, ${formatContribution(points)}`}
+                        >
+                          <span className="contribution-row-heading">
+                            <span>{label}</span>
+                            <strong className={points < 0 ? 'negative' : ''}>
+                              {formatContribution(points)}
+                            </strong>
+                          </span>
+                          <span className="contribution-track" aria-hidden="true">
+                            <span
+                              className={
+                                points < 0 ? 'contribution-fill negative' : 'contribution-fill'
+                              }
+                              style={{
+                                width: `${largestContribution ? (Math.abs(points) / largestContribution) * 100 : 0}%`,
+                              }}
+                            />
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="contribution-note">
+                    Expected contributions add to the mean. Select a stat to inspect its outcomes
+                    and betting lines.
+                  </p>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
           {metric !== 'fantasy_points' ? (
             <div className="inspector-section evidence-section">
               <div className="section-label">{metricLabel(metric)} evidence</div>
@@ -85,6 +153,15 @@ export function PlayerInspector({
               ) : null}
               {market ? (
                 <>
+                  <div className="stat-contribution-summary">
+                    <span>Mean point contribution</span>
+                    <strong className={market.expected_points < 0 ? 'negative' : ''}>
+                      {formatContribution(market.expected_points)}
+                    </strong>
+                    <button type="button" onClick={() => onMetricChange('fantasy_points')}>
+                      All point sources
+                    </button>
+                  </div>
                   <dl className="stat-range-summary">
                     <div>
                       <dt>10th</dt>

@@ -42,6 +42,115 @@
   font-size: 11px;
 }
 
+.contribution-total,
+.stat-contribution-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: #9ba5b2;
+  font-size: 10px;
+}
+
+.contribution-total strong,
+.stat-contribution-summary strong {
+  color: #e8edf3;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.contribution-list {
+  margin-top: 8px;
+  margin-bottom: 0;
+  padding: 0;
+  border-top: 1px solid #202630;
+  list-style: none;
+}
+
+.contribution-row {
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid #1b2129;
+  background: transparent;
+  color: #cbd3dc;
+  text-align: left;
+  cursor: pointer;
+}
+
+.contribution-row:hover,
+.contribution-row:focus-visible {
+  color: #fff;
+  background: #111820;
+}
+
+.contribution-row-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.contribution-row-heading strong {
+  color: #b6d6ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.contribution-row-heading strong.negative,
+.stat-contribution-summary strong.negative {
+  color: #e7a0a0;
+}
+
+.contribution-track {
+  display: block;
+  width: 100%;
+  height: 2px;
+  margin-top: 5px;
+  overflow: hidden;
+  background: #202630;
+}
+
+.contribution-fill {
+  display: block;
+  height: 100%;
+  background: #5aa2ff;
+}
+
+.contribution-fill.negative {
+  background: #c96f6f;
+}
+
+.contribution-note {
+  margin: 8px 0 0;
+  color: #687382;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.stat-contribution-summary {
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px solid #202630;
+}
+
+.stat-contribution-summary button {
+  flex-basis: 100%;
+  padding: 2px 0 0;
+  border: 0;
+  background: transparent;
+  color: #7ab8ff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stat-contribution-summary button:hover,
+.stat-contribution-summary button:focus-visible {
+  color: #b6d6ff;
+}
+
 .stat-range-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
