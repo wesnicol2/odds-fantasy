@@ -1,7 +1,6 @@
 import { metricLabel } from '../analysis/metrics';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
 import type { MarketDetail, PlayerOddsDetails, ProjectionPlayer } from '../types';
-import { RangeThermometer } from './RangeThermometer';
 
 interface PlayerComparisonInspectorProps {
   challenger: ProjectionPlayer;
@@ -36,7 +35,8 @@ interface MatrixRow {
   lowerWins?: boolean;
   challengerRange?: MatrixRange | null | undefined;
   starterRange?: MatrixRange | null | undefined;
-  rangeLabelSuffix?: string;
+  /** A stat the league scores against you, so the larger value is the warning. */
+  negativeStat?: boolean;
   /** Metric this row drills into; rows without one render as plain labels. */
   actionMetric?: string;
   /** Accessible name for the drill-down button when the row has one. */
@@ -91,17 +91,6 @@ function marketRange(market: MarketDetail | undefined): MatrixRange | null {
   const [floor, mid, ceiling] = market.stat_range;
   if (floor === undefined || mid === undefined || ceiling === undefined) return null;
   return { floor, mid, ceiling };
-}
-
-/** Zero-anchored shared scale so both thermometers read as magnitudes, not as a zoomed gap. */
-function rangeScale(ranges: (MatrixRange | null | undefined)[]): {
-  minimum: number;
-  maximum: number;
-} {
-  const present = ranges.filter((range): range is MatrixRange => Boolean(range));
-  const minimum = Math.min(0, ...present.map((range) => range.floor));
-  const maximum = Math.max(minimum + 1, ...present.map((range) => range.ceiling));
-  return { minimum, maximum };
 }
 
 function rangeValue(market: MarketDetail | undefined, index: 0 | 1 | 2): string {
@@ -212,56 +201,78 @@ function PlayerHeading({
   );
 }
 
+interface Shading {
+  side: MatrixSide;
+  tone: 'positive' | 'negative';
+  intensity: number;
+}
+
+/**
+ * Which cell to tint, in what colour, and how strongly.
+ *
+ * The row is read as numbers; colour only says how far apart those numbers
+ * are. A stat the league rewards tints the leader green; a stat it punishes
+ * tints the player carrying more of it red, because there the larger number
+ * is the thing worth spotting. Intensity tracks the relative gap, so a near
+ * tie stays almost uncoloured and a blowout is unmistakable.
+ */
+function rowShading(row: MatrixRow): Shading | null {
+  const winner = rowWinner(row);
+  if (winner === null) return null;
+  const challenger = row.challengerValue as number;
+  const starter = row.starterValue as number;
+  const magnitude = Math.max(Math.abs(challenger), Math.abs(starter));
+  const gap = magnitude > 0 ? Math.abs(challenger - starter) / magnitude : 0;
+  // Ease the ramp so a small but real edge is still visible.
+  const intensity = Math.sqrt(Math.min(1, gap));
+  if (row.negativeStat) {
+    return {
+      side: winner === 'challenger' ? 'starter' : 'challenger',
+      tone: 'negative',
+      intensity,
+    };
+  }
+  return { side: winner, tone: 'positive', intensity };
+}
+
+function shadingStyle(shading: Shading | null, side: MatrixSide) {
+  if (!shading || shading.side !== side) return undefined;
+  const alpha = (0.12 + shading.intensity * 0.42).toFixed(3);
+  const rgb = shading.tone === 'positive' ? '75, 200, 131' : '214, 92, 92';
+  return { backgroundColor: `rgba(${rgb}, ${alpha})` };
+}
+
 function MatrixCell({
   display,
   winner,
-  range,
-  scale,
-  thermometerLabel,
+  shading,
+  side,
 }: {
   display: string;
   winner: boolean;
-  range: MatrixRange | null | undefined;
-  scale: { minimum: number; maximum: number } | undefined;
-  thermometerLabel: string;
+  shading: Shading | null;
+  side: MatrixSide;
 }) {
   return (
-    <td className={winner ? 'matrix-winner' : undefined}>
+    <td style={shadingStyle(shading, side)}>
       <span>{display}</span>
-      {range && scale ? (
-        <RangeThermometer
-          floor={range.floor}
-          mid={range.mid}
-          ceiling={range.ceiling}
-          minimum={scale.minimum}
-          maximum={scale.maximum}
-          label={thermometerLabel}
-          className="matrix-range-glyph"
-        />
-      ) : null}
-      {winner ? <small>Edge</small> : null}
+      {/* Colour alone must not carry the result, so the edge stays in the
+          accessible name even though it is no longer drawn. */}
+      {winner ? <small className="sr-only">Edge</small> : null}
     </td>
   );
 }
 
 function MatrixRows({
   rows,
-  challengerName,
-  starterName,
   onMetricChange,
 }: {
   rows: MatrixRow[];
-  challengerName: string;
-  starterName: string;
   onMetricChange: (metric: string) => void;
 }) {
   return rows.map((row) => {
     const winner = rowWinner(row);
-    const scale =
-      row.challengerRange || row.starterRange
-        ? rangeScale([row.challengerRange, row.starterRange])
-        : undefined;
-    const suffix = row.rangeLabelSuffix ?? '';
+    const shading = rowShading(row);
     return (
       <tr key={row.key}>
         <th>
@@ -278,18 +289,16 @@ function MatrixRows({
           )}
         </th>
         <MatrixCell
+          side="challenger"
           display={row.challengerDisplay}
           winner={winner === 'challenger'}
-          range={row.challengerRange}
-          scale={scale}
-          thermometerLabel={`${challengerName} ${row.label} floor ${formatValue(row.challengerRange?.floor)}, mid ${formatValue(row.challengerRange?.mid)}, ceiling ${formatValue(row.challengerRange?.ceiling)}${suffix ? ` ${suffix}` : ''}`}
+          shading={shading}
         />
         <MatrixCell
+          side="starter"
           display={row.starterDisplay}
           winner={winner === 'starter'}
-          range={row.starterRange}
-          scale={scale}
-          thermometerLabel={`${starterName} ${row.label} floor ${formatValue(row.starterRange?.floor)}, mid ${formatValue(row.starterRange?.mid)}, ceiling ${formatValue(row.starterRange?.ceiling)}${suffix ? ` ${suffix}` : ''}`}
+          shading={shading}
         />
       </tr>
     );
@@ -347,9 +356,6 @@ export function PlayerComparisonInspector({
       challengerDisplay: formatRange(challengerFantasyRange, 'FP'),
       starterDisplay: formatRange(starterFantasyRange, 'FP'),
       comparable: false,
-      challengerRange: challengerFantasyRange,
-      starterRange: starterFantasyRange,
-      rangeLabelSuffix: 'FP',
     },
     {
       key: 'floor',
@@ -448,6 +454,11 @@ export function PlayerComparisonInspector({
   const contributionRows: MatrixRow[] = contributionKeys.map((marketKey) => {
     const challengerStat = sideMeasure(challengerDetails, marketKey);
     const starterStat = sideMeasure(starterDetails, marketKey);
+    // Points from a punished stat are negative, so the deeper number is the
+    // warning even though the higher one still wins the row.
+    const punished = [challengerStat, starterStat].some(
+      (stat) => stat !== null && stat.expectedPoints < 0,
+    );
     // A summed row has no single fitted distribution to open; its component
     // markets stay reachable from the chart's own metric strip.
     const drillDown =
@@ -464,6 +475,7 @@ export function PlayerComparisonInspector({
       starterValue: starterStat?.expectedPoints,
       challengerDisplay: formatContribution(challengerStat?.expectedPoints),
       starterDisplay: formatContribution(starterStat?.expectedPoints),
+      negativeStat: punished,
       ...drillDown,
     };
   });
@@ -492,8 +504,7 @@ export function PlayerComparisonInspector({
       challengerDisplay: formatRange(challengerStat?.range, ''),
       starterDisplay: formatRange(starterStat?.range, ''),
       lowerWins,
-      challengerRange: challengerStat?.range ?? null,
-      starterRange: starterStat?.range ?? null,
+      negativeStat: lowerWins,
       ...drillDown,
     };
   });
@@ -501,7 +512,6 @@ export function PlayerComparisonInspector({
   const pointRows = [...projectionRows, ...matchupRows, ...contributionRows];
   const pointLead = leadSentence(pointRows, challenger.name, starter.name, 'fantasy-point');
   const statLead = leadSentence(statValueRows, challenger.name, starter.name, 'stat-value');
-  const statScale = rangeScale([marketRange(challengerMarket), marketRange(starterMarket)]);
 
   return (
     <div className="start-sit-comparison">
@@ -534,9 +544,10 @@ export function PlayerComparisonInspector({
         >
           <p>
             Every value is tied to this matchup week. Fantasy-point rows use league scoring; stat
-            rows compare the raw weekly stat instead. Each thermometer marks the 10th percentile,
-            median and 90th percentile on a shared scale. An edge marks the better comparable value;
-            missing data and ties do not award either player a win.
+            rows compare the raw weekly stat instead. Shading marks the gap between the two players
+            in that row and fades as they converge: green highlights the leader on a stat the league
+            rewards, red the player carrying more of one it punishes. Missing data and ties leave
+            both sides unshaded.
           </p>
           {detailsLoading && (!challengerDetails || !starterDetails) ? (
             <p className="subtle evidence-status">Loading both players’ weekly evidence…</p>
@@ -569,41 +580,21 @@ export function PlayerComparisonInspector({
                 <tr className="matrix-group-row">
                   <th colSpan={3}>Projection · fantasy points</th>
                 </tr>
-                <MatrixRows
-                  rows={projectionRows}
-                  challengerName={challenger.name}
-                  starterName={starter.name}
-                  onMetricChange={onMetricChange}
-                />
+                <MatrixRows rows={projectionRows} onMetricChange={onMetricChange} />
                 <tr className="matrix-group-row">
                   <th colSpan={3}>Matchup</th>
                 </tr>
-                <MatrixRows
-                  rows={matchupRows}
-                  challengerName={challenger.name}
-                  starterName={starter.name}
-                  onMetricChange={onMetricChange}
-                />
+                <MatrixRows rows={matchupRows} onMetricChange={onMetricChange} />
                 {contributionRows.length ? (
                   <>
                     <tr className="matrix-group-row">
                       <th colSpan={3}>Fantasy-point sources</th>
                     </tr>
-                    <MatrixRows
-                      rows={contributionRows}
-                      challengerName={challenger.name}
-                      starterName={starter.name}
-                      onMetricChange={onMetricChange}
-                    />
+                    <MatrixRows rows={contributionRows} onMetricChange={onMetricChange} />
                     <tr className="matrix-group-row">
                       <th colSpan={3}>Stat value · 10th · median · 90th</th>
                     </tr>
-                    <MatrixRows
-                      rows={statValueRows}
-                      challengerName={challenger.name}
-                      starterName={starter.name}
-                      onMetricChange={onMetricChange}
-                    />
+                    <MatrixRows rows={statValueRows} onMetricChange={onMetricChange} />
                   </>
                 ) : null}
               </tbody>
@@ -674,32 +665,6 @@ export function PlayerComparisonInspector({
                   <th>90th</th>
                   <td>{rangeValue(challengerMarket, 2)}</td>
                   <td>{rangeValue(starterMarket, 2)}</td>
-                </tr>
-                <tr>
-                  <th>Stat value range</th>
-                  {[
-                    { player: challenger, market: challengerMarket },
-                    { player: starter, market: starterMarket },
-                  ].map(({ player, market }) => {
-                    const range = marketRange(market);
-                    return (
-                      <td key={player.name}>
-                        {range ? (
-                          <RangeThermometer
-                            floor={range.floor}
-                            mid={range.mid}
-                            ceiling={range.ceiling}
-                            minimum={statScale.minimum}
-                            maximum={statScale.maximum}
-                            label={`${player.name} ${metricLabel(metric)} floor ${formatValue(range.floor)}, mid ${formatValue(range.mid)}, ceiling ${formatValue(range.ceiling)}`}
-                            className="matrix-range-glyph"
-                          />
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    );
-                  })}
                 </tr>
               </tbody>
             </table>

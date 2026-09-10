@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Route, sync_playwright
@@ -45,6 +46,13 @@ RECEIVING_GRAPH = {
         {"x": 55, "probability": 0.014},
         {"x": 75, "probability": 0.007},
         {"x": 95, "probability": 0.002},
+    ],
+}
+INTERCEPTIONS_GRAPH = {
+    "kind": "threshold_gauge",
+    "points": [
+        {"x": 1, "probability": 0.55},
+        {"x": 2, "probability": 0.22},
     ],
 }
 RECEPTIONS_GRAPH = {
@@ -231,6 +239,18 @@ def api_fixture(route: Route) -> None:
                         ],
                         "lines": market_lines(3.5, 4.5),
                     },
+                    # A negatively scored market, so the matrix must flag the
+                    # player carrying more of it rather than the one with less.
+                    "player_pass_interceptions": {
+                        "stat_range": [0, 1, 2] if is_receiver else [0, 0, 1],
+                        "expected_points": -1.5 if is_receiver else -0.5,
+                        "graph": INTERCEPTIONS_GRAPH,
+                        "anchors": [
+                            {"threshold": 0.5, "survival": 0.55},
+                            {"threshold": 1.5, "survival": 0.22},
+                        ],
+                        "lines": market_lines(0.5, 1.5),
+                    },
                     "player_anytime_td": {
                         "stat_range": [0, 1, 2],
                         "expected_points": 3.7,
@@ -345,6 +365,12 @@ def api_fixture(route: Route) -> None:
     route.continue_()
 
 
+def alpha_of(style: str) -> float:
+    """Alpha channel of an rgba() background declared in an inline style."""
+    match = re.search(r"rgba\([^)]*,\s*([0-9.]+)\s*\)", style)
+    return float(match.group(1)) if match else 0.0
+
+
 def main() -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
@@ -405,10 +431,10 @@ def main() -> None:
         ).wait_for()
         # Fantasy-point and stat-value signals are tallied separately, never merged.
         inspector.get_by_text(
-            "Alpha Runner leads 7\u20130 across 9 comparable fantasy-point signals", exact=True
+            "Alpha Runner leads 8\u20130 across 10 comparable fantasy-point signals", exact=True
         ).wait_for()
         inspector.get_by_text(
-            "Signals are tied 1\u20131 across 3 comparable stat-value signals", exact=True
+            "Alpha Runner leads 2\u20131 across 4 comparable stat-value signals", exact=True
         ).wait_for()
         matrix = inspector.get_by_role("table", name="Weekly player comparison matrix")
         assert "Beta Receiver" in matrix.inner_text()
@@ -416,12 +442,17 @@ def main() -> None:
         assert "Team implied total" in matrix.inner_text()
         assert "25.5 pts" in matrix.inner_text()
 
-        # Fantasy points carry a floor/mid/ceiling thermometer alongside the scored rows.
+        # The matrix is numbers only: no glyphs, and no drawn edge chips.
+        assert matrix.locator(".range-glyph").count() == 0
         fantasy_range_row = matrix.locator("tbody tr").filter(has_text="Fantasy point range")
         assert "8 \u00b7 15 \u00b7 24 FP" in fantasy_range_row.inner_text()
         assert "10 \u00b7 17 \u00b7 25 FP" in fantasy_range_row.inner_text()
-        assert fantasy_range_row.locator(".range-glyph").count() == 2
-        assert "Edge" not in fantasy_range_row.inner_text()
+        # An unscored row is never shaded.
+        assert not any(
+            "background-color"
+            in (fantasy_range_row.locator("td").nth(index).get_attribute("style") or "")
+            for index in (0, 1)
+        )
 
         # A back and a pass catcher earn yardage in different markets, so RB vs WR
         # compares their summed yardage instead of two half-empty rows.
@@ -440,26 +471,40 @@ def main() -> None:
         assert "STAT VALUE \u00b7 10TH \u00b7 MEDIAN \u00b7 90TH" in matrix.inner_text().upper()
         combined_value_row = matrix.locator("tbody tr").filter(has_text="58 \u00b7 91 \u00b7 130")
         assert "30 \u00b7 52 \u00b7 85" in combined_value_row.inner_text()
-        assert combined_value_row.locator(".range-glyph").count() == 2
-        assert "matrix-winner" in (
-            combined_value_row.locator("td").nth(1).get_attribute("class") or ""
-        )
+
+        def shade(row, index: int) -> str:
+            return row.locator("td").nth(index).get_attribute("style") or ""
+
+        # A rewarded stat tints the leader green; the gap here is wide, so it is strong.
+        combined_shade = shade(combined_value_row, 1)
+        assert "75, 200, 131" in combined_shade, combined_shade
+        assert not shade(combined_value_row, 0)
         receptions_value_row = matrix.locator("tbody tr").filter(has_text="4 \u00b7 7 \u00b7 10")
-        assert "matrix-winner" in (
-            receptions_value_row.locator("td").first.get_attribute("class") or ""
-        )
-        # Identical stat ranges award neither player a stat-value win.
-        anytime_value_row = matrix.locator("tbody tr").filter(has_text="0 \u00b7 1 \u00b7 2")
-        assert "Edge" not in anytime_value_row.inner_text()
+        assert "75, 200, 131" in shade(receptions_value_row, 0)
+        # A wider relative gap must read stronger than a narrow one.
+        floor_row = matrix.locator("tbody tr").filter(has_text="8.0 FP")
+        assert alpha_of(shade(combined_value_row, 1)) > alpha_of(shade(floor_row, 1))
+        # Identical stat ranges award neither player a stat-value win, so neither is tinted.
+        anytime_value_row = matrix.locator("tbody tr").filter(has_text="Anytime TD").last
+        assert not shade(anytime_value_row, 0)
+        assert not shade(anytime_value_row, 1)
+
+        # A punished stat flags the player carrying more of it, in red, on both
+        # the points row and the stat-value row.
+        interception_rows = matrix.locator("tbody tr").filter(has_text="Interceptions")
+        assert interception_rows.count() == 2
+        for index in range(2):
+            row = interception_rows.nth(index)
+            assert "214, 92, 92" in shade(row, 0), shade(row, 0)
+            assert not shade(row, 1)
 
         # Un-merged markets keep both drill-downs.
         matrix.get_by_role("button", name="Compare Receptions stat values", exact=True).click()
         receptions_comparison = inspector.get_by_role("region", name="Receptions comparison")
         receptions_comparison.get_by_text("Receptions comparison", exact=True).wait_for()
-        stat_range_row = receptions_comparison.locator("tbody tr").filter(
-            has_text="Stat value range"
-        )
-        assert stat_range_row.locator(".range-glyph").count() == 2
+        # The drill-down keeps the percentile numbers and drops the glyph with them.
+        assert "Stat value range" not in receptions_comparison.inner_text()
+        assert receptions_comparison.locator(".range-glyph").count() == 0
         inspector.get_by_role("button", name="Full matrix", exact=True).click()
         matrix.get_by_role("button", name="Compare Receptions distributions", exact=True).click()
         receptions_comparison.get_by_text("Receptions comparison", exact=True).wait_for()
