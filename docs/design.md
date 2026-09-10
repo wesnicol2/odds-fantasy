@@ -256,10 +256,13 @@ The comparison inspector should show:
 - this game's opponent, kickoff, spread, total and team implied total when the market supplies them;
 - an aligned union of this week's modeled props with each stat's signed expected fantasy-point contribution;
 - the same modeled props measured a second way, in raw stat value rather than league points, using each market's backend 10th / median / 90th percentiles;
+- rushing and receiving yardage as one combined row when, and only when, a running back is compared with a wide receiver or tight end — those positions earn yardage in different markets, so separate rows read as a gap that is only a position difference. Back against back and receiver against receiver keep their own markets, as do receptions and anytime TD in every pairing;
 - a visible edge marker on the better comparable value and a count of row wins;
 - missing markets as `—`, distinct from a modeled zero-point contribution;
 - a direct stat action that changes the shared chart to compare both fitted stat distributions;
 - a direct return from the stat drill-down to the full matrix.
+
+A combined row's expected-point contribution is the sum of its components because means are additive, but its stat range must come from the backend's sampled combined range: percentiles do not add (`docs/fantasy-projection-methodology.md` §5.1). A combined row has no single fitted distribution behind it, so it is not a drill-down; its component markets stay reachable from the chart's metric strip.
 
 Fantasy points and stat value are two measurements of the same week, so both use the same visual language: the Floor / Mid / Ceiling thermometer already used by the ranking table. Every thermometer marks all three percentiles, and the two players in one row share a single zero-anchored scale so the glyphs read as magnitudes rather than as a zoomed-in gap. A thermometer is presentation only — it places backend percentiles on a scale and never derives a value the backend did not supply.
 

@@ -34,9 +34,11 @@ interface MatrixRow {
   comparable?: boolean;
   /** A lower value wins the row, e.g. a stat the league scores negatively. */
   lowerWins?: boolean;
-  challengerRange?: MatrixRange | null;
-  starterRange?: MatrixRange | null;
+  challengerRange?: MatrixRange | null | undefined;
+  starterRange?: MatrixRange | null | undefined;
   rangeLabelSuffix?: string;
+  /** Metric this row drills into; rows without one render as plain labels. */
+  actionMetric?: string;
   /** Accessible name for the drill-down button when the row has one. */
   actionLabel?: string;
 }
@@ -104,6 +106,46 @@ function rangeScale(ranges: (MatrixRange | null | undefined)[]): {
 
 function rangeValue(market: MarketDetail | undefined, index: 0 | 1 | 2): string {
   return formatValue(market?.stat_range[index]);
+}
+
+const COMBINED_YARDAGE_KEY = 'rush_reception_yds';
+const COMBINED_YARDAGE_MARKETS = ['player_rush_yds', 'player_reception_yds'];
+
+/**
+ * A back's yards are priced as rushing and a pass catcher's as receiving, so
+ * lining those markets up separately shows a gap that is really just a
+ * position difference. Only that mismatch earns the combined yardage row;
+ * back-against-back and receiver-against-receiver already compare like for
+ * like and keep their own markets.
+ */
+function comparesAcrossYardageRoles(left: string, right: string): boolean {
+  const isBack = (position: string) => position.toUpperCase() === 'RB';
+  const isPassCatcher = (position: string) =>
+    position.toUpperCase() === 'WR' || position.toUpperCase() === 'TE';
+  return (isBack(left) && isPassCatcher(right)) || (isBack(right) && isPassCatcher(left));
+}
+
+interface SideMeasure {
+  expectedPoints: number;
+  range: MatrixRange | null;
+}
+
+/** One player's contribution and stat range for a market key or a combined key. */
+function sideMeasure(details: PlayerOddsDetails | null, key: string): SideMeasure | null {
+  if (key === COMBINED_YARDAGE_KEY) {
+    const combined = details?.combined_markets?.[key];
+    if (!combined) return null;
+    const [floor, mid, ceiling] = combined.stat_range;
+    return {
+      expectedPoints: combined.expected_points,
+      range:
+        floor === undefined || mid === undefined || ceiling === undefined
+          ? null
+          : { floor, mid, ceiling },
+    };
+  }
+  const market = details?.markets[key];
+  return market ? { expectedPoints: market.expected_points, range: marketRange(market) } : null;
 }
 
 function rowWinner(row: MatrixRow): MatrixSide | null {
@@ -211,7 +253,7 @@ function MatrixRows({
   rows: MatrixRow[];
   challengerName: string;
   starterName: string;
-  onMetricChange?: (metric: string) => void;
+  onMetricChange: (metric: string) => void;
 }) {
   return rows.map((row) => {
     const winner = rowWinner(row);
@@ -223,10 +265,10 @@ function MatrixRows({
     return (
       <tr key={row.key}>
         <th>
-          {onMetricChange ? (
+          {row.actionMetric ? (
             <button
               type="button"
-              onClick={() => onMetricChange(row.key)}
+              onClick={() => onMetricChange(row.actionMetric as string)}
               aria-label={row.actionLabel ?? `Compare ${row.label} distributions`}
             >
               {row.label}
@@ -266,22 +308,28 @@ export function PlayerComparisonInspector({
   onMetricChange,
   onExit,
 }: PlayerComparisonInspectorProps) {
-  const contributionKeys = [
+  const modeledKeys = [
     ...new Set([
       ...Object.keys(challengerDetails?.markets ?? {}),
       ...Object.keys(starterDetails?.markets ?? {}),
     ]),
-  ].sort((left, right) => {
-    const leftImpact = Math.max(
-      Math.abs(challengerDetails?.markets[left]?.expected_points ?? 0),
-      Math.abs(starterDetails?.markets[left]?.expected_points ?? 0),
+  ];
+  const mergeYardage =
+    comparesAcrossYardageRoles(challenger.pos, starter.pos) &&
+    modeledKeys.some((key) => COMBINED_YARDAGE_MARKETS.includes(key));
+  const rowImpact = (key: string) =>
+    Math.max(
+      Math.abs(sideMeasure(challengerDetails, key)?.expectedPoints ?? 0),
+      Math.abs(sideMeasure(starterDetails, key)?.expectedPoints ?? 0),
     );
-    const rightImpact = Math.max(
-      Math.abs(challengerDetails?.markets[right]?.expected_points ?? 0),
-      Math.abs(starterDetails?.markets[right]?.expected_points ?? 0),
-    );
-    return rightImpact - leftImpact;
-  });
+  const contributionKeys = (
+    mergeYardage
+      ? [
+          COMBINED_YARDAGE_KEY,
+          ...modeledKeys.filter((key) => !COMBINED_YARDAGE_MARKETS.includes(key)),
+        ]
+      : modeledKeys
+  ).sort((left, right) => rowImpact(right) - rowImpact(left));
   const challengerMarket = challengerDetails?.markets[metric];
   const starterMarket = starterDetails?.markets[metric];
   const challengerMatchup = challengerDetails?.matchup;
@@ -398,41 +446,55 @@ export function PlayerComparisonInspector({
   ];
 
   const contributionRows: MatrixRow[] = contributionKeys.map((marketKey) => {
-    const challengerStat = challengerDetails?.markets[marketKey];
-    const starterStat = starterDetails?.markets[marketKey];
+    const challengerStat = sideMeasure(challengerDetails, marketKey);
+    const starterStat = sideMeasure(starterDetails, marketKey);
+    // A summed row has no single fitted distribution to open; its component
+    // markets stay reachable from the chart's own metric strip.
+    const drillDown =
+      marketKey === COMBINED_YARDAGE_KEY
+        ? {}
+        : {
+            actionMetric: marketKey,
+            actionLabel: `Compare ${metricLabel(marketKey)} distributions`,
+          };
     return {
       key: marketKey,
       label: metricLabel(marketKey),
-      challengerValue: challengerStat?.expected_points,
-      starterValue: starterStat?.expected_points,
-      challengerDisplay: formatContribution(challengerStat?.expected_points),
-      starterDisplay: formatContribution(starterStat?.expected_points),
-      actionLabel: `Compare ${metricLabel(marketKey)} distributions`,
+      challengerValue: challengerStat?.expectedPoints,
+      starterValue: starterStat?.expectedPoints,
+      challengerDisplay: formatContribution(challengerStat?.expectedPoints),
+      starterDisplay: formatContribution(starterStat?.expectedPoints),
+      ...drillDown,
     };
   });
 
   const statValueRows: MatrixRow[] = contributionKeys.map((marketKey) => {
-    const challengerStat = challengerDetails?.markets[marketKey];
-    const starterStat = starterDetails?.markets[marketKey];
-    const challengerStatRange = marketRange(challengerStat);
-    const starterStatRange = marketRange(starterStat);
+    const challengerStat = sideMeasure(challengerDetails, marketKey);
+    const starterStat = sideMeasure(starterDetails, marketKey);
     // The league can score a stat negatively (interceptions), so the smaller
     // volume is the better weekly outcome. Read that from the scored points
     // rather than assuming every counted stat is helpful.
     const lowerWins = [challengerStat, starterStat].some(
-      (stat) => stat !== undefined && stat.expected_points < 0,
+      (stat) => stat !== null && stat.expectedPoints < 0,
     );
+    const drillDown =
+      marketKey === COMBINED_YARDAGE_KEY
+        ? {}
+        : {
+            actionMetric: marketKey,
+            actionLabel: `Compare ${metricLabel(marketKey)} stat values`,
+          };
     return {
       key: marketKey,
       label: metricLabel(marketKey),
-      challengerValue: challengerStatRange?.mid,
-      starterValue: starterStatRange?.mid,
-      challengerDisplay: formatRange(challengerStatRange, ''),
-      starterDisplay: formatRange(starterStatRange, ''),
+      challengerValue: challengerStat?.range?.mid,
+      starterValue: starterStat?.range?.mid,
+      challengerDisplay: formatRange(challengerStat?.range, ''),
+      starterDisplay: formatRange(starterStat?.range, ''),
       lowerWins,
-      challengerRange: challengerStatRange,
-      starterRange: starterStatRange,
-      actionLabel: `Compare ${metricLabel(marketKey)} stat values`,
+      challengerRange: challengerStat?.range ?? null,
+      starterRange: starterStat?.range ?? null,
+      ...drillDown,
     };
   });
 
@@ -511,6 +573,7 @@ export function PlayerComparisonInspector({
                   rows={projectionRows}
                   challengerName={challenger.name}
                   starterName={starter.name}
+                  onMetricChange={onMetricChange}
                 />
                 <tr className="matrix-group-row">
                   <th colSpan={3}>Matchup</th>
@@ -519,6 +582,7 @@ export function PlayerComparisonInspector({
                   rows={matchupRows}
                   challengerName={challenger.name}
                   starterName={starter.name}
+                  onMetricChange={onMetricChange}
                 />
                 {contributionRows.length ? (
                   <>
@@ -551,6 +615,9 @@ export function PlayerComparisonInspector({
             </div>
           ) : null}
           <p className="comparison-count-note">
+            {mergeYardage
+              ? `Rushing and receiving yards are summed because ${challenger.pos} and ${starter.pos} earn yardage in different markets; the combined range is sampled from both fitted distributions, not added percentile by percentile. Open either market from the chart's metric strip. `
+              : ''}
             Row wins are a transparent scan aid, not independent evidence or a confidence score.
             Fantasy-point and stat-value signals are counted separately because a stat and the
             points it produces are the same underlying market. The start recommendation remains the

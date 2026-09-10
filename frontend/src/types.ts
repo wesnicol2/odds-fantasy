@@ -67,6 +67,13 @@ export interface MarketDetail {
   lines: SportsbookLine[];
 }
 
+/** Several markets summed into one comparable quantity by the backend. */
+export interface CombinedMarketDetail {
+  markets: string[];
+  stat_range: [number, number, number];
+  expected_points: number;
+}
+
 export interface PlayerOddsDetails {
   player: {
     name: string;
@@ -90,6 +97,7 @@ export interface PlayerOddsDetails {
     books_used: number;
   } | null;
   markets: Record<string, MarketDetail>;
+  combined_markets?: Record<string, CombinedMarketDetail>;
   message?: string;
   error?: string;
   ratelimit?: string;
