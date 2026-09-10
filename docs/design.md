@@ -399,6 +399,18 @@ BYE teams remain visible and sort below playable defenses.
 
 Dashboard exposes only a small actionable subset. Defenses is where the user inspects the complete market.
 
+### Every defense number opens its own arithmetic
+
+No number in Defenses is a black box. Selecting any ranked value — opponent implied total, Floor, Mid, Ceiling, or the book count — opens a defense detail panel for that team with that number's derivation already showing, and the panel's own numbers are selectable the same way, so the detail surface behaves like the table rather than dead-ending.
+
+Each derivation shows the inputs, not a restatement of the result:
+
+- **Opponent implied total** — the formula, then one row per sportsbook giving that book's game total, the opponent's spread and the implied total they produce, then the median across those rows. Only books that posted both markets can contribute a row, and the row count is the book count shown in the table.
+- **Floor / Ceiling** — the opponent implied total, the assumed spread of team scores, the opponent score at the percentile being read, the points-allowed bracket that score lands in, and the league's points for that bracket. Floor reads the *high* opponent percentile and Ceiling the low, because a defense scores least when its opponent scores most.
+- **Mid** — every points-allowed bracket with its probability, the league's points, and the product, summing to the Mid the table ranked.
+
+The explanation must be supplied by the backend alongside the number it explains, never recomputed in the browser: a derivation that can drift from the ranked figure is worse than no derivation. The browser formats provenance and nothing else.
+
 ---
 
 ## Lineup

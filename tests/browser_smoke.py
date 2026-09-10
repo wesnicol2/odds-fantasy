@@ -298,13 +298,72 @@ def api_fixture(route: Route) -> None:
                         "opponent": "Las Vegas Raiders",
                         "game_date": "2026-09-13T20:25:00Z",
                         "implied_total": 17.25,
-                        "book_count": 6,
+                        "book_count": 2,
                         "taken": False,
                         "owner": None,
                         "owned_by_current": False,
                         "floor": 4.0,
                         "mid": 7.0,
                         "ceiling": 10.0,
+                        # Every derived number ships with the inputs behind it.
+                        "implied_books": [
+                            {
+                                "book": "draftkings",
+                                "game_total": 42.5,
+                                "opponent_spread": 8.0,
+                                "implied_total": 17.25,
+                            },
+                            {
+                                "book": "fanduel",
+                                "game_total": 43.5,
+                                "opponent_spread": 9.0,
+                                "implied_total": 17.25,
+                            },
+                        ],
+                        "range_breakdown": {
+                            "opponent_mean": 17.25,
+                            "sigma": 10.0,
+                            "floor": {
+                                "opponent_points": 30.06,
+                                "percentile": 0.9,
+                                "bracket": "pts_allow_28_34",
+                                "bracket_label": "28-34",
+                                "points": 4.0,
+                            },
+                            "ceiling": {
+                                "opponent_points": 4.44,
+                                "percentile": 0.1,
+                                "bracket": "pts_allow_1_6",
+                                "bracket_label": "1-6",
+                                "points": 10.0,
+                            },
+                            "mid": {
+                                "points": 7.0,
+                                "brackets": [
+                                    {
+                                        "bracket": "pts_allow_1_6",
+                                        "bracket_label": "1-6",
+                                        "probability": 0.1,
+                                        "points": 10.0,
+                                        "contribution": 1.0,
+                                    },
+                                    {
+                                        "bracket": "pts_allow_7_13",
+                                        "bracket_label": "7-13",
+                                        "probability": 0.3,
+                                        "points": 4.0,
+                                        "contribution": 1.2,
+                                    },
+                                    {
+                                        "bracket": "pts_allow_14_20",
+                                        "bracket_label": "14-20",
+                                        "probability": 0.6,
+                                        "points": 8.0,
+                                        "contribution": 4.8,
+                                    },
+                                ],
+                            },
+                        },
                     },
                     {
                         "defense": "Jacksonville Jaguars",
@@ -312,13 +371,28 @@ def api_fixture(route: Route) -> None:
                         "opponent": "Tennessee Titans",
                         "game_date": "2026-09-13T17:00:00Z",
                         "implied_total": 19.5,
-                        "book_count": 5,
+                        "book_count": 2,
                         "taken": True,
                         "owner": "Other Team",
                         "owned_by_current": False,
                         "floor": 3.0,
                         "mid": 6.0,
                         "ceiling": 9.0,
+                        "implied_books": [
+                            {
+                                "book": "draftkings",
+                                "game_total": 45.0,
+                                "opponent_spread": 6.0,
+                                "implied_total": 19.5,
+                            },
+                            {
+                                "book": "fanduel",
+                                "game_total": 46.0,
+                                "opponent_spread": 7.0,
+                                "implied_total": 19.5,
+                            },
+                        ],
+                        "range_breakdown": None,
                     },
                 ],
                 "note": "DEF fantasy ranges use only the points-allowed component.",
@@ -611,6 +685,45 @@ def main() -> None:
         first_defense = defense_view.locator("tbody tr").first
         assert "17.3" in first_defense.inner_text()
         assert "Available" in first_defense.inner_text()
+
+        # Every ranked number opens the arithmetic that produced it.
+        defense_view.get_by_role(
+            "button", name="Explain Los Angeles Chargers opponent implied total 17.3", exact=True
+        ).click()
+        detail = page.get_by_role("complementary", name="Defense detail")
+        detail.get_by_text("Los Angeles Chargers", exact=True).wait_for()
+        implied_explain = detail.get_by_role("region", name="Opponent implied total derivation")
+        implied_explain.get_by_text(
+            "implied total = game total \u00f7 2 \u2212 opponent spread \u00f7 2", exact=True
+        ).wait_for()
+        book_table = implied_explain.get_by_role(
+            "table", name="Opponent implied total by sportsbook"
+        )
+        # The book rows are the rows the median was actually taken over.
+        assert book_table.locator("tbody tr").count() == 2
+        draftkings_row = book_table.locator("tbody tr").filter(has_text="draftkings")
+        assert "42.5" in draftkings_row.inner_text()
+        assert "+8.0" in draftkings_row.inner_text()
+        implied_explain.get_by_text("Median of 2 books = 17.3", exact=True).wait_for()
+
+        # Mid is a probability-weighted sum, and the shown parts add to the shown total.
+        detail.get_by_role("button", name="Mid").first.click()
+        mid_explain = detail.get_by_role("region", name="Mid derivation")
+        bracket_table = mid_explain.get_by_role("table", name="Mid by points-allowed bracket")
+        assert bracket_table.locator("tbody tr").count() == 3
+        assert "14-20" in bracket_table.inner_text()
+        assert "60.0%" in bracket_table.inner_text()
+        mid_explain.get_by_text("Sum of contributions = 7.0", exact=True).wait_for()
+
+        # Floor reads a single bracket at the high opponent percentile.
+        detail.get_by_role("button", name="Floor").first.click()
+        floor_explain = detail.get_by_role("region", name="Floor derivation")
+        floor_explain.get_by_text("Opponent points at the 90th percentile", exact=True).wait_for()
+        floor_explain.get_by_text("30.1", exact=True).wait_for()
+        floor_explain.get_by_text("Floor = 4.0", exact=True).wait_for()
+
+        detail.get_by_role("button", name="Close", exact=True).click()
+        assert page.get_by_role("complementary", name="Defense detail").count() == 0
 
         # Lineup remains the detailed optimizer and exposes unsupported slots explicitly.
         primary_nav.get_by_role("button", name="Lineup", exact=True).click()

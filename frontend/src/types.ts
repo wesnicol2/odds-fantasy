@@ -111,6 +111,38 @@ export interface ChartEvidence {
   lines: SportsbookLine[];
 }
 
+/** One sportsbook's total and spread, plus the implied total they produce. */
+export interface ImpliedBookLine {
+  book: string;
+  game_total: number;
+  opponent_spread: number;
+  implied_total: number;
+}
+
+export interface DefenseBracketRow {
+  bracket: string;
+  bracket_label: string;
+  probability: number;
+  points: number;
+  contribution: number;
+}
+
+export interface DefenseBracketPick {
+  opponent_points: number;
+  percentile: number;
+  bracket: string;
+  bracket_label: string;
+  points: number;
+}
+
+export interface DefenseRangeBreakdown {
+  opponent_mean: number;
+  sigma: number;
+  floor: DefenseBracketPick;
+  ceiling: DefenseBracketPick;
+  mid: { points: number; brackets: DefenseBracketRow[] };
+}
+
 export interface DefenseRow {
   defense: string;
   abbr: string | null;
@@ -124,6 +156,8 @@ export interface DefenseRow {
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
+  implied_books?: ImpliedBookLine[];
+  range_breakdown?: DefenseRangeBreakdown | null;
 }
 
 export interface DefenseResponse {
