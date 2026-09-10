@@ -106,6 +106,26 @@ class PlayerDetailsTest(TestCase):
         self.assertGreater(max(probabilities), 0)
 
     @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
+    def test_detail_exposes_combined_yardage_for_cross_position_comparison(self, _mock_context):
+        result = get_player_odds_details(
+            username="u",
+            season="2026",
+            week="this",
+            name="James Cook",
+        )
+        combined = result["combined_markets"]["rush_reception_yds"]
+        self.assertEqual(combined["markets"], ["player_rush_yds"])
+        self.assertEqual(
+            combined["stat_range"],
+            result["markets"]["player_rush_yds"]["stat_range"],
+        )
+        self.assertAlmostEqual(
+            combined["expected_points"],
+            result["markets"]["player_rush_yds"]["expected_points"],
+            places=3,
+        )
+
+    @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
     def test_name_normalization_matches_suffixes(self, _mock_context):
         result = get_player_odds_details(
             username="u",

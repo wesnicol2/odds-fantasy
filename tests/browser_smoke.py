@@ -37,6 +37,16 @@ RUSH_GRAPH = {
         {"x": 120, "probability": 0.002},
     ],
 }
+RECEIVING_GRAPH = {
+    "kind": "continuous_density",
+    "points": [
+        {"x": 20, "probability": 0.004},
+        {"x": 40, "probability": 0.011},
+        {"x": 55, "probability": 0.014},
+        {"x": 75, "probability": 0.007},
+        {"x": 95, "probability": 0.002},
+    ],
+}
 RECEPTIONS_GRAPH = {
     "kind": "discrete_pmf",
     "points": [
@@ -183,18 +193,36 @@ def api_fixture(route: Route) -> None:
                     "books_used": 6,
                 },
                 "markets": {
-                    "player_rush_yds": {
-                        "stat_range": [45, 75, 115],
-                        "expected_points": mean - 3.7,
-                        "graph": RUSH_GRAPH,
+                    # The back is priced for rushing, the receiver is not: the
+                    # exact mismatch the combined yardage row exists to fix.
+                    **(
+                        {}
+                        if is_receiver
+                        else {
+                            "player_rush_yds": {
+                                "stat_range": [45, 75, 115],
+                                "expected_points": 12.3,
+                                "graph": RUSH_GRAPH,
+                                "anchors": [
+                                    {"threshold": 64.5, "survival": 0.68},
+                                    {"threshold": 84.5, "survival": 0.39},
+                                ],
+                                "lines": market_lines(64.5, 84.5),
+                            }
+                        }
+                    ),
+                    "player_reception_yds": {
+                        "stat_range": [30, 52, 85] if is_receiver else [5, 15, 30],
+                        "expected_points": 11.8 if is_receiver else 1.5,
+                        "graph": RECEIVING_GRAPH,
                         "anchors": [
-                            {"threshold": 64.5, "survival": 0.68},
-                            {"threshold": 84.5, "survival": 0.39},
+                            {"threshold": 44.5, "survival": 0.61},
+                            {"threshold": 60.5, "survival": 0.34},
                         ],
-                        "lines": market_lines(64.5, 84.5),
+                        "lines": market_lines(44.5, 60.5),
                     },
                     "player_receptions": {
-                        "stat_range": [2, 4, 6],
+                        "stat_range": [4, 7, 10] if is_receiver else [2, 4, 6],
                         "expected_points": 0.0,
                         "graph": RECEPTIONS_GRAPH,
                         "anchors": [
@@ -213,6 +241,19 @@ def api_fixture(route: Route) -> None:
                         ],
                         "lines": market_lines(0.0, 2.0),
                     },
+                },
+                # Percentiles are not additive, so the backend samples the
+                # combined yardage range instead of adding the components.
+                "combined_markets": {
+                    "rush_reception_yds": {
+                        "markets": (
+                            ["player_reception_yds"]
+                            if is_receiver
+                            else ["player_rush_yds", "player_reception_yds"]
+                        ),
+                        "stat_range": [30, 52, 85] if is_receiver else [58, 91, 130],
+                        "expected_points": 11.8 if is_receiver else 13.8,
+                    }
                 },
                 "ratelimit": "Odds API · 499 remaining",
             },
@@ -349,29 +390,84 @@ def main() -> None:
 
         inspector = page.get_by_role("complementary", name="Player inspector")
         inspector.get_by_text("This week\u2019s tie-breaker matrix", exact=True).wait_for()
+
+        def pane_order() -> list[str]:
+            return page.locator(".workspace > *").evaluate_all(
+                "nodes => nodes.map((node) => node.getAttribute('aria-label'))"
+            )
+
+        # Comparing leads with the decision: matrix, then chart, then the ranking checkboxes.
+        assert pane_order() == ["Player inspector", "Probability analysis", "Player ranking"]
         inspector.get_by_text("Start Alpha Runner", exact=True).wait_for()
         inspector.get_by_text(
             "Beta Receiver is 2.0 lineup FP back after re-optimizing every eligible slot.",
             exact=True,
         ).wait_for()
+        # Fantasy-point and stat-value signals are tallied separately, never merged.
         inspector.get_by_text(
-            "Alpha Runner leads 7\u20130 across 9 comparable weekly signals", exact=True
+            "Alpha Runner leads 7\u20130 across 9 comparable fantasy-point signals", exact=True
+        ).wait_for()
+        inspector.get_by_text(
+            "Signals are tied 1\u20131 across 3 comparable stat-value signals", exact=True
         ).wait_for()
         matrix = inspector.get_by_role("table", name="Weekly player comparison matrix")
         assert "Beta Receiver" in matrix.inner_text()
         assert "Alpha Runner" in matrix.inner_text()
         assert "Team implied total" in matrix.inner_text()
         assert "25.5 pts" in matrix.inner_text()
-        rushing_row = matrix.locator("tbody tr").filter(has_text="Rushing yards")
-        assert "+11.8 FP" in rushing_row.inner_text()
-        assert "+13.8 FP" in rushing_row.inner_text()
-        matrix.get_by_role("button", name="Compare Rushing yards distributions", exact=True).click()
-        rushing_comparison = inspector.get_by_role("region", name="Rushing yards comparison")
-        rushing_comparison.get_by_text("Rushing yards comparison", exact=True).wait_for()
-        assert "+11.8 FP" in rushing_comparison.inner_text()
-        assert "+13.8 FP" in rushing_comparison.inner_text()
+
+        # Fantasy points carry a floor/mid/ceiling thermometer alongside the scored rows.
+        fantasy_range_row = matrix.locator("tbody tr").filter(has_text="Fantasy point range")
+        assert "8 \u00b7 15 \u00b7 24 FP" in fantasy_range_row.inner_text()
+        assert "10 \u00b7 17 \u00b7 25 FP" in fantasy_range_row.inner_text()
+        assert fantasy_range_row.locator(".range-glyph").count() == 2
+        assert "Edge" not in fantasy_range_row.inner_text()
+
+        # A back and a pass catcher earn yardage in different markets, so RB vs WR
+        # compares their summed yardage instead of two half-empty rows.
+        assert "Rushing + receiving yards" in matrix.inner_text()
+        assert "Rushing yards" not in matrix.inner_text()
+        assert "Receiving yards" not in matrix.inner_text()
+        combined_rows = matrix.locator("tbody tr").filter(has_text="Rushing + receiving yards")
+        assert combined_rows.count() == 2
+        # A summed row has no single fitted distribution, so it is not a drill-down.
+        assert combined_rows.locator("button").count() == 0
+        combined_points_row = matrix.locator("tbody tr").filter(has_text="+11.8 FP")
+        assert "+13.8 FP" in combined_points_row.inner_text()
+
+        # Stat value is measured on its own scale, with all three percentiles present.
+        # Group headings render uppercase, so compare case-insensitively.
+        assert "STAT VALUE \u00b7 10TH \u00b7 MEDIAN \u00b7 90TH" in matrix.inner_text().upper()
+        combined_value_row = matrix.locator("tbody tr").filter(has_text="58 \u00b7 91 \u00b7 130")
+        assert "30 \u00b7 52 \u00b7 85" in combined_value_row.inner_text()
+        assert combined_value_row.locator(".range-glyph").count() == 2
+        assert "matrix-winner" in (
+            combined_value_row.locator("td").nth(1).get_attribute("class") or ""
+        )
+        receptions_value_row = matrix.locator("tbody tr").filter(has_text="4 \u00b7 7 \u00b7 10")
+        assert "matrix-winner" in (
+            receptions_value_row.locator("td").first.get_attribute("class") or ""
+        )
+        # Identical stat ranges award neither player a stat-value win.
+        anytime_value_row = matrix.locator("tbody tr").filter(has_text="0 \u00b7 1 \u00b7 2")
+        assert "Edge" not in anytime_value_row.inner_text()
+
+        # Un-merged markets keep both drill-downs.
+        matrix.get_by_role("button", name="Compare Receptions stat values", exact=True).click()
+        receptions_comparison = inspector.get_by_role("region", name="Receptions comparison")
+        receptions_comparison.get_by_text("Receptions comparison", exact=True).wait_for()
+        stat_range_row = receptions_comparison.locator("tbody tr").filter(
+            has_text="Stat value range"
+        )
+        assert stat_range_row.locator(".range-glyph").count() == 2
+        inspector.get_by_role("button", name="Full matrix", exact=True).click()
+        matrix.get_by_role("button", name="Compare Receptions distributions", exact=True).click()
+        receptions_comparison.get_by_text("Receptions comparison", exact=True).wait_for()
         inspector.get_by_role("button", name="Full matrix", exact=True).click()
         inspector.get_by_role("button", name="Exit comparison", exact=True).click()
+
+        # Exiting restores the normal ranking/chart/inspector workstation order.
+        assert pane_order() == ["Player ranking", "Probability analysis", "Player inspector"]
 
         primary_nav = page.get_by_role("navigation", name="Primary navigation")
 
@@ -396,11 +492,11 @@ def main() -> None:
 
         # Mean fantasy points expose exact additive stat sources and drill into the chosen stat.
         inspector.get_by_text("Mean point sources", exact=True).wait_for()
-        inspector.get_by_role("button", name="Analyze Rushing yards, +13.8 FP").click()
+        inspector.get_by_role("button", name="Analyze Rushing yards, +12.3 FP").click()
 
         # Continuous stat exploration uses probability density and keeps evidence inspectable.
         inspector.get_by_text("Rushing yards evidence", exact=True).wait_for()
-        inspector.get_by_text("+13.8 FP", exact=True).wait_for()
+        inspector.get_by_text("+12.3 FP", exact=True).wait_for()
         inspector.get_by_text("2 consensus thresholds", exact=True).wait_for()
         inspector.get_by_text("2 source lines", exact=True).wait_for()
         inspector.get_by_text("2 books", exact=True).wait_for()

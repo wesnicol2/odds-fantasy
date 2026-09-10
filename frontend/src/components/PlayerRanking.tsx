@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
 import type { ProjectionPlayer } from '../types';
+import { RangeThermometer } from './RangeThermometer';
 
 interface PlayerRankingProps {
   players: ProjectionPlayer[];
@@ -19,11 +20,6 @@ interface PlayerRankingProps {
 
 function formatPoints(value: number | null): string {
   return value === null ? '—' : value.toFixed(1);
-}
-
-function glyphPercent(value: number, minimum: number, maximum: number): number {
-  if (maximum <= minimum) return 50;
-  return Math.min(100, Math.max(0, ((value - minimum) / (maximum - minimum)) * 100));
 }
 
 export function PlayerRanking({
@@ -131,15 +127,6 @@ export function PlayerRanking({
               const targetProbability = probabilityAtTarget(player.curve, target);
               const hasRange =
                 player.floor !== null && player.mid !== null && player.ceiling !== null;
-              const floorPercent = hasRange
-                ? glyphPercent(player.floor ?? 0, glyphMinimum, glyphMaximum)
-                : 0;
-              const midPercent = hasRange
-                ? glyphPercent(player.mid ?? 0, glyphMinimum, glyphMaximum)
-                : 0;
-              const ceilingPercent = hasRange
-                ? glyphPercent(player.ceiling ?? 0, glyphMinimum, glyphMaximum)
-                : 0;
 
               return (
                 <tr
@@ -175,25 +162,14 @@ export function PlayerRanking({
                   <td className="number">{formatPoints(player.ceiling)}</td>
                   <td>
                     {hasRange ? (
-                      <div
-                        className="range-glyph"
-                        role="img"
-                        aria-label={`Floor ${formatPoints(player.floor)}, mid ${formatPoints(player.mid)}, ceiling ${formatPoints(player.ceiling)}`}
-                      >
-                        <span
-                          className="range-segment"
-                          style={{
-                            left: `${floorPercent}%`,
-                            width: `${ceilingPercent - floorPercent}%`,
-                          }}
-                        />
-                        <span className="range-end floor" style={{ left: `${floorPercent}%` }} />
-                        <span className="range-mid" style={{ left: `${midPercent}%` }} />
-                        <span
-                          className="range-end ceiling"
-                          style={{ left: `${ceilingPercent}%` }}
-                        />
-                      </div>
+                      <RangeThermometer
+                        floor={player.floor ?? 0}
+                        mid={player.mid ?? 0}
+                        ceiling={player.ceiling ?? 0}
+                        minimum={glyphMinimum}
+                        maximum={glyphMaximum}
+                        label={`Floor ${formatPoints(player.floor)}, mid ${formatPoints(player.mid)}, ceiling ${formatPoints(player.ceiling)}`}
+                      />
                     ) : (
                       <span className="subtle">—</span>
                     )}

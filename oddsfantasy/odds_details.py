@@ -9,7 +9,13 @@ from . import odds_client, ratelimit
 from .defense import implied_team_total
 from .graph_data import distribution_graph
 from .market_math import collect_anchors
-from .projection import project_player, survival_curve
+from .projection import (
+    COMBINED_YARDAGE_KEY,
+    COMBINED_YARDAGE_MARKETS,
+    combined_stat_range,
+    project_player,
+    survival_curve,
+)
 from .services import NO_GAMES_SCHEDULED_MESSAGE, _load_week_context
 
 
@@ -204,6 +210,7 @@ def get_player_odds_details(
             "player": {"name": name},
             "projection": None,
             "markets": {},
+            "combined_markets": {},
             "message": NO_GAMES_SCHEDULED_MESSAGE,
             "ratelimit": ratelimit.format_status(),
             "ratelimit_info": ratelimit.get_details(),
@@ -223,6 +230,7 @@ def get_player_odds_details(
             "player": {"name": name},
             "projection": None,
             "markets": {},
+            "combined_markets": {},
             "ratelimit": ratelimit.format_status(),
             "ratelimit_info": ratelimit.get_details(),
         }
@@ -256,6 +264,20 @@ def get_player_odds_details(
             "lines": _line_rows(by_book, market_key),
         }
 
+    # Rushing and receiving yardage summed into one comparable quantity. The
+    # range is sampled by the projection engine because percentiles do not add.
+    combined_markets: dict[str, dict] = {}
+    combined_range = combined_stat_range(projection.stats)
+    if combined_range is not None:
+        sources = [key for key in COMBINED_YARDAGE_MARKETS if key in projection.stats]
+        combined_markets[COMBINED_YARDAGE_KEY] = {
+            "markets": sources,
+            "stat_range": [round(value, 2) for value in combined_range],
+            "expected_points": round(
+                sum(projection.stats[key].expected_points for key in sources), 3
+            ),
+        }
+
     has_projection = projection.has_projection
     return {
         "player": {
@@ -276,6 +298,7 @@ def get_player_odds_details(
         ),
         "matchup": matchup,
         "markets": markets,
+        "combined_markets": combined_markets,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }

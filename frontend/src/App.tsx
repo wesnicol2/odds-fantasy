@@ -602,6 +602,168 @@ export function App() {
           ? defensePayload?.ratelimit
           : lineupPayload?.ratelimit;
 
+  const rankingPane = (
+    <aside key="ranking" className="ranking-pane" aria-label="Player ranking">
+      <div className="pane-heading">
+        <span className="eyebrow">Ranking</span>
+        <h2>{target === null ? 'Roster projections' : `Target · ${target.toFixed(1)} FP`}</h2>
+      </div>
+      {error ? <div className="error-state">{error}</div> : null}
+      {!error && report?.message ? <div className="status-note">{report.message}</div> : null}
+      {!identityReady ? (
+        <div className="empty-state">Choose a Sleeper league and team to load projections.</div>
+      ) : null}
+      {!error && !loading && identityReady ? (
+        <PlayerRanking
+          players={players}
+          target={fantasyPointsMetric ? target : null}
+          selectedPlayer={selectedPlayer}
+          comparedPlayers={selectedPlayers}
+          selectedPositions={selectedPositions}
+          hoveredPlayer={hoveredPlayer}
+          onSelectPlayer={selectPlayer}
+          onToggleComparedPlayer={toggleComparedPlayer}
+          onTogglePosition={togglePosition}
+          onSelectAll={() =>
+            setSelectedPlayers(
+              players.filter((player) => player.curve.length).map((player) => player.name),
+            )
+          }
+          onSelectNone={() => setSelectedPlayers([])}
+          onHoverPlayer={setHoveredPlayer}
+        />
+      ) : null}
+    </aside>
+  );
+
+  const analysisPane = (
+    <section key="analysis" className="analysis-pane" aria-label="Probability analysis">
+      <div className="pane-heading split">
+        <div>
+          <span className="eyebrow">Probability</span>
+          <h2>
+            {fantasyPointsMetric
+              ? `${activeMetricLabel} distribution`
+              : lowGranularityMetric
+                ? `${activeMetricLabel} thresholds`
+                : `${activeMetricLabel} distribution`}
+          </h2>
+          <p className="pane-description">
+            {fantasyPointsMetric
+              ? 'Chance of landing in each one-point fantasy-score bucket.'
+              : lowGranularityMetric
+                ? `Chance of meeting or exceeding each ${activeMetricLabel.toLowerCase()} count threshold.`
+                : highGranularityMetric
+                  ? `Chance of each exact ${activeMetricLabel.toLowerCase()} value; the line is smoothed only between integer outcomes.`
+                  : `Probability density across the fitted ${activeMetricLabel.toLowerCase()} distribution.`}
+          </p>
+        </div>
+        {fantasyPointsMetric ? (
+          <div className="target-controls">
+            <label className="target-control">
+              <span>Target FP</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                value={target ?? ''}
+                placeholder="Set"
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTarget(value === '' ? null : Number(value));
+                }}
+              />
+            </label>
+            {target !== null ? (
+              <button className="clear-target" type="button" onClick={() => setTarget(null)}>
+                Clear
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <fieldset className="metric-strip">
+        <legend className="sr-only">Probability metric</legend>
+        {availableMetrics.map((value) => (
+          <button
+            key={value}
+            type="button"
+            className={metric === value ? 'active' : ''}
+            onClick={() => setMetric(value)}
+          >
+            {metricLabel(value)}
+          </button>
+        ))}
+      </fieldset>
+
+      <div className="chart-instruction">
+        {fantasyPointsMetric
+          ? target === null
+            ? 'Click and drag in the chart to set a target.'
+            : 'Drag the dashed target line or type an exact value.'
+          : lowGranularityMetric
+            ? `Each thermometer shows P(${activeMetricLabel} ≥ threshold); player markers are fitted probabilities derived from sportsbook lines.`
+            : 'Exact sportsbook thresholds are marked on the x-axis. Consensus P(≥x) anchors remain in the inspector because this chart shows P(x).'}
+      </div>
+      {fantasyPointsMetric ? (
+        <ProbabilityChart
+          series={graphSeries}
+          target={target}
+          activePlayerId={hoveredPlayer ?? selectedPlayer}
+          metric={metric}
+          xAxisName={activeMetricLabel}
+          yAxisName={`P(${activeMetricLabel} = x)`}
+          targetEnabled
+          onTargetChange={setTarget}
+          onPlayerHover={setHoveredPlayer}
+          onPlayerSelect={selectPlayer}
+        />
+      ) : (
+        <StatProbabilityChart
+          series={graphSeries}
+          activePlayerId={hoveredPlayer ?? selectedPlayer}
+          metric={metric}
+          xAxisName={activeMetricLabel}
+          evidence={chartEvidence}
+          onPlayerHover={setHoveredPlayer}
+          onPlayerSelect={selectPlayer}
+        />
+      )}
+    </section>
+  );
+
+  const inspectorPane = (
+    <aside key="inspector" className="inspector-pane" aria-label="Player inspector">
+      <div className="pane-heading">
+        <span className="eyebrow">Inspector</span>
+      </div>
+      {activeComparison ? (
+        <PlayerComparisonInspector
+          challenger={activeComparison.challenger}
+          starter={activeComparison.starter}
+          challengerDetails={activeComparison.challengerDetails}
+          starterDetails={activeComparison.starterDetails}
+          detailsLoading={activeComparison.detailsLoading}
+          lineupDelta={activeComparison.context.lineupDelta}
+          target={target}
+          metric={metric}
+          onMetricChange={setMetric}
+          onExit={() => setComparisonContext(null)}
+        />
+      ) : (
+        <PlayerInspector
+          player={selected}
+          target={target}
+          metric={metric}
+          details={selectedDetails}
+          detailsLoading={selectedDetailsLoading}
+          onMetricChange={setMetric}
+        />
+      )}
+    </aside>
+  );
+
   return (
     <div className="app-frame">
       <header className="topbar">
@@ -676,163 +838,9 @@ export function App() {
 
       {view === 'players' ? (
         <main className={activeComparison ? 'workspace comparison-workspace' : 'workspace'}>
-          <aside className="ranking-pane" aria-label="Player ranking">
-            <div className="pane-heading">
-              <span className="eyebrow">Ranking</span>
-              <h2>{target === null ? 'Roster projections' : `Target · ${target.toFixed(1)} FP`}</h2>
-            </div>
-            {error ? <div className="error-state">{error}</div> : null}
-            {!error && report?.message ? <div className="status-note">{report.message}</div> : null}
-            {!identityReady ? (
-              <div className="empty-state">
-                Choose a Sleeper league and team to load projections.
-              </div>
-            ) : null}
-            {!error && !loading && identityReady ? (
-              <PlayerRanking
-                players={players}
-                target={fantasyPointsMetric ? target : null}
-                selectedPlayer={selectedPlayer}
-                comparedPlayers={selectedPlayers}
-                selectedPositions={selectedPositions}
-                hoveredPlayer={hoveredPlayer}
-                onSelectPlayer={selectPlayer}
-                onToggleComparedPlayer={toggleComparedPlayer}
-                onTogglePosition={togglePosition}
-                onSelectAll={() =>
-                  setSelectedPlayers(
-                    players.filter((player) => player.curve.length).map((player) => player.name),
-                  )
-                }
-                onSelectNone={() => setSelectedPlayers([])}
-                onHoverPlayer={setHoveredPlayer}
-              />
-            ) : null}
-          </aside>
-
-          <section className="analysis-pane" aria-label="Probability analysis">
-            <div className="pane-heading split">
-              <div>
-                <span className="eyebrow">Probability</span>
-                <h2>
-                  {fantasyPointsMetric
-                    ? `${activeMetricLabel} distribution`
-                    : lowGranularityMetric
-                      ? `${activeMetricLabel} thresholds`
-                      : `${activeMetricLabel} distribution`}
-                </h2>
-                <p className="pane-description">
-                  {fantasyPointsMetric
-                    ? 'Chance of landing in each one-point fantasy-score bucket.'
-                    : lowGranularityMetric
-                      ? `Chance of meeting or exceeding each ${activeMetricLabel.toLowerCase()} count threshold.`
-                      : highGranularityMetric
-                        ? `Chance of each exact ${activeMetricLabel.toLowerCase()} value; the line is smoothed only between integer outcomes.`
-                        : `Probability density across the fitted ${activeMetricLabel.toLowerCase()} distribution.`}
-                </p>
-              </div>
-              {fantasyPointsMetric ? (
-                <div className="target-controls">
-                  <label className="target-control">
-                    <span>Target FP</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.5"
-                      value={target ?? ''}
-                      placeholder="Set"
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setTarget(value === '' ? null : Number(value));
-                      }}
-                    />
-                  </label>
-                  {target !== null ? (
-                    <button className="clear-target" type="button" onClick={() => setTarget(null)}>
-                      Clear
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-
-            <fieldset className="metric-strip">
-              <legend className="sr-only">Probability metric</legend>
-              {availableMetrics.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={metric === value ? 'active' : ''}
-                  onClick={() => setMetric(value)}
-                >
-                  {metricLabel(value)}
-                </button>
-              ))}
-            </fieldset>
-
-            <div className="chart-instruction">
-              {fantasyPointsMetric
-                ? target === null
-                  ? 'Click and drag in the chart to set a target.'
-                  : 'Drag the dashed target line or type an exact value.'
-                : lowGranularityMetric
-                  ? `Each thermometer shows P(${activeMetricLabel} ≥ threshold); player markers are fitted probabilities derived from sportsbook lines.`
-                  : 'Exact sportsbook thresholds are marked on the x-axis. Consensus P(≥x) anchors remain in the inspector because this chart shows P(x).'}
-            </div>
-            {fantasyPointsMetric ? (
-              <ProbabilityChart
-                series={graphSeries}
-                target={target}
-                activePlayerId={hoveredPlayer ?? selectedPlayer}
-                metric={metric}
-                xAxisName={activeMetricLabel}
-                yAxisName={`P(${activeMetricLabel} = x)`}
-                targetEnabled
-                onTargetChange={setTarget}
-                onPlayerHover={setHoveredPlayer}
-                onPlayerSelect={selectPlayer}
-              />
-            ) : (
-              <StatProbabilityChart
-                series={graphSeries}
-                activePlayerId={hoveredPlayer ?? selectedPlayer}
-                metric={metric}
-                xAxisName={activeMetricLabel}
-                evidence={chartEvidence}
-                onPlayerHover={setHoveredPlayer}
-                onPlayerSelect={selectPlayer}
-              />
-            )}
-          </section>
-
-          <aside className="inspector-pane" aria-label="Player inspector">
-            <div className="pane-heading">
-              <span className="eyebrow">Inspector</span>
-            </div>
-            {activeComparison ? (
-              <PlayerComparisonInspector
-                challenger={activeComparison.challenger}
-                starter={activeComparison.starter}
-                challengerDetails={activeComparison.challengerDetails}
-                starterDetails={activeComparison.starterDetails}
-                detailsLoading={activeComparison.detailsLoading}
-                lineupDelta={activeComparison.context.lineupDelta}
-                target={target}
-                metric={metric}
-                onMetricChange={setMetric}
-                onExit={() => setComparisonContext(null)}
-              />
-            ) : (
-              <PlayerInspector
-                player={selected}
-                target={target}
-                metric={metric}
-                details={selectedDetails}
-                detailsLoading={selectedDetailsLoading}
-                onMetricChange={setMetric}
-              />
-            )}
-          </aside>
+          {activeComparison
+            ? [inspectorPane, analysisPane, rankingPane]
+            : [rankingPane, analysisPane, inspectorPane]}
         </main>
       ) : null}
 
