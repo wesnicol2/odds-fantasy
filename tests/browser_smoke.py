@@ -209,6 +209,7 @@ def api_fixture(route: Route) -> None:
                         else {
                             "player_rush_yds": {
                                 "stat_range": [45, 75, 115],
+                                "stat_mean": 78.4,
                                 "expected_points": 12.3,
                                 "graph": RUSH_GRAPH,
                                 "anchors": [
@@ -221,6 +222,7 @@ def api_fixture(route: Route) -> None:
                     ),
                     "player_reception_yds": {
                         "stat_range": [30, 52, 85] if is_receiver else [5, 15, 30],
+                        "stat_mean": 55.2 if is_receiver else 16.1,
                         "expected_points": 11.8 if is_receiver else 1.5,
                         "graph": RECEIVING_GRAPH,
                         "anchors": [
@@ -231,6 +233,7 @@ def api_fixture(route: Route) -> None:
                     },
                     "player_receptions": {
                         "stat_range": [4, 7, 10] if is_receiver else [2, 4, 6],
+                        "stat_mean": 6.8 if is_receiver else 4.1,
                         "expected_points": 0.0,
                         "graph": RECEPTIONS_GRAPH,
                         "anchors": [
@@ -243,6 +246,7 @@ def api_fixture(route: Route) -> None:
                     # player carrying more of it rather than the one with less.
                     "player_pass_interceptions": {
                         "stat_range": [0, 1, 2] if is_receiver else [0, 0, 1],
+                        "stat_mean": 1.1 if is_receiver else 0.4,
                         "expected_points": -1.5 if is_receiver else -0.5,
                         "graph": INTERCEPTIONS_GRAPH,
                         "anchors": [
@@ -253,6 +257,7 @@ def api_fixture(route: Route) -> None:
                     },
                     "player_anytime_td": {
                         "stat_range": [0, 1, 2],
+                        "stat_mean": 0.9,
                         "expected_points": 3.7,
                         "graph": ANYTIME_TD_GRAPH,
                         "anchors": [
@@ -272,6 +277,7 @@ def api_fixture(route: Route) -> None:
                             else ["player_rush_yds", "player_reception_yds"]
                         ),
                         "stat_range": [30, 52, 85] if is_receiver else [58, 91, 130],
+                        "stat_mean": 55.2 if is_receiver else 94.5,
                         "expected_points": 11.8 if is_receiver else 13.8,
                     }
                 },
@@ -444,13 +450,13 @@ def main() -> None:
 
         # The matrix is numbers only: no glyphs, and no drawn edge chips.
         assert matrix.locator(".range-glyph").count() == 0
-        fantasy_range_row = matrix.locator("tbody tr").filter(has_text="Fantasy point range")
-        assert "8 \u00b7 15 \u00b7 24 FP" in fantasy_range_row.inner_text()
-        assert "10 \u00b7 17 \u00b7 25 FP" in fantasy_range_row.inner_text()
+        # Floor / Median / Ceiling are their own rows, so no combined range row repeats them.
+        assert "Fantasy point range" not in matrix.inner_text()
         # An unscored row is never shaded.
+        kickoff_row = matrix.locator("tbody tr").filter(has_text="Kickoff")
         assert not any(
             "background-color"
-            in (fantasy_range_row.locator("td").nth(index).get_attribute("style") or "")
+            in (kickoff_row.locator("td").nth(index).get_attribute("style") or "")
             for index in (0, 1)
         )
 
@@ -468,9 +474,11 @@ def main() -> None:
 
         # Stat value is measured on its own scale, with all three percentiles present.
         # Group headings render uppercase, so compare case-insensitively.
-        assert "STAT VALUE \u00b7 10TH \u00b7 MEDIAN \u00b7 90TH" in matrix.inner_text().upper()
-        combined_value_row = matrix.locator("tbody tr").filter(has_text="58 \u00b7 91 \u00b7 130")
-        assert "30 \u00b7 52 \u00b7 85" in combined_value_row.inner_text()
+        assert "STAT VALUE \u00b7 WEEKLY MEAN" in matrix.inner_text().upper()
+        # One number per stat, in the stat's own unit, not a three-part range.
+        combined_value_row = matrix.locator("tbody tr").filter(has_text="94.5")
+        assert "55.2" in combined_value_row.inner_text()
+        assert "\u00b7" not in combined_value_row.locator("td").first.inner_text()
 
         def shade(row, index: int) -> str:
             return row.locator("td").nth(index).get_attribute("style") or ""
@@ -479,13 +487,13 @@ def main() -> None:
         combined_shade = shade(combined_value_row, 1)
         assert "75, 200, 131" in combined_shade, combined_shade
         assert not shade(combined_value_row, 0)
-        receptions_value_row = matrix.locator("tbody tr").filter(has_text="4 \u00b7 7 \u00b7 10")
+        receptions_value_row = matrix.locator("tbody tr").filter(has_text="6.8")
         assert "75, 200, 131" in shade(receptions_value_row, 0)
         # A wider relative gap must read stronger than a narrow one.
         floor_row = matrix.locator("tbody tr").filter(has_text="8.0 FP")
         assert alpha_of(shade(combined_value_row, 1)) > alpha_of(shade(floor_row, 1))
         # Identical stat ranges award neither player a stat-value win, so neither is tinted.
-        anytime_value_row = matrix.locator("tbody tr").filter(has_text="Anytime TD").last
+        anytime_value_row = matrix.locator("tbody tr").filter(has_text="0.9")
         assert not shade(anytime_value_row, 0)
         assert not shade(anytime_value_row, 1)
 

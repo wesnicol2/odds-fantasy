@@ -252,6 +252,7 @@ def get_player_odds_details(
         anchors = collect_anchors(by_book, market_key)
         markets[market_key] = {
             "stat_range": [round(value, 2) for value in stat.stat_range],
+            "stat_mean": round(stat.mean, 2),
             "expected_points": round(stat.expected_points, 3),
             "graph": distribution_graph(stat.distribution, market_key),
             "anchors": [
@@ -273,6 +274,8 @@ def get_player_odds_details(
         combined_markets[COMBINED_YARDAGE_KEY] = {
             "markets": sources,
             "stat_range": [round(value, 2) for value in combined_range],
+            # Means add exactly, so this needs no sampling the way the range does.
+            "stat_mean": round(sum(projection.stats[key].mean for key in sources), 2),
             "expected_points": round(
                 sum(projection.stats[key].expected_points for key in sources), 3
             ),

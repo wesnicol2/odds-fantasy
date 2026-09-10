@@ -75,17 +75,6 @@ function formatKickoff(value: string | null | undefined): string {
   }).format(date);
 }
 
-function formatRange(range: MatrixRange | null | undefined, suffix: string): string {
-  if (!range) return '—';
-  const values = [range.floor, range.mid, range.ceiling].map(formatValue).join(' · ');
-  return suffix ? `${values} ${suffix}` : values;
-}
-
-function playerRange(player: ProjectionPlayer): MatrixRange | null {
-  if (player.floor === null || player.mid === null || player.ceiling === null) return null;
-  return { floor: player.floor, mid: player.mid, ceiling: player.ceiling };
-}
-
 function marketRange(market: MarketDetail | undefined): MatrixRange | null {
   if (!market) return null;
   const [floor, mid, ceiling] = market.stat_range;
@@ -116,6 +105,8 @@ function comparesAcrossYardageRoles(left: string, right: string): boolean {
 
 interface SideMeasure {
   expectedPoints: number;
+  /** The stat in its own unit, as a single mean. */
+  statMean: number | null;
   range: MatrixRange | null;
 }
 
@@ -127,6 +118,7 @@ function sideMeasure(details: PlayerOddsDetails | null, key: string): SideMeasur
     const [floor, mid, ceiling] = combined.stat_range;
     return {
       expectedPoints: combined.expected_points,
+      statMean: combined.stat_mean ?? null,
       range:
         floor === undefined || mid === undefined || ceiling === undefined
           ? null
@@ -134,7 +126,13 @@ function sideMeasure(details: PlayerOddsDetails | null, key: string): SideMeasur
     };
   }
   const market = details?.markets[key];
-  return market ? { expectedPoints: market.expected_points, range: marketRange(market) } : null;
+  return market
+    ? {
+        expectedPoints: market.expected_points,
+        statMean: market.stat_mean ?? null,
+        range: marketRange(market),
+      }
+    : null;
 }
 
 function rowWinner(row: MatrixRow): MatrixSide | null {
@@ -344,19 +342,7 @@ export function PlayerComparisonInspector({
   const challengerMatchup = challengerDetails?.matchup;
   const starterMatchup = starterDetails?.matchup;
 
-  const challengerFantasyRange = playerRange(challenger);
-  const starterFantasyRange = playerRange(starter);
-
   const projectionRows: MatrixRow[] = [
-    {
-      key: 'fantasy-range',
-      label: 'Fantasy point range',
-      challengerValue: null,
-      starterValue: null,
-      challengerDisplay: formatRange(challengerFantasyRange, 'FP'),
-      starterDisplay: formatRange(starterFantasyRange, 'FP'),
-      comparable: false,
-    },
     {
       key: 'floor',
       label: 'Floor',
@@ -499,10 +485,10 @@ export function PlayerComparisonInspector({
     return {
       key: marketKey,
       label: metricLabel(marketKey),
-      challengerValue: challengerStat?.range?.mid,
-      starterValue: starterStat?.range?.mid,
-      challengerDisplay: formatRange(challengerStat?.range, ''),
-      starterDisplay: formatRange(starterStat?.range, ''),
+      challengerValue: challengerStat?.statMean,
+      starterValue: starterStat?.statMean,
+      challengerDisplay: formatValue(challengerStat?.statMean),
+      starterDisplay: formatValue(starterStat?.statMean),
       lowerWins,
       negativeStat: lowerWins,
       ...drillDown,
@@ -544,10 +530,10 @@ export function PlayerComparisonInspector({
         >
           <p>
             Every value is tied to this matchup week. Fantasy-point rows use league scoring; stat
-            rows compare the raw weekly stat instead. Shading marks the gap between the two players
-            in that row and fades as they converge: green highlights the leader on a stat the league
-            rewards, red the player carrying more of one it punishes. Missing data and ties leave
-            both sides unshaded.
+            rows compare the mean of the raw weekly stat instead. Shading marks the gap between the
+            two players in that row and fades as they converge: green highlights the leader on a
+            stat the league rewards, red the player carrying more of one it punishes. Missing data
+            and ties leave both sides unshaded.
           </p>
           {detailsLoading && (!challengerDetails || !starterDetails) ? (
             <p className="subtle evidence-status">Loading both players’ weekly evidence…</p>
@@ -592,7 +578,7 @@ export function PlayerComparisonInspector({
                     </tr>
                     <MatrixRows rows={contributionRows} onMetricChange={onMetricChange} />
                     <tr className="matrix-group-row">
-                      <th colSpan={3}>Stat value · 10th · median · 90th</th>
+                      <th colSpan={3}>Stat value · weekly mean</th>
                     </tr>
                     <MatrixRows rows={statValueRows} onMetricChange={onMetricChange} />
                   </>
@@ -607,7 +593,7 @@ export function PlayerComparisonInspector({
           ) : null}
           <p className="comparison-count-note">
             {mergeYardage
-              ? `Rushing and receiving yards are summed because ${challenger.pos} and ${starter.pos} earn yardage in different markets; the combined range is sampled from both fitted distributions, not added percentile by percentile. Open either market from the chart's metric strip. `
+              ? `Rushing and receiving yards are summed because ${challenger.pos} and ${starter.pos} earn yardage in different markets, and means add exactly, so the combined figure is a plain sum. Open either market from the chart's metric strip. `
               : ''}
             Row wins are a transparent scan aid, not independent evidence or a confidence score.
             Fantasy-point and stat-value signals are counted separately because a stat and the
@@ -650,6 +636,11 @@ export function PlayerComparisonInspector({
                   >
                     {formatContribution(starterMarket?.expected_points)}
                   </td>
+                </tr>
+                <tr>
+                  <th>Mean</th>
+                  <td>{formatValue(challengerMarket?.stat_mean)}</td>
+                  <td>{formatValue(starterMarket?.stat_mean)}</td>
                 </tr>
                 <tr>
                   <th>10th</th>

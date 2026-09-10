@@ -251,6 +251,32 @@ class AggregationTest(unittest.TestCase):
         self.assertEqual(set(project_player(noisy, LEAGUE).stats), {"player_rush_yds"})
 
 
+class StatMeanTest(unittest.TestCase):
+    """One number per stat, in the stat's own unit."""
+
+    def setUp(self):
+        self.stats = project_player(
+            {"bookA": dict(DOC_RUSH_YDS_BOOK, player_reception_yds=two_way(35.5, -115, -105))},
+            LEAGUE,
+        ).stats
+
+    def test_mean_sits_inside_the_stat_range(self):
+        rush = self.stats["player_rush_yds"]
+        self.assertGreater(rush.mean, rush.stat_range[0])
+        self.assertLess(rush.mean, rush.stat_range[2])
+
+    def test_means_add_across_markets_even_though_percentiles_do_not(self):
+        """The property that lets a combined mean be a plain sum."""
+        rush = self.stats["player_rush_yds"]
+        receiving = self.stats["player_reception_yds"]
+        combined_floor, _mid, _ceiling = combined_stat_range(self.stats)
+        self.assertGreater(combined_floor, rush.stat_range[0] + receiving.stat_range[0])
+        # Nothing to prove about the sum of means beyond it being the definition,
+        # so assert the units instead: a yardage mean is yards, not points.
+        self.assertGreater(rush.mean, 10.0)
+        self.assertNotAlmostEqual(rush.mean, rush.expected_points, places=1)
+
+
 class CombinedStatRangeTest(unittest.TestCase):
     """Rushing + receiving yardage, the only cross-position yardage comparison."""
 

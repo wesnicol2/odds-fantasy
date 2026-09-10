@@ -61,6 +61,7 @@ export interface SportsbookLine {
 
 export interface MarketDetail {
   stat_range: [number, number, number];
+  stat_mean?: number;
   expected_points: number;
   graph: StatGraph;
   anchors: ConsensusAnchor[];
@@ -71,6 +72,7 @@ export interface MarketDetail {
 export interface CombinedMarketDetail {
   markets: string[];
   stat_range: [number, number, number];
+  stat_mean?: number;
   expected_points: number;
 }
 
