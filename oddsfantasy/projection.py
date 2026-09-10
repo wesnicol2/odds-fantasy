@@ -42,6 +42,10 @@ class StatProjection:
     distribution: object
     stat_range: tuple[float, float, float]
     expected_points: float
+    # Mean of the stat itself, in the stat's own unit. Unlike the percentiles
+    # this is additive across markets, which is what lets a combined yardage
+    # mean be a plain sum.
+    mean: float = 0.0
     values: list[float] = field(default_factory=list)
     point_values: list[float] = field(default_factory=list)
     cumulative_weights: list[float] = field(default_factory=list)
@@ -160,6 +164,7 @@ def build_stat_projection(
 
     point_values = [stat_scoring.points_for(v) for v in values]
     expected_points = sum(p * w for p, w in zip(point_values, weights, strict=True))
+    stat_mean = sum(value * weight for value, weight in zip(values, weights, strict=True))
 
     cumulative: list[float] = []
     running = 0.0
@@ -177,6 +182,7 @@ def build_stat_projection(
         distribution=distribution,
         stat_range=stat_range,
         expected_points=expected_points,
+        mean=stat_mean,
         values=list(values),
         point_values=point_values,
         cumulative_weights=cumulative,

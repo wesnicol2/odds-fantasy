@@ -255,14 +255,14 @@ The comparison inspector should show:
 - a weekly tie-breaker matrix with aligned Floor / Mid / Ceiling / Mean values for both players;
 - this game's opponent, kickoff, spread, total and team implied total when the market supplies them;
 - an aligned union of this week's modeled props with each stat's signed expected fantasy-point contribution;
-- the same modeled props measured a second way, in raw stat value rather than league points, using each market's backend 10th / median / 90th percentiles;
+- the same modeled props measured a second way, in raw stat value rather than league points, as one number per stat: the backend mean of that stat in its own unit. One row is one number — do not put a percentile range back into a matrix cell; the percentiles belong to the stat drill-down, which shows the mean alongside them;
 - rushing and receiving yardage as one combined row when, and only when, a running back is compared with a wide receiver or tight end — those positions earn yardage in different markets, so separate rows read as a gap that is only a position difference. Back against back and receiver against receiver keep their own markets, as do receptions and anytime TD in every pairing;
 - a visible edge marker on the better comparable value and a count of row wins;
 - missing markets as `—`, distinct from a modeled zero-point contribution;
 - a direct stat action that changes the shared chart to compare both fitted stat distributions;
 - a direct return from the stat drill-down to the full matrix.
 
-A combined row's expected-point contribution is the sum of its components because means are additive, but its stat range must come from the backend's sampled combined range: percentiles do not add (`docs/fantasy-projection-methodology.md` §5.1). A combined row has no single fitted distribution behind it, so it is not a drill-down; its component markets stay reachable from the chart's metric strip.
+A combined row's expected-point contribution and its stat mean are both plain sums of the components, because means are additive. Its stat *range* is different and must come from the backend's sampled combined range: percentiles do not add (`docs/fantasy-projection-methodology.md` §5.1). That sampled range is currently backend-only — the matrix shows means — and must not be replaced by added percentiles if a range is ever surfaced again. A combined row has no single fitted distribution behind it, so it is not a drill-down; its component markets stay reachable from the chart's metric strip.
 
 The matrix stays numbers. Its one visual channel is cell shading, which encodes only the size of the gap between the two players in that row and fades to nothing as they converge, so a near tie looks like a near tie without being read digit by digit. Hue carries the stat's polarity rather than the winner: green highlights the leader on a stat the league rewards, red highlights the player carrying more of one it punishes, because there the larger number is the thing worth spotting. Shading is derived from the two values already shown — it introduces no quantity of its own — and colour never carries the result alone: the edge stays in each cell's accessible name.
 
