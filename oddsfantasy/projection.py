@@ -24,6 +24,12 @@ from .scoring import ScoringConfig
 DEFAULT_DRAWS = 4000
 CONTINUOUS_BUCKETS = 128
 DEFAULT_SEED = 20260822
+COMBINED_SEED_OFFSET = 104729
+
+# Yardage a running back and a pass catcher earn in different markets. Summing
+# them is the only apples-to-apples yardage comparison across those positions.
+COMBINED_YARDAGE_KEY = "rush_reception_yds"
+COMBINED_YARDAGE_MARKETS = ("player_rush_yds", "player_reception_yds")
 
 FLOOR_PERCENTILE = 0.10
 MID_PERCENTILE = 0.50
@@ -36,6 +42,11 @@ class StatProjection:
     distribution: object
     stat_range: tuple[float, float, float]
     expected_points: float
+    # Mean of the stat itself, in the stat's own unit. Unlike the percentiles
+    # this is additive across markets, which is what lets a combined yardage
+    # mean be a plain sum.
+    mean: float = 0.0
+    values: list[float] = field(default_factory=list)
     point_values: list[float] = field(default_factory=list)
     cumulative_weights: list[float] = field(default_factory=list)
 
@@ -153,6 +164,7 @@ def build_stat_projection(
 
     point_values = [stat_scoring.points_for(v) for v in values]
     expected_points = sum(p * w for p, w in zip(point_values, weights, strict=True))
+    stat_mean = sum(value * weight for value, weight in zip(values, weights, strict=True))
 
     cumulative: list[float] = []
     running = 0.0
@@ -170,8 +182,47 @@ def build_stat_projection(
         distribution=distribution,
         stat_range=stat_range,
         expected_points=expected_points,
+        mean=stat_mean,
+        values=list(values),
         point_values=point_values,
         cumulative_weights=cumulative,
+    )
+
+
+def combined_stat_range(
+    stats: dict[str, StatProjection],
+    market_keys: tuple[str, ...] = COMBINED_YARDAGE_MARKETS,
+    draws: int = DEFAULT_DRAWS,
+    seed: int = DEFAULT_SEED,
+) -> tuple[float, float, float] | None:
+    """Percentiles of the SUM of several stats, drawn rather than added.
+
+    Percentiles are not additive, so a combined 10th/50th/90th cannot be
+    obtained by adding each market's own percentiles. This samples the fitted
+    component distributions and reads the percentiles of the totals, reusing
+    the same cross-stat independence assumption already applied to the
+    fantasy-points total. Returns ``None`` when no component market is modeled.
+    """
+    present = [stats[key] for key in market_keys if key in stats and stats[key].values]
+    if not present:
+        return None
+    if len(present) == 1:
+        # Nothing to combine, so use the market's own exact percentiles rather
+        # than re-deriving them through sampling error.
+        return present[0].stat_range
+
+    per_stat_draws: list[list[float]] = []
+    for index, stat in enumerate(present):
+        rng = random.Random(seed + COMBINED_SEED_OFFSET + index * 7919)
+        per_stat_draws.append(
+            rng.choices(stat.values, cum_weights=stat.cumulative_weights, k=draws)
+        )
+
+    totals = sorted(map(sum, zip(*per_stat_draws, strict=True)))
+    return (
+        percentile(totals, FLOOR_PERCENTILE),
+        percentile(totals, MID_PERCENTILE),
+        percentile(totals, CEILING_PERCENTILE),
     )
 
 

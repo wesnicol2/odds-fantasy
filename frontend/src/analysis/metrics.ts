@@ -22,6 +22,7 @@ const METRIC_LABELS: Record<string, string> = {
   player_reception_yds: 'Receiving yards',
   player_reception_tds: 'Receiving TDs',
   player_anytime_td: 'Anytime TD',
+  rush_reception_yds: 'Rushing + receiving yards',
 };
 
 const COUNT_METRICS = new Set([

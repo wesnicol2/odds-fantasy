@@ -61,10 +61,19 @@ export interface SportsbookLine {
 
 export interface MarketDetail {
   stat_range: [number, number, number];
+  stat_mean?: number;
   expected_points: number;
   graph: StatGraph;
   anchors: ConsensusAnchor[];
   lines: SportsbookLine[];
+}
+
+/** Several markets summed into one comparable quantity by the backend. */
+export interface CombinedMarketDetail {
+  markets: string[];
+  stat_range: [number, number, number];
+  stat_mean?: number;
+  expected_points: number;
 }
 
 export interface PlayerOddsDetails {
@@ -80,7 +89,17 @@ export interface PlayerOddsDetails {
     mean: number;
     curve: FantasyCurvePoint[];
   } | null;
+  matchup?: {
+    opponent: string;
+    venue: 'home' | 'away';
+    commence_time: string;
+    game_total: number | null;
+    team_spread: number | null;
+    team_implied_total: number | null;
+    books_used: number;
+  } | null;
   markets: Record<string, MarketDetail>;
+  combined_markets?: Record<string, CombinedMarketDetail>;
   message?: string;
   error?: string;
   ratelimit?: string;

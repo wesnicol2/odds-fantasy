@@ -247,7 +247,34 @@ When available, identify which current starter the bench player would displace. 
 
 The browser must not recreate optimizer eligibility logic to derive this value.
 
-Selecting a bench-pressure row should drill into Players for **This week**, ideally comparing the bench player with the displaced starter while preserving the rest of the Players workstation.
+Selecting a bench-pressure row drills into Players for **This week** and opens a focused start/sit comparison between the bench player and the optimizer-identified starter they would displace. Preserve `FP back` as the optimizer's whole-lineup opportunity cost; do not relabel it as a raw difference between the two player projections.
+
+The comparison inspector should show:
+
+- the optimizer's current recommendation and lineup-level `FP back` context;
+- a weekly tie-breaker matrix with aligned Floor / Mid / Ceiling / Mean values for both players;
+- this game's opponent, kickoff, spread, total and team implied total when the market supplies them;
+- an aligned union of this week's modeled props with each stat's signed expected fantasy-point contribution;
+- the same modeled props measured a second way, in raw stat value rather than league points, as one number per stat: the backend mean of that stat in its own unit. One row is one number — do not put a percentile range back into a matrix cell; the percentiles belong to the stat drill-down, which shows the mean alongside them;
+- rushing and receiving yardage as one combined row when, and only when, a running back is compared with a wide receiver or tight end — those positions earn yardage in different markets, so separate rows read as a gap that is only a position difference. Back against back and receiver against receiver keep their own markets, as do receptions and anytime TD in every pairing;
+- a visible edge marker on the better comparable value and a count of row wins;
+- missing markets as `—`, distinct from a modeled zero-point contribution;
+- a direct stat action that changes the shared chart to compare both fitted stat distributions;
+- a direct return from the stat drill-down to the full matrix.
+
+A combined row's expected-point contribution and its stat mean are both plain sums of the components, because means are additive. Its stat *range* is different and must come from the backend's sampled combined range: percentiles do not add (`docs/fantasy-projection-methodology.md` §5.1). That sampled range is currently backend-only — the matrix shows means — and must not be replaced by added percentiles if a range is ever surfaced again. A combined row has no single fitted distribution behind it, so it is not a drill-down; its component markets stay reachable from the chart's metric strip.
+
+The matrix stays numbers. Its one visual channel is cell shading, which encodes only the size of the gap between the two players in that row and fades to nothing as they converge, so a near tie looks like a near tie without being read digit by digit. Hue carries the stat's polarity rather than the winner: green highlights the leader on a stat the league rewards, red highlights the player carrying more of one it punishes, because there the larger number is the thing worth spotting. Shading is derived from the two values already shown — it introduces no quantity of its own — and colour never carries the result alone: the edge stays in each cell's accessible name.
+
+Do not add glyphs, bars or range charts to the matrix cells. Floor / Mid / Ceiling thermometers belong to the ranking table, where one bar per row is a dense column; stacking them into a comparison that already carries numbers, an edge marker and two tallies makes a scanning surface into a busy one.
+
+Fantasy-point and stat-value signals are counted as two separate tallies and must never be merged into one number: a stat and the points it produces are the same underlying market, so adding them would double-count it. Stat-value direction follows league scoring rather than assuming more is better — where the modeled contribution is negative (interceptions), the smaller weekly stat wins the row.
+
+Every matrix input must apply directly to the selected week. Do not show ADP, draft rank, team season-win totals, rest-of-season projections, multi-week strength of schedule or any other draft/long-horizon statistic. Spread is context rather than a scored row because favorable game script is position-dependent. Tied or missing values award neither player a row win. Row-win counts are a transparent scan aid, not a confidence score and not a replacement for the backend optimizer.
+
+This is a focused explanation mode inside the existing Players workstation, not a separate destination or browser-side start/sit model. Exiting comparison restores the normal selected-player inspector without discarding the narrowed two-player chart context.
+
+While a comparison is open the workstation reorders to match what the user is deciding. The matrix leads full width, the probability chart follows as its supporting evidence, and the ranking/graph checkboxes come last. Reorder the DOM, not just the visual order, so reading order and keyboard tab order stay aligned with the layout; keep each pane keyed so moving it does not remount the chart. The default ranking/chart/inspector column order returns the moment comparison is exited.
 
 ### Defense planning
 

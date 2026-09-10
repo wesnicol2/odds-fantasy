@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import re
+from statistics import median
 
-from . import ratelimit
+from . import odds_client, ratelimit
+from .defense import implied_team_total
 from .graph_data import distribution_graph
 from .market_math import collect_anchors
-from .projection import project_player, survival_curve
+from .projection import (
+    COMBINED_YARDAGE_KEY,
+    COMBINED_YARDAGE_MARKETS,
+    combined_stat_range,
+    project_player,
+    survival_curve,
+)
 from .services import NO_GAMES_SCHEDULED_MESSAGE, _load_week_context
 
 
@@ -66,6 +74,115 @@ def _line_rows(by_book: dict, market_key: str) -> list[dict]:
     return rows
 
 
+def _game_line_context(event_odds: object, team: str) -> dict:
+    """Return median same-week game lines without turning them into a player model."""
+    events = (
+        [event_odds]
+        if isinstance(event_odds, dict)
+        else [row for row in event_odds if isinstance(row, dict)]
+        if isinstance(event_odds, list)
+        else []
+    )
+    totals: list[float] = []
+    spreads: list[float] = []
+    implied_totals: list[float] = []
+    books_used: set[str] = set()
+
+    for event in events:
+        for book in event.get("bookmakers", []) or []:
+            game_total = None
+            team_spread = None
+            for market in book.get("markets", []) or []:
+                if market.get("key") == "totals":
+                    over = next(
+                        (
+                            outcome
+                            for outcome in market.get("outcomes", []) or []
+                            if outcome.get("name") == "Over"
+                        ),
+                        None,
+                    )
+                    game_total = over.get("point") if over else None
+                elif market.get("key") == "spreads":
+                    team_outcome = next(
+                        (
+                            outcome
+                            for outcome in market.get("outcomes", []) or []
+                            if outcome.get("name") == team
+                        ),
+                        None,
+                    )
+                    team_spread = team_outcome.get("point") if team_outcome else None
+
+            try:
+                parsed_total = float(game_total) if game_total is not None else None
+                parsed_spread = float(team_spread) if team_spread is not None else None
+            except (TypeError, ValueError):
+                continue
+
+            if parsed_total is not None:
+                totals.append(parsed_total)
+            if parsed_spread is not None:
+                spreads.append(parsed_spread)
+            if parsed_total is not None and parsed_spread is not None:
+                implied_totals.append(implied_team_total(parsed_total, parsed_spread))
+            if parsed_total is not None or parsed_spread is not None:
+                books_used.add(str(book.get("key") or book.get("title") or "unknown"))
+
+    return {
+        "game_total": round(float(median(totals)), 2) if totals else None,
+        "team_spread": round(float(median(spreads)), 2) if spreads else None,
+        "team_implied_total": (round(float(median(implied_totals)), 2) if implied_totals else None),
+        "books_used": len(books_used),
+    }
+
+
+def _player_matchup(
+    context: dict,
+    target_alias: str,
+    team: str | None,
+    region: str,
+    cache_mode: str,
+    fresh: bool,
+) -> dict | None:
+    game = next(
+        (
+            planned
+            for planned in (context.get("planned") or {}).values()
+            if any(player.get("alias") == target_alias for player in planned.players)
+        ),
+        None,
+    )
+    if game is None or not team:
+        return None
+
+    opponent = game.away_team if team == game.home_team else game.home_team
+    venue = "home" if team == game.home_team else "away"
+    line_context = {
+        "game_total": None,
+        "team_spread": None,
+        "team_implied_total": None,
+        "books_used": 0,
+    }
+    try:
+        game_odds = odds_client.get_event_player_odds(
+            event_id=game.game_id,
+            markets="spreads,totals",
+            regions=region,
+            mode="fresh" if fresh else cache_mode,
+        )
+        line_context = _game_line_context(game_odds, team)
+    except Exception as exc:
+        print(f"[odds_details] game line fetch failed for {game.game_id}: {exc}")
+
+    return {
+        "opponent": opponent,
+        "venue": venue,
+        "commence_time": game.commence_time,
+        **line_context,
+    }
+
+
 def get_player_odds_details(
     username: str,
     season: str,
@@ -93,6 +210,7 @@ def get_player_odds_details(
             "player": {"name": name},
             "projection": None,
             "markets": {},
+            "combined_markets": {},
             "message": NO_GAMES_SCHEDULED_MESSAGE,
             "ratelimit": ratelimit.format_status(),
             "ratelimit_info": ratelimit.get_details(),
@@ -112,6 +230,7 @@ def get_player_odds_details(
             "player": {"name": name},
             "projection": None,
             "markets": {},
+            "combined_markets": {},
             "ratelimit": ratelimit.format_status(),
             "ratelimit_info": ratelimit.get_details(),
         }
@@ -119,12 +238,21 @@ def get_player_odds_details(
     info = info_by_alias[target_alias]
     by_book = (context.get("players_odds") or {}).get(target_alias, {})
     projection = project_player(by_book, context.get("scoring_rules") or {})
+    matchup = _player_matchup(
+        context,
+        target_alias,
+        info.get("editorial_team_full_name"),
+        region,
+        cache_mode,
+        fresh,
+    )
 
     markets: dict[str, dict] = {}
     for market_key, stat in projection.stats.items():
         anchors = collect_anchors(by_book, market_key)
         markets[market_key] = {
             "stat_range": [round(value, 2) for value in stat.stat_range],
+            "stat_mean": round(stat.mean, 2),
             "expected_points": round(stat.expected_points, 3),
             "graph": distribution_graph(stat.distribution, market_key),
             "anchors": [
@@ -135,6 +263,22 @@ def get_player_odds_details(
                 for anchor in anchors
             ],
             "lines": _line_rows(by_book, market_key),
+        }
+
+    # Rushing and receiving yardage summed into one comparable quantity. The
+    # range is sampled by the projection engine because percentiles do not add.
+    combined_markets: dict[str, dict] = {}
+    combined_range = combined_stat_range(projection.stats)
+    if combined_range is not None:
+        sources = [key for key in COMBINED_YARDAGE_MARKETS if key in projection.stats]
+        combined_markets[COMBINED_YARDAGE_KEY] = {
+            "markets": sources,
+            "stat_range": [round(value, 2) for value in combined_range],
+            # Means add exactly, so this needs no sampling the way the range does.
+            "stat_mean": round(sum(projection.stats[key].mean for key in sources), 2),
+            "expected_points": round(
+                sum(projection.stats[key].expected_points for key in sources), 3
+            ),
         }
 
     has_projection = projection.has_projection
@@ -155,7 +299,9 @@ def get_player_odds_details(
             if has_projection
             else None
         ),
+        "matchup": matchup,
         "markets": markets,
+        "combined_markets": combined_markets,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }

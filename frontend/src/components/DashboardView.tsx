@@ -154,12 +154,17 @@ export function DashboardView({
                     type="button"
                     className="bench-pressure-row"
                     onClick={() => onCompareBenchPlayer(row)}
+                    aria-label={
+                      row.displaces
+                        ? `Compare ${row.name} with ${row.displaces}`
+                        : `Inspect ${row.name}`
+                    }
                   >
                     <span className="dashboard-player">
                       <strong>{row.name}</strong>
                       <small>
                         {row.pos}
-                        {row.displaces ? ` · behind ${row.displaces}` : ''}
+                        {row.displaces ? ` · behind ${row.displaces} · compare` : ''}
                       </small>
                     </span>
                     <span className="bench-pressure-gap">

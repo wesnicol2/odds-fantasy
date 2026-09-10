@@ -3,7 +3,13 @@
 import unittest
 from itertools import pairwise
 
-from oddsfantasy.projection import DEFAULT_DRAWS, percentile, project_player, survival_curve
+from oddsfantasy.projection import (
+    DEFAULT_DRAWS,
+    combined_stat_range,
+    percentile,
+    project_player,
+    survival_curve,
+)
 from oddsfantasy.scoring import ScoringConfig
 from tests.test_market_math import DOC_RUSH_YDS_BOOK, alt_ladder, two_way
 from tests.test_scoring import LEAGUE
@@ -243,6 +249,80 @@ class AggregationTest(unittest.TestCase):
             )
         }
         self.assertEqual(set(project_player(noisy, LEAGUE).stats), {"player_rush_yds"})
+
+
+class StatMeanTest(unittest.TestCase):
+    """One number per stat, in the stat's own unit."""
+
+    def setUp(self):
+        self.stats = project_player(
+            {"bookA": dict(DOC_RUSH_YDS_BOOK, player_reception_yds=two_way(35.5, -115, -105))},
+            LEAGUE,
+        ).stats
+
+    def test_mean_sits_inside_the_stat_range(self):
+        rush = self.stats["player_rush_yds"]
+        self.assertGreater(rush.mean, rush.stat_range[0])
+        self.assertLess(rush.mean, rush.stat_range[2])
+
+    def test_means_add_across_markets_even_though_percentiles_do_not(self):
+        """The property that lets a combined mean be a plain sum."""
+        rush = self.stats["player_rush_yds"]
+        receiving = self.stats["player_reception_yds"]
+        combined_floor, _mid, _ceiling = combined_stat_range(self.stats)
+        self.assertGreater(combined_floor, rush.stat_range[0] + receiving.stat_range[0])
+        # Nothing to prove about the sum of means beyond it being the definition,
+        # so assert the units instead: a yardage mean is yards, not points.
+        self.assertGreater(rush.mean, 10.0)
+        self.assertNotAlmostEqual(rush.mean, rush.expected_points, places=1)
+
+
+class CombinedStatRangeTest(unittest.TestCase):
+    """Rushing + receiving yardage, the only cross-position yardage comparison."""
+
+    def setUp(self):
+        self.dual_threat = {
+            "bookA": dict(
+                DOC_RUSH_YDS_BOOK,
+                player_reception_yds=two_way(35.5, -115, -105),
+            )
+        }
+        self.stats = project_player(self.dual_threat, LEAGUE).stats
+
+    def test_combined_range_is_ordered(self):
+        floor, mid, ceiling = combined_stat_range(self.stats)
+        self.assertLess(floor, mid)
+        self.assertLess(mid, ceiling)
+
+    def test_combined_range_is_not_the_sum_of_component_percentiles(self):
+        """Percentiles are not additive; a sampled total must not be faked by adding."""
+        floor, _mid, ceiling = combined_stat_range(self.stats)
+        rush = self.stats["player_rush_yds"].stat_range
+        receiving = self.stats["player_reception_yds"].stat_range
+
+        # Two stats are rarely low together, so the joint floor sits above the
+        # added floors; the same argument caps the joint ceiling from below.
+        self.assertGreater(floor, rush[0] + receiving[0])
+        self.assertLess(ceiling, rush[2] + receiving[2])
+
+    def test_combined_range_exceeds_either_component_alone(self):
+        _floor, mid, _ceiling = combined_stat_range(self.stats)
+        self.assertGreater(mid, self.stats["player_rush_yds"].stat_range[1])
+        self.assertGreater(mid, self.stats["player_reception_yds"].stat_range[1])
+
+    def test_one_modeled_market_is_that_market_exactly(self):
+        """With nothing to combine there is no reason to add sampling error."""
+        rush_only = project_player(DOC_RUSHER, LEAGUE).stats
+        self.assertEqual(combined_stat_range(rush_only), rush_only["player_rush_yds"].stat_range)
+
+    def test_no_modeled_yardage_is_none_not_zero(self):
+        receptions_only = project_player(
+            {"bookA": {"player_receptions": two_way(2.5, -130, 105)}}, LEAGUE
+        ).stats
+        self.assertIsNone(combined_stat_range(receptions_only))
+
+    def test_sampling_is_deterministic(self):
+        self.assertEqual(combined_stat_range(self.stats), combined_stat_range(self.stats))
 
 
 if __name__ == "__main__":
