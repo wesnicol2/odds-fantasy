@@ -150,6 +150,9 @@ input:focus-visible {
   grid-template-columns: minmax(360px, 0.95fr) minmax(540px, 1.65fr) minmax(250px, 0.65fr);
   min-height: calc(100vh - 104px);
 }
+.workspace.comparison-workspace {
+  grid-template-columns: minmax(320px, 0.75fr) minmax(500px, 1.2fr) minmax(430px, 1fr);
+}
 .ranking-pane,
 .analysis-pane,
 .inspector-pane {
@@ -561,6 +564,17 @@ input:focus-visible {
   }
   .player-identity {
     grid-column: 1;
+  }
+}
+
+@media (max-width: 1320px) {
+  .workspace.comparison-workspace {
+    grid-template-columns: minmax(335px, 1fr) minmax(480px, 1.55fr);
+  }
+  .comparison-workspace .inspector-pane {
+    grid-column: 1 / -1;
+    border-top: 1px solid #232932;
+    border-left: 0;
   }
 }
 

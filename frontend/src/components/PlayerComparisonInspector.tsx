@@ -1,0 +1,451 @@
+import { metricLabel } from '../analysis/metrics';
+import { formatProbability, probabilityAtTarget } from '../analysis/probability';
+import type { MarketDetail, PlayerOddsDetails, ProjectionPlayer } from '../types';
+
+interface PlayerComparisonInspectorProps {
+  challenger: ProjectionPlayer;
+  starter: ProjectionPlayer;
+  challengerDetails: PlayerOddsDetails | null;
+  starterDetails: PlayerOddsDetails | null;
+  detailsLoading: boolean;
+  lineupDelta: number;
+  target: number | null;
+  metric: string;
+  onMetricChange: (metric: string) => void;
+  onExit: () => void;
+}
+
+type MatrixSide = 'challenger' | 'starter';
+
+interface MatrixRow {
+  key: string;
+  label: string;
+  challengerValue: number | null | undefined;
+  starterValue: number | null | undefined;
+  challengerDisplay: string;
+  starterDisplay: string;
+  comparable?: boolean;
+}
+
+function formatPoints(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : `${value.toFixed(1)} FP`;
+}
+
+function formatContribution(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  const normalized = Math.abs(value) < 0.05 ? 0 : value;
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)} FP`;
+}
+
+function formatValue(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatLine(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  return value > 0 ? `+${formatValue(value)}` : formatValue(value);
+}
+
+function formatKickoff(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(date);
+}
+
+function rangeValue(market: MarketDetail | undefined, index: 0 | 1 | 2): string {
+  return formatValue(market?.stat_range[index]);
+}
+
+function rowWinner(row: MatrixRow): MatrixSide | null {
+  if (row.comparable === false) return null;
+  if (row.challengerValue === null || row.challengerValue === undefined) return null;
+  if (row.starterValue === null || row.starterValue === undefined) return null;
+  if (Math.abs(row.challengerValue - row.starterValue) < 0.05) return null;
+  return row.challengerValue > row.starterValue ? 'challenger' : 'starter';
+}
+
+function PlayerHeading({
+  player,
+  details,
+  label,
+}: {
+  player: ProjectionPlayer;
+  details: PlayerOddsDetails | null;
+  label: string;
+}) {
+  const matchup = details?.matchup;
+  return (
+    <span className="comparison-player-heading">
+      <strong>{player.name}</strong>
+      <small>
+        {label} · {player.pos}
+      </small>
+      {matchup ? (
+        <small>
+          {matchup.venue === 'home' ? 'vs' : '@'} {matchup.opponent}
+        </small>
+      ) : null}
+    </span>
+  );
+}
+
+function MatrixCell({ display, winner }: { display: string; winner: boolean }) {
+  return (
+    <td className={winner ? 'matrix-winner' : undefined}>
+      <span>{display}</span>
+      {winner ? <small>Edge</small> : null}
+    </td>
+  );
+}
+
+function MatrixRows({ rows }: { rows: MatrixRow[] }) {
+  return rows.map((row) => {
+    const winner = rowWinner(row);
+    return (
+      <tr key={row.key}>
+        <th>{row.label}</th>
+        <MatrixCell display={row.challengerDisplay} winner={winner === 'challenger'} />
+        <MatrixCell display={row.starterDisplay} winner={winner === 'starter'} />
+      </tr>
+    );
+  });
+}
+
+export function PlayerComparisonInspector({
+  challenger,
+  starter,
+  challengerDetails,
+  starterDetails,
+  detailsLoading,
+  lineupDelta,
+  target,
+  metric,
+  onMetricChange,
+  onExit,
+}: PlayerComparisonInspectorProps) {
+  const contributionKeys = [
+    ...new Set([
+      ...Object.keys(challengerDetails?.markets ?? {}),
+      ...Object.keys(starterDetails?.markets ?? {}),
+    ]),
+  ].sort((left, right) => {
+    const leftImpact = Math.max(
+      Math.abs(challengerDetails?.markets[left]?.expected_points ?? 0),
+      Math.abs(starterDetails?.markets[left]?.expected_points ?? 0),
+    );
+    const rightImpact = Math.max(
+      Math.abs(challengerDetails?.markets[right]?.expected_points ?? 0),
+      Math.abs(starterDetails?.markets[right]?.expected_points ?? 0),
+    );
+    return rightImpact - leftImpact;
+  });
+  const challengerMarket = challengerDetails?.markets[metric];
+  const starterMarket = starterDetails?.markets[metric];
+  const challengerMatchup = challengerDetails?.matchup;
+  const starterMatchup = starterDetails?.matchup;
+
+  const projectionRows: MatrixRow[] = [
+    {
+      key: 'floor',
+      label: 'Floor',
+      challengerValue: challenger.floor,
+      starterValue: starter.floor,
+      challengerDisplay: formatPoints(challenger.floor),
+      starterDisplay: formatPoints(starter.floor),
+    },
+    {
+      key: 'mid',
+      label: 'Median',
+      challengerValue: challenger.mid,
+      starterValue: starter.mid,
+      challengerDisplay: formatPoints(challenger.mid),
+      starterDisplay: formatPoints(starter.mid),
+    },
+    {
+      key: 'ceiling',
+      label: 'Ceiling',
+      challengerValue: challenger.ceiling,
+      starterValue: starter.ceiling,
+      challengerDisplay: formatPoints(challenger.ceiling),
+      starterDisplay: formatPoints(starter.ceiling),
+    },
+    {
+      key: 'mean',
+      label: 'Mean',
+      challengerValue: challengerDetails?.projection?.mean ?? challenger.mean,
+      starterValue: starterDetails?.projection?.mean ?? starter.mean,
+      challengerDisplay: formatPoints(challengerDetails?.projection?.mean ?? challenger.mean),
+      starterDisplay: formatPoints(starterDetails?.projection?.mean ?? starter.mean),
+    },
+  ];
+
+  if (target !== null) {
+    const challengerProbability = probabilityAtTarget(challenger.curve, target);
+    const starterProbability = probabilityAtTarget(starter.curve, target);
+    projectionRows.push({
+      key: 'target',
+      label: `Chance of ≥ ${target.toFixed(1)} FP`,
+      challengerValue: challengerProbability,
+      starterValue: starterProbability,
+      challengerDisplay: formatProbability(challengerProbability),
+      starterDisplay: formatProbability(starterProbability),
+    });
+  }
+
+  const matchupRows: MatrixRow[] = [
+    {
+      key: 'team-implied-total',
+      label: 'Team implied total',
+      challengerValue: challengerMatchup?.team_implied_total,
+      starterValue: starterMatchup?.team_implied_total,
+      challengerDisplay:
+        challengerMatchup?.team_implied_total == null
+          ? '—'
+          : `${formatValue(challengerMatchup.team_implied_total)} pts`,
+      starterDisplay:
+        starterMatchup?.team_implied_total == null
+          ? '—'
+          : `${formatValue(starterMatchup.team_implied_total)} pts`,
+    },
+    {
+      key: 'game-total',
+      label: 'Game total',
+      challengerValue: challengerMatchup?.game_total,
+      starterValue: starterMatchup?.game_total,
+      challengerDisplay:
+        challengerMatchup?.game_total == null
+          ? '—'
+          : `${formatValue(challengerMatchup.game_total)} pts`,
+      starterDisplay:
+        starterMatchup?.game_total == null ? '—' : `${formatValue(starterMatchup.game_total)} pts`,
+    },
+    {
+      key: 'spread',
+      label: 'Team spread',
+      challengerValue: challengerMatchup?.team_spread,
+      starterValue: starterMatchup?.team_spread,
+      challengerDisplay: formatLine(challengerMatchup?.team_spread),
+      starterDisplay: formatLine(starterMatchup?.team_spread),
+      comparable: false,
+    },
+    {
+      key: 'kickoff',
+      label: 'Kickoff',
+      challengerValue: null,
+      starterValue: null,
+      challengerDisplay: formatKickoff(challengerMatchup?.commence_time),
+      starterDisplay: formatKickoff(starterMatchup?.commence_time),
+      comparable: false,
+    },
+  ];
+
+  const contributionRows: MatrixRow[] = contributionKeys.map((marketKey) => {
+    const challengerStat = challengerDetails?.markets[marketKey];
+    const starterStat = starterDetails?.markets[marketKey];
+    const statDisplay = (market: MarketDetail | undefined) =>
+      market
+        ? `${formatContribution(market.expected_points)} · ${formatValue(market.stat_range[1])} median`
+        : '—';
+    return {
+      key: marketKey,
+      label: metricLabel(marketKey),
+      challengerValue: challengerStat?.expected_points,
+      starterValue: starterStat?.expected_points,
+      challengerDisplay: statDisplay(challengerStat),
+      starterDisplay: statDisplay(starterStat),
+    };
+  });
+
+  const scoredRows = [...projectionRows, ...matchupRows, ...contributionRows].filter(
+    (row) =>
+      row.comparable !== false &&
+      row.challengerValue !== null &&
+      row.challengerValue !== undefined &&
+      row.starterValue !== null &&
+      row.starterValue !== undefined,
+  );
+  const challengerWins = scoredRows.filter((row) => rowWinner(row) === 'challenger').length;
+  const starterWins = scoredRows.filter((row) => rowWinner(row) === 'starter').length;
+  const signalLead =
+    challengerWins > starterWins
+      ? `${challenger.name} leads ${challengerWins}–${starterWins}`
+      : starterWins > challengerWins
+        ? `${starter.name} leads ${starterWins}–${challengerWins}`
+        : `Signals are tied ${challengerWins}–${starterWins}`;
+
+  return (
+    <div className="start-sit-comparison">
+      <header className="comparison-heading">
+        <div>
+          <div className="section-label">This week’s tie-breaker matrix</div>
+          <h2>
+            {challenger.name} <span>vs</span> {starter.name}
+          </h2>
+        </div>
+        <button type="button" onClick={onExit}>
+          Exit comparison
+        </button>
+      </header>
+
+      <div className="comparison-recommendation">
+        <strong>Start {starter.name}</strong>
+        <span className="comparison-recommendation-copy">
+          {challenger.name} is {lineupDelta.toFixed(1)} lineup FP back after re-optimizing every
+          eligible slot.
+        </span>
+        <span className="comparison-signal-score">
+          {signalLead} across {scoredRows.length} comparable weekly signals
+        </span>
+      </div>
+
+      {metric === 'fantasy_points' ? (
+        <section
+          className="comparison-section matrix-section"
+          aria-label="Weekly tie-breaker matrix"
+        >
+          <p>
+            Every value is tied to this matchup week. An edge marks the higher comparable value;
+            missing data and ties do not award either player a win.
+          </p>
+          {detailsLoading && (!challengerDetails || !starterDetails) ? (
+            <p className="subtle evidence-status">Loading both players’ weekly evidence…</p>
+          ) : null}
+          <div className="comparison-table-scroll">
+            <table
+              className="comparison-table matrix-table"
+              aria-label="Weekly player comparison matrix"
+            >
+              <thead>
+                <tr>
+                  <th>Weekly signal</th>
+                  <th>
+                    <PlayerHeading
+                      player={challenger}
+                      details={challengerDetails}
+                      label="Bench option"
+                    />
+                  </th>
+                  <th>
+                    <PlayerHeading
+                      player={starter}
+                      details={starterDetails}
+                      label="Ideal starter"
+                    />
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="matrix-group-row">
+                  <th colSpan={3}>Projection</th>
+                </tr>
+                <MatrixRows rows={projectionRows} />
+                <tr className="matrix-group-row">
+                  <th colSpan={3}>Matchup</th>
+                </tr>
+                <MatrixRows rows={matchupRows} />
+                {contributionRows.length ? (
+                  <tr className="matrix-group-row">
+                    <th colSpan={3}>Fantasy-point sources</th>
+                  </tr>
+                ) : null}
+                {contributionRows.map((row) => {
+                  const winner = rowWinner(row);
+                  return (
+                    <tr key={row.key}>
+                      <th>
+                        <button
+                          type="button"
+                          onClick={() => onMetricChange(row.key)}
+                          aria-label={`Compare ${row.label} distributions`}
+                        >
+                          {row.label}
+                        </button>
+                      </th>
+                      <MatrixCell
+                        display={row.challengerDisplay}
+                        winner={winner === 'challenger'}
+                      />
+                      <MatrixCell display={row.starterDisplay} winner={winner === 'starter'} />
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {!detailsLoading && contributionRows.length === 0 ? (
+            <div className="empty-state">
+              No shared weekly point-source comparison is available.
+            </div>
+          ) : null}
+          <p className="comparison-count-note">
+            Row wins are a transparent scan aid, not independent evidence or a confidence score. The
+            start recommendation remains the optimizer’s league-scored lineup result.
+          </p>
+        </section>
+      ) : (
+        <section className="comparison-section" aria-label={`${metricLabel(metric)} comparison`}>
+          <div className="comparison-section-heading">
+            <div>
+              <div className="section-label">This week’s stat drill-down</div>
+              <h3>{metricLabel(metric)} comparison</h3>
+            </div>
+            <button type="button" onClick={() => onMetricChange('fantasy_points')}>
+              Full matrix
+            </button>
+          </div>
+          <div className="comparison-table-scroll">
+            <table className="comparison-table stat-detail-table">
+              <thead>
+                <tr>
+                  <th>Measure</th>
+                  <th>{challenger.name}</th>
+                  <th>{starter.name}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>Mean FP contribution</th>
+                  <td
+                    className={
+                      challengerMarket && challengerMarket.expected_points < 0 ? 'negative' : ''
+                    }
+                  >
+                    {formatContribution(challengerMarket?.expected_points)}
+                  </td>
+                  <td
+                    className={starterMarket && starterMarket.expected_points < 0 ? 'negative' : ''}
+                  >
+                    {formatContribution(starterMarket?.expected_points)}
+                  </td>
+                </tr>
+                <tr>
+                  <th>10th</th>
+                  <td>{rangeValue(challengerMarket, 0)}</td>
+                  <td>{rangeValue(starterMarket, 0)}</td>
+                </tr>
+                <tr>
+                  <th>Median</th>
+                  <td>{rangeValue(challengerMarket, 1)}</td>
+                  <td>{rangeValue(starterMarket, 1)}</td>
+                </tr>
+                <tr>
+                  <th>90th</th>
+                  <td>{rangeValue(challengerMarket, 2)}</td>
+                  <td>{rangeValue(starterMarket, 2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The central chart compares the complete fitted distributions for this week’s stat.</p>
+        </section>
+      )}
+    </div>
+  );
+}

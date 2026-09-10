@@ -154,6 +154,8 @@ A memoized assignment search maximizes the requested target across eligible star
 
 The optimizer also returns `bench_pressure`. For every modeled bench player, it solves the lineup again with that player required to occupy an eligible starter slot. `delta_to_lineup` is the optimal unconstrained lineup total minus that forced-lineup total. This is the authoritative "FP back" measure used by Dashboard; the browser must not approximate it by comparing raw player projections or recreating FLEX eligibility. The forced solution also identifies the starter displaced by that bench player when one exists.
 
+Selecting a Dashboard bench-pressure row carries that exact bench player/displaced starter pair and `delta_to_lineup` into Players as start/sit comparison context. The browser narrows the existing comparison series to those two players and loads both canonical `/player/odds` payloads from the shared week context. The inspector presents a weekly tie-breaker matrix: projection ranges, same-week game lines, and `StatProjection.expected_points`/median values aligned by market. Selecting a contribution changes the shared metric so the central chart compares the two backend-supplied stat distributions. It must not show ADP, draft rank, season win totals, rest-of-season projections, multi-week SOS or any input outside the requested week. The lineup recommendation remains optimizer-derived; the browser may count higher comparable rows only as a display aid and must not pretend those correlated rows are independent evidence or a confidence score.
+
 Unsupported starter slots (currently most importantly K) are returned as `unmodeled_slots`; the optimizer must not invent scores just to fill them. Starter positions with no priced candidate are returned as `unfilled_slots`.
 
 ## Odds API efficiency
@@ -173,7 +175,7 @@ Feature/main CI builds the exact Dockerfile, runs the image, verifies `/health` 
 The runtime smoke covers:
 
 - fresh-browser username → league → team setup and cookie persistence;
-- Dashboard as the default destination, including ideal lineup, bench pressure and two-week defense summary;
+- Dashboard as the default destination, including ideal lineup, bench pressure, start/sit comparison drill-down and two-week defense summary;
 - primary navigation plus browser-history restoration of destination/week context;
 - linked player ranking/chart/inspector behavior and Target FP;
 - continuous yardage density, discrete exact-value PMF and low-granularity threshold-gauge rendering;
