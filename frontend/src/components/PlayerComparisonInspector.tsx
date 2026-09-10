@@ -1,6 +1,7 @@
 import { metricLabel } from '../analysis/metrics';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
 import type { MarketDetail, PlayerOddsDetails, ProjectionPlayer } from '../types';
+import { RangeThermometer } from './RangeThermometer';
 
 interface PlayerComparisonInspectorProps {
   challenger: ProjectionPlayer;
@@ -17,6 +18,12 @@ interface PlayerComparisonInspectorProps {
 
 type MatrixSide = 'challenger' | 'starter';
 
+interface MatrixRange {
+  floor: number;
+  mid: number;
+  ceiling: number;
+}
+
 interface MatrixRow {
   key: string;
   label: string;
@@ -25,6 +32,13 @@ interface MatrixRow {
   challengerDisplay: string;
   starterDisplay: string;
   comparable?: boolean;
+  /** A lower value wins the row, e.g. a stat the league scores negatively. */
+  lowerWins?: boolean;
+  challengerRange?: MatrixRange | null;
+  starterRange?: MatrixRange | null;
+  rangeLabelSuffix?: string;
+  /** Accessible name for the drill-down button when the row has one. */
+  actionLabel?: string;
 }
 
 function formatPoints(value: number | null | undefined): string {
@@ -59,6 +73,35 @@ function formatKickoff(value: string | null | undefined): string {
   }).format(date);
 }
 
+function formatRange(range: MatrixRange | null | undefined, suffix: string): string {
+  if (!range) return '—';
+  const values = [range.floor, range.mid, range.ceiling].map(formatValue).join(' · ');
+  return suffix ? `${values} ${suffix}` : values;
+}
+
+function playerRange(player: ProjectionPlayer): MatrixRange | null {
+  if (player.floor === null || player.mid === null || player.ceiling === null) return null;
+  return { floor: player.floor, mid: player.mid, ceiling: player.ceiling };
+}
+
+function marketRange(market: MarketDetail | undefined): MatrixRange | null {
+  if (!market) return null;
+  const [floor, mid, ceiling] = market.stat_range;
+  if (floor === undefined || mid === undefined || ceiling === undefined) return null;
+  return { floor, mid, ceiling };
+}
+
+/** Zero-anchored shared scale so both thermometers read as magnitudes, not as a zoomed gap. */
+function rangeScale(ranges: (MatrixRange | null | undefined)[]): {
+  minimum: number;
+  maximum: number;
+} {
+  const present = ranges.filter((range): range is MatrixRange => Boolean(range));
+  const minimum = Math.min(0, ...present.map((range) => range.floor));
+  const maximum = Math.max(minimum + 1, ...present.map((range) => range.ceiling));
+  return { minimum, maximum };
+}
+
 function rangeValue(market: MarketDetail | undefined, index: 0 | 1 | 2): string {
   return formatValue(market?.stat_range[index]);
 }
@@ -68,7 +111,38 @@ function rowWinner(row: MatrixRow): MatrixSide | null {
   if (row.challengerValue === null || row.challengerValue === undefined) return null;
   if (row.starterValue === null || row.starterValue === undefined) return null;
   if (Math.abs(row.challengerValue - row.starterValue) < 0.05) return null;
-  return row.challengerValue > row.starterValue ? 'challenger' : 'starter';
+  const challengerLeads = row.lowerWins
+    ? row.challengerValue < row.starterValue
+    : row.challengerValue > row.starterValue;
+  return challengerLeads ? 'challenger' : 'starter';
+}
+
+function isScored(row: MatrixRow): boolean {
+  return (
+    row.comparable !== false &&
+    row.challengerValue !== null &&
+    row.challengerValue !== undefined &&
+    row.starterValue !== null &&
+    row.starterValue !== undefined
+  );
+}
+
+function leadSentence(
+  rows: MatrixRow[],
+  challengerName: string,
+  starterName: string,
+  measure: string,
+): string {
+  const scored = rows.filter(isScored);
+  const challengerWins = scored.filter((row) => rowWinner(row) === 'challenger').length;
+  const starterWins = scored.filter((row) => rowWinner(row) === 'starter').length;
+  const lead =
+    challengerWins > starterWins
+      ? `${challengerName} leads ${challengerWins}–${starterWins}`
+      : starterWins > challengerWins
+        ? `${starterName} leads ${starterWins}–${challengerWins}`
+        : `Signals are tied ${challengerWins}–${starterWins}`;
+  return `${lead} across ${scored.length} comparable ${measure} signals`;
 }
 
 function PlayerHeading({
@@ -96,23 +170,85 @@ function PlayerHeading({
   );
 }
 
-function MatrixCell({ display, winner }: { display: string; winner: boolean }) {
+function MatrixCell({
+  display,
+  winner,
+  range,
+  scale,
+  thermometerLabel,
+}: {
+  display: string;
+  winner: boolean;
+  range: MatrixRange | null | undefined;
+  scale: { minimum: number; maximum: number } | undefined;
+  thermometerLabel: string;
+}) {
   return (
     <td className={winner ? 'matrix-winner' : undefined}>
       <span>{display}</span>
+      {range && scale ? (
+        <RangeThermometer
+          floor={range.floor}
+          mid={range.mid}
+          ceiling={range.ceiling}
+          minimum={scale.minimum}
+          maximum={scale.maximum}
+          label={thermometerLabel}
+          className="matrix-range-glyph"
+        />
+      ) : null}
       {winner ? <small>Edge</small> : null}
     </td>
   );
 }
 
-function MatrixRows({ rows }: { rows: MatrixRow[] }) {
+function MatrixRows({
+  rows,
+  challengerName,
+  starterName,
+  onMetricChange,
+}: {
+  rows: MatrixRow[];
+  challengerName: string;
+  starterName: string;
+  onMetricChange?: (metric: string) => void;
+}) {
   return rows.map((row) => {
     const winner = rowWinner(row);
+    const scale =
+      row.challengerRange || row.starterRange
+        ? rangeScale([row.challengerRange, row.starterRange])
+        : undefined;
+    const suffix = row.rangeLabelSuffix ?? '';
     return (
       <tr key={row.key}>
-        <th>{row.label}</th>
-        <MatrixCell display={row.challengerDisplay} winner={winner === 'challenger'} />
-        <MatrixCell display={row.starterDisplay} winner={winner === 'starter'} />
+        <th>
+          {onMetricChange ? (
+            <button
+              type="button"
+              onClick={() => onMetricChange(row.key)}
+              aria-label={row.actionLabel ?? `Compare ${row.label} distributions`}
+            >
+              {row.label}
+            </button>
+          ) : (
+            row.label
+          )}
+        </th>
+        <MatrixCell
+          display={row.challengerDisplay}
+          winner={winner === 'challenger'}
+          range={row.challengerRange}
+          scale={scale}
+          thermometerLabel={`${challengerName} ${row.label} floor ${formatValue(row.challengerRange?.floor)}, mid ${formatValue(row.challengerRange?.mid)}, ceiling ${formatValue(row.challengerRange?.ceiling)}${suffix ? ` ${suffix}` : ''}`}
+        />
+        <MatrixCell
+          display={row.starterDisplay}
+          winner={winner === 'starter'}
+          range={row.starterRange}
+          scale={scale}
+          thermometerLabel={`${starterName} ${row.label} floor ${formatValue(row.starterRange?.floor)}, mid ${formatValue(row.starterRange?.mid)}, ceiling ${formatValue(row.starterRange?.ceiling)}${suffix ? ` ${suffix}` : ''}`}
+        />
       </tr>
     );
   });
@@ -151,7 +287,22 @@ export function PlayerComparisonInspector({
   const challengerMatchup = challengerDetails?.matchup;
   const starterMatchup = starterDetails?.matchup;
 
+  const challengerFantasyRange = playerRange(challenger);
+  const starterFantasyRange = playerRange(starter);
+
   const projectionRows: MatrixRow[] = [
+    {
+      key: 'fantasy-range',
+      label: 'Fantasy point range',
+      challengerValue: null,
+      starterValue: null,
+      challengerDisplay: formatRange(challengerFantasyRange, 'FP'),
+      starterDisplay: formatRange(starterFantasyRange, 'FP'),
+      comparable: false,
+      challengerRange: challengerFantasyRange,
+      starterRange: starterFantasyRange,
+      rangeLabelSuffix: 'FP',
+    },
     {
       key: 'floor',
       label: 'Floor',
@@ -249,36 +400,46 @@ export function PlayerComparisonInspector({
   const contributionRows: MatrixRow[] = contributionKeys.map((marketKey) => {
     const challengerStat = challengerDetails?.markets[marketKey];
     const starterStat = starterDetails?.markets[marketKey];
-    const statDisplay = (market: MarketDetail | undefined) =>
-      market
-        ? `${formatContribution(market.expected_points)} · ${formatValue(market.stat_range[1])} median`
-        : '—';
     return {
       key: marketKey,
       label: metricLabel(marketKey),
       challengerValue: challengerStat?.expected_points,
       starterValue: starterStat?.expected_points,
-      challengerDisplay: statDisplay(challengerStat),
-      starterDisplay: statDisplay(starterStat),
+      challengerDisplay: formatContribution(challengerStat?.expected_points),
+      starterDisplay: formatContribution(starterStat?.expected_points),
+      actionLabel: `Compare ${metricLabel(marketKey)} distributions`,
     };
   });
 
-  const scoredRows = [...projectionRows, ...matchupRows, ...contributionRows].filter(
-    (row) =>
-      row.comparable !== false &&
-      row.challengerValue !== null &&
-      row.challengerValue !== undefined &&
-      row.starterValue !== null &&
-      row.starterValue !== undefined,
-  );
-  const challengerWins = scoredRows.filter((row) => rowWinner(row) === 'challenger').length;
-  const starterWins = scoredRows.filter((row) => rowWinner(row) === 'starter').length;
-  const signalLead =
-    challengerWins > starterWins
-      ? `${challenger.name} leads ${challengerWins}–${starterWins}`
-      : starterWins > challengerWins
-        ? `${starter.name} leads ${starterWins}–${challengerWins}`
-        : `Signals are tied ${challengerWins}–${starterWins}`;
+  const statValueRows: MatrixRow[] = contributionKeys.map((marketKey) => {
+    const challengerStat = challengerDetails?.markets[marketKey];
+    const starterStat = starterDetails?.markets[marketKey];
+    const challengerStatRange = marketRange(challengerStat);
+    const starterStatRange = marketRange(starterStat);
+    // The league can score a stat negatively (interceptions), so the smaller
+    // volume is the better weekly outcome. Read that from the scored points
+    // rather than assuming every counted stat is helpful.
+    const lowerWins = [challengerStat, starterStat].some(
+      (stat) => stat !== undefined && stat.expected_points < 0,
+    );
+    return {
+      key: marketKey,
+      label: metricLabel(marketKey),
+      challengerValue: challengerStatRange?.mid,
+      starterValue: starterStatRange?.mid,
+      challengerDisplay: formatRange(challengerStatRange, ''),
+      starterDisplay: formatRange(starterStatRange, ''),
+      lowerWins,
+      challengerRange: challengerStatRange,
+      starterRange: starterStatRange,
+      actionLabel: `Compare ${metricLabel(marketKey)} stat values`,
+    };
+  });
+
+  const pointRows = [...projectionRows, ...matchupRows, ...contributionRows];
+  const pointLead = leadSentence(pointRows, challenger.name, starter.name, 'fantasy-point');
+  const statLead = leadSentence(statValueRows, challenger.name, starter.name, 'stat-value');
+  const statScale = rangeScale([marketRange(challengerMarket), marketRange(starterMarket)]);
 
   return (
     <div className="start-sit-comparison">
@@ -300,9 +461,8 @@ export function PlayerComparisonInspector({
           {challenger.name} is {lineupDelta.toFixed(1)} lineup FP back after re-optimizing every
           eligible slot.
         </span>
-        <span className="comparison-signal-score">
-          {signalLead} across {scoredRows.length} comparable weekly signals
-        </span>
+        <span className="comparison-signal-score">{pointLead}</span>
+        <span className="comparison-signal-score">{statLead}</span>
       </div>
 
       {metric === 'fantasy_points' ? (
@@ -311,7 +471,9 @@ export function PlayerComparisonInspector({
           aria-label="Weekly tie-breaker matrix"
         >
           <p>
-            Every value is tied to this matchup week. An edge marks the higher comparable value;
+            Every value is tied to this matchup week. Fantasy-point rows use league scoring; stat
+            rows compare the raw weekly stat instead. Each thermometer marks the 10th percentile,
+            median and 90th percentile on a shared scale. An edge marks the better comparable value;
             missing data and ties do not award either player a win.
           </p>
           {detailsLoading && (!challengerDetails || !starterDetails) ? (
@@ -343,39 +505,43 @@ export function PlayerComparisonInspector({
               </thead>
               <tbody>
                 <tr className="matrix-group-row">
-                  <th colSpan={3}>Projection</th>
+                  <th colSpan={3}>Projection · fantasy points</th>
                 </tr>
-                <MatrixRows rows={projectionRows} />
+                <MatrixRows
+                  rows={projectionRows}
+                  challengerName={challenger.name}
+                  starterName={starter.name}
+                />
                 <tr className="matrix-group-row">
                   <th colSpan={3}>Matchup</th>
                 </tr>
-                <MatrixRows rows={matchupRows} />
+                <MatrixRows
+                  rows={matchupRows}
+                  challengerName={challenger.name}
+                  starterName={starter.name}
+                />
                 {contributionRows.length ? (
-                  <tr className="matrix-group-row">
-                    <th colSpan={3}>Fantasy-point sources</th>
-                  </tr>
-                ) : null}
-                {contributionRows.map((row) => {
-                  const winner = rowWinner(row);
-                  return (
-                    <tr key={row.key}>
-                      <th>
-                        <button
-                          type="button"
-                          onClick={() => onMetricChange(row.key)}
-                          aria-label={`Compare ${row.label} distributions`}
-                        >
-                          {row.label}
-                        </button>
-                      </th>
-                      <MatrixCell
-                        display={row.challengerDisplay}
-                        winner={winner === 'challenger'}
-                      />
-                      <MatrixCell display={row.starterDisplay} winner={winner === 'starter'} />
+                  <>
+                    <tr className="matrix-group-row">
+                      <th colSpan={3}>Fantasy-point sources</th>
                     </tr>
-                  );
-                })}
+                    <MatrixRows
+                      rows={contributionRows}
+                      challengerName={challenger.name}
+                      starterName={starter.name}
+                      onMetricChange={onMetricChange}
+                    />
+                    <tr className="matrix-group-row">
+                      <th colSpan={3}>Stat value · 10th · median · 90th</th>
+                    </tr>
+                    <MatrixRows
+                      rows={statValueRows}
+                      challengerName={challenger.name}
+                      starterName={starter.name}
+                      onMetricChange={onMetricChange}
+                    />
+                  </>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -385,8 +551,10 @@ export function PlayerComparisonInspector({
             </div>
           ) : null}
           <p className="comparison-count-note">
-            Row wins are a transparent scan aid, not independent evidence or a confidence score. The
-            start recommendation remains the optimizer’s league-scored lineup result.
+            Row wins are a transparent scan aid, not independent evidence or a confidence score.
+            Fantasy-point and stat-value signals are counted separately because a stat and the
+            points it produces are the same underlying market. The start recommendation remains the
+            optimizer’s league-scored lineup result.
           </p>
         </section>
       ) : (
@@ -440,10 +608,39 @@ export function PlayerComparisonInspector({
                   <td>{rangeValue(challengerMarket, 2)}</td>
                   <td>{rangeValue(starterMarket, 2)}</td>
                 </tr>
+                <tr>
+                  <th>Stat value range</th>
+                  {[
+                    { player: challenger, market: challengerMarket },
+                    { player: starter, market: starterMarket },
+                  ].map(({ player, market }) => {
+                    const range = marketRange(market);
+                    return (
+                      <td key={player.name}>
+                        {range ? (
+                          <RangeThermometer
+                            floor={range.floor}
+                            mid={range.mid}
+                            ceiling={range.ceiling}
+                            minimum={statScale.minimum}
+                            maximum={statScale.maximum}
+                            label={`${player.name} ${metricLabel(metric)} floor ${formatValue(range.floor)}, mid ${formatValue(range.mid)}, ceiling ${formatValue(range.ceiling)}`}
+                            className="matrix-range-glyph"
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>
-          <p>The central chart compares the complete fitted distributions for this week’s stat.</p>
+          <p>
+            The central chart compares the complete fitted distributions for this week’s stat. The
+            range thermometers place both players on one shared stat-value scale.
+          </p>
         </section>
       )}
     </div>

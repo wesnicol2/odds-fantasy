@@ -184,7 +184,7 @@ def api_fixture(route: Route) -> None:
                 },
                 "markets": {
                     "player_rush_yds": {
-                        "stat_range": [45, 75, 115],
+                        "stat_range": [5, 12, 25] if is_receiver else [45, 75, 115],
                         "expected_points": mean - 3.7,
                         "graph": RUSH_GRAPH,
                         "anchors": [
@@ -194,7 +194,7 @@ def api_fixture(route: Route) -> None:
                         "lines": market_lines(64.5, 84.5),
                     },
                     "player_receptions": {
-                        "stat_range": [2, 4, 6],
+                        "stat_range": [4, 7, 10] if is_receiver else [2, 4, 6],
                         "expected_points": 0.0,
                         "graph": RECEPTIONS_GRAPH,
                         "anchors": [
@@ -354,22 +354,54 @@ def main() -> None:
             "Beta Receiver is 2.0 lineup FP back after re-optimizing every eligible slot.",
             exact=True,
         ).wait_for()
+        # Fantasy-point and stat-value signals are tallied separately, never merged.
         inspector.get_by_text(
-            "Alpha Runner leads 7\u20130 across 9 comparable weekly signals", exact=True
+            "Alpha Runner leads 7\u20130 across 9 comparable fantasy-point signals", exact=True
+        ).wait_for()
+        inspector.get_by_text(
+            "Signals are tied 1\u20131 across 3 comparable stat-value signals", exact=True
         ).wait_for()
         matrix = inspector.get_by_role("table", name="Weekly player comparison matrix")
         assert "Beta Receiver" in matrix.inner_text()
         assert "Alpha Runner" in matrix.inner_text()
         assert "Team implied total" in matrix.inner_text()
         assert "25.5 pts" in matrix.inner_text()
-        rushing_row = matrix.locator("tbody tr").filter(has_text="Rushing yards")
-        assert "+11.8 FP" in rushing_row.inner_text()
-        assert "+13.8 FP" in rushing_row.inner_text()
-        matrix.get_by_role("button", name="Compare Rushing yards distributions", exact=True).click()
+
+        # Fantasy points carry a floor/mid/ceiling thermometer alongside the scored rows.
+        fantasy_range_row = matrix.locator("tbody tr").filter(has_text="Fantasy point range")
+        assert "8 \u00b7 15 \u00b7 24 FP" in fantasy_range_row.inner_text()
+        assert "10 \u00b7 17 \u00b7 25 FP" in fantasy_range_row.inner_text()
+        assert fantasy_range_row.locator(".range-glyph").count() == 2
+        assert "Edge" not in fantasy_range_row.inner_text()
+
+        point_source_row = matrix.locator("tbody tr").filter(has_text="+11.8 FP")
+        assert "+13.8 FP" in point_source_row.inner_text()
+
+        # Stat value is measured on its own scale, with all three percentiles present.
+        # Group headings render uppercase, so compare case-insensitively.
+        assert "STAT VALUE \u00b7 10TH \u00b7 MEDIAN \u00b7 90TH" in matrix.inner_text().upper()
+        rush_value_row = matrix.locator("tbody tr").filter(has_text="45 \u00b7 75 \u00b7 115")
+        assert "5 \u00b7 12 \u00b7 25" in rush_value_row.inner_text()
+        assert rush_value_row.locator(".range-glyph").count() == 2
+        assert "matrix-winner" in (rush_value_row.locator("td").nth(1).get_attribute("class") or "")
+        receptions_value_row = matrix.locator("tbody tr").filter(has_text="4 \u00b7 7 \u00b7 10")
+        assert "matrix-winner" in (
+            receptions_value_row.locator("td").first.get_attribute("class") or ""
+        )
+        # Identical stat ranges award neither player a stat-value win.
+        anytime_value_row = matrix.locator("tbody tr").filter(has_text="0 \u00b7 1 \u00b7 2")
+        assert "Edge" not in anytime_value_row.inner_text()
+
+        matrix.get_by_role("button", name="Compare Rushing yards stat values", exact=True).click()
         rushing_comparison = inspector.get_by_role("region", name="Rushing yards comparison")
         rushing_comparison.get_by_text("Rushing yards comparison", exact=True).wait_for()
         assert "+11.8 FP" in rushing_comparison.inner_text()
         assert "+13.8 FP" in rushing_comparison.inner_text()
+        stat_range_row = rushing_comparison.locator("tbody tr").filter(has_text="Stat value range")
+        assert stat_range_row.locator(".range-glyph").count() == 2
+        inspector.get_by_role("button", name="Full matrix", exact=True).click()
+        matrix.get_by_role("button", name="Compare Rushing yards distributions", exact=True).click()
+        rushing_comparison.get_by_text("Rushing yards comparison", exact=True).wait_for()
         inspector.get_by_role("button", name="Full matrix", exact=True).click()
         inspector.get_by_role("button", name="Exit comparison", exact=True).click()
 

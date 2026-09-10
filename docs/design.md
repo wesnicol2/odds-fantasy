@@ -254,11 +254,16 @@ The comparison inspector should show:
 - the optimizer's current recommendation and lineup-level `FP back` context;
 - a weekly tie-breaker matrix with aligned Floor / Mid / Ceiling / Mean values for both players;
 - this game's opponent, kickoff, spread, total and team implied total when the market supplies them;
-- an aligned union of this week's modeled props with each stat's signed expected fantasy-point contribution and median;
-- a visible edge marker on the higher comparable value and a count of row wins;
+- an aligned union of this week's modeled props with each stat's signed expected fantasy-point contribution;
+- the same modeled props measured a second way, in raw stat value rather than league points, using each market's backend 10th / median / 90th percentiles;
+- a visible edge marker on the better comparable value and a count of row wins;
 - missing markets as `—`, distinct from a modeled zero-point contribution;
 - a direct stat action that changes the shared chart to compare both fitted stat distributions;
 - a direct return from the stat drill-down to the full matrix.
+
+Fantasy points and stat value are two measurements of the same week, so both use the same visual language: the Floor / Mid / Ceiling thermometer already used by the ranking table. Every thermometer marks all three percentiles, and the two players in one row share a single zero-anchored scale so the glyphs read as magnitudes rather than as a zoomed-in gap. A thermometer is presentation only — it places backend percentiles on a scale and never derives a value the backend did not supply.
+
+Fantasy-point and stat-value signals are counted as two separate tallies and must never be merged into one number: a stat and the points it produces are the same underlying market, so adding them would double-count it. Stat-value direction follows league scoring rather than assuming more is better — where the modeled contribution is negative (interceptions), the smaller weekly stat wins the row.
 
 Every matrix input must apply directly to the selected week. Do not show ADP, draft rank, team season-win totals, rest-of-season projections, multi-week strength of schedule or any other draft/long-horizon statistic. Spread is context rather than a scored row because favorable game script is position-dependent. Tied or missing values award neither player a row win. Row-win counts are a transparent scan aid, not a confidence score and not a replacement for the backend optimizer.
 
