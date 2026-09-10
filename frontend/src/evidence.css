@@ -274,30 +274,6 @@
   display: block;
 }
 
-.matrix-table td > small {
-  display: block;
-  margin-top: 2px;
-  color: #75d6a3;
-  font-size: 7px;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-/* Both comparison cells are equal fixed-width, so a full-width glyph keeps the
-   shared floor/mid/ceiling scale pixel-aligned between the two players. */
-.matrix-range-glyph {
-  width: 100%;
-  min-width: 0;
-  margin-top: 4px;
-}
-
-.matrix-table td.matrix-winner {
-  box-shadow: inset 2px 0 #4bc883;
-  background: #10231d;
-  color: #f2fff8;
-}
-
 .matrix-table .matrix-group-row th {
   width: auto;
   padding-top: 10px;
