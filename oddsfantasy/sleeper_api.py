@@ -6,7 +6,8 @@ import requests
 
 from .config import DATA_DIR, SLEEPER_TO_ODDSAPI_TEAM
 
-SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
+SLEEPER_ROOT_URL = "https://api.sleeper.app"
+SLEEPER_BASE_URL = f"{SLEEPER_ROOT_URL}/v1"
 # Allow overriding request timeouts via env; default (connect=5s, read=20s)
 _conn_to = float(os.getenv("SLEEPER_CONNECT_TIMEOUT", "5") or 5)
 _read_to = float(os.getenv("SLEEPER_READ_TIMEOUT", "20") or 20)
@@ -101,6 +102,30 @@ def get_league_users(league_id):
     Fetch all user profiles for a given league to map owner_id -> display_name/username.
     """
     url = f"{SLEEPER_BASE_URL}/league/{league_id}/users"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_league_matchups(league_id, week):
+    """Fetch every roster's submitted starters and live points for one league week."""
+    url = f"{SLEEPER_BASE_URL}/league/{league_id}/matchups/{week}"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_nfl_state():
+    """Return Sleeper's current NFL season/week state."""
+    url = f"{SLEEPER_BASE_URL}/state/nfl"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_nfl_schedule(season, season_type="regular"):
+    """Return Sleeper's NFL schedule, including per-game status, for a season."""
+    url = f"{SLEEPER_ROOT_URL}/schedule/nfl/{season_type}/{season}"
     response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
