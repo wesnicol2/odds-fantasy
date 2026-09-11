@@ -78,6 +78,10 @@
   opacity: 0.48;
 }
 
+.decision-table tr.locked-row {
+  background: #0f141a;
+}
+
 .row-secondary {
   display: block;
   margin-top: 2px;
@@ -90,7 +94,8 @@
   font-weight: 700;
 }
 
-.ownership {
+.ownership,
+.lineup-status {
   display: inline-block;
   padding: 2px 6px;
   border: 1px solid #303844;
@@ -110,6 +115,19 @@
 
 .ownership.taken {
   color: #858f9b;
+}
+
+.lineup-status.open {
+  color: #9bc6ad;
+}
+
+.lineup-status.live {
+  border-color: #816a31;
+  color: #e3c66c;
+}
+
+.lineup-status.final {
+  color: #8793a1;
 }
 
 .decision-note {
@@ -152,6 +170,23 @@
 .lineup-total strong {
   color: #f1f4f7;
   font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineup-live-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: -4px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid #202b36;
+  background: #0f151c;
+  color: #8c98a6;
+  font-size: 10px;
+}
+
+.lineup-live-summary strong {
+  color: #dce5ef;
   font-variant-numeric: tabular-nums;
 }
 
