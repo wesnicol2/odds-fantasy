@@ -227,11 +227,7 @@ def load_live_state(
             return empty
         matchups = sleeper_api.get_league_matchups(resolved_league_id, nfl_week) or []
         matchup = next(
-            (
-                row
-                for row in matchups
-                if str(row.get("roster_id")) == str(resolved_roster_id)
-            ),
+            (row for row in matchups if str(row.get("roster_id")) == str(resolved_roster_id)),
             None,
         )
         if not matchup:
