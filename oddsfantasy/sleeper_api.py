@@ -6,7 +6,8 @@ import requests
 
 from .config import DATA_DIR, SLEEPER_TO_ODDSAPI_TEAM
 
-SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
+SLEEPER_ROOT_URL = "https://api.sleeper.app"
+SLEEPER_BASE_URL = f"{SLEEPER_ROOT_URL}/v1"
 # Allow overriding request timeouts via env; default (connect=5s, read=20s)
 _conn_to = float(os.getenv("SLEEPER_CONNECT_TIMEOUT", "5") or 5)
 _read_to = float(os.getenv("SLEEPER_READ_TIMEOUT", "20") or 20)
@@ -14,6 +15,7 @@ REQ_TIMEOUT = (_conn_to, _read_to)  # (connect, read) seconds
 _PLAYERS_CACHE = None
 _PLAYERS_CACHE_FILE = os.path.join(DATA_DIR, "sleeper_players.json")
 _PLAYERS_TTL = int(os.getenv("SLEEPER_PLAYERS_TTL", "86400"))  # 24h
+_SCHEDULE_CACHE: dict[tuple[str, str], list[dict]] = {}
 
 
 def get_player_enhanced_info(player_id):
@@ -110,6 +112,25 @@ def get_nfl_state():
     response = requests.get(url, timeout=REQ_TIMEOUT)
     response.raise_for_status()
     return response.json()
+
+
+def get_nfl_schedule(season, season_type="regular"):
+    """Fetch the stable season schedule once per process.
+
+    Sleeper's schedule route is outside /v1 and keeps completed games, unlike
+    The Odds API's live/upcoming event feed. That makes it the durable source
+    for deciding whether a fantasy lineup slot has crossed kickoff.
+    """
+    key = (str(season), str(season_type))
+    if key in _SCHEDULE_CACHE:
+        return _SCHEDULE_CACHE[key]
+    url = f"{SLEEPER_ROOT_URL}/schedule/nfl/{season_type}/{season}"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    data = response.json()
+    rows = data if isinstance(data, list) else []
+    _SCHEDULE_CACHE[key] = rows
+    return rows
 
 
 def get_league_users(league_id):
