@@ -60,6 +60,7 @@ def _empty_state() -> dict:
     return {
         "locked_assignments": [],
         "unavailable_player_ids": [],
+        "player_statuses": {},
         "week": None,
         "season": None,
     }
@@ -123,11 +124,12 @@ def current_lineup_lock_state(
             return statuses_by_team.get(str(team_abbr), "upcoming") if team_abbr else "upcoming"
 
         matchup_players = [str(player_id) for player_id in (matchup.get("players") or [])]
-        unavailable = sorted(
-            player_id
+        player_statuses = {
+            player_id: status_for(player_id)
             for player_id in matchup_players
             if status_for(player_id) in {"live", "final"}
-        )
+        }
+        unavailable = sorted(player_statuses)
 
         starters = [str(player_id) for player_id in (matchup.get("starters") or [])]
         starter_points = matchup.get("starters_points") or []
@@ -167,6 +169,7 @@ def current_lineup_lock_state(
         return {
             "locked_assignments": locked_assignments,
             "unavailable_player_ids": unavailable,
+            "player_statuses": player_statuses,
             "week": current_week,
             "season": current_season,
         }
