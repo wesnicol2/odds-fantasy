@@ -14,16 +14,10 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
-from . import odds_client, odds_details, ratelimit
+from . import live_lineup, odds_client, odds_details, ratelimit
 from .build_info import build_info
 from .config import DEFAULT_SEASON
-from .services import (
-    compute_best_lineup,
-    compute_projections,
-    list_defenses,
-    resolve_league,
-    resolve_user_leagues,
-)
+from .services import list_defenses, resolve_league, resolve_user_leagues
 
 _DEBUG_FLAG = False
 
@@ -177,7 +171,7 @@ def application(environ, start_response):
 
         if path == "/projections":
             _refresh_quota_snapshot()
-            data = compute_projections(**common())
+            data = live_lineup.compute_projections(**common())
             return _json_response(start_response, "200 OK", _attach_quota(data))
 
         if path == "/defenses":
@@ -195,7 +189,7 @@ def application(environ, start_response):
                     {"error": "target_must_be_floor_mid_or_ceiling"},
                 )
             _refresh_quota_snapshot()
-            data = compute_best_lineup(**params)
+            data = live_lineup.compute_best_lineup(**params)
             return _json_response(start_response, "200 OK", _attach_quota(data))
 
         if path == "/player/odds":
