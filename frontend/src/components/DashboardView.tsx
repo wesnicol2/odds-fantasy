@@ -119,7 +119,7 @@ export function DashboardView({
             </div>
             <div className="dashboard-total">
               <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
-              <span>{remainingMode ? 'week FP' : 'total FP'}</span>
+              <span>{remainingMode ? 'modeled week FP' : 'total FP'}</span>
             </div>
           </div>
 
