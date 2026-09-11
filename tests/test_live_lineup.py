@@ -86,9 +86,7 @@ class LiveLineupStateTest(unittest.TestCase):
 
     @mock.patch("oddsfantasy.live_lineup.sleeper_api.get_league_matchups")
     @mock.patch("oddsfantasy.live_lineup.sleeper_api.get_nfl_state")
-    def test_does_not_apply_current_live_state_to_another_season(
-        self, mock_state, mock_matchups
-    ):
+    def test_does_not_apply_current_live_state_to_another_season(self, mock_state, mock_matchups):
         mock_state.return_value = {"season": "2026", "season_type": "regular", "leg": 1}
         result = current_lineup_lock_state(
             league_id="league",
