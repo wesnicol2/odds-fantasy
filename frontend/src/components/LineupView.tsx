@@ -67,11 +67,15 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
       {!loading && !error && payload ? (
         <>
           <div className="lineup-total">
-            <span>{hasLocks ? `Actual + projected ${label(payload.target)}` : `Projected ${label(payload.target)}`}</span>
+            <span>
+              {hasLocks
+                ? `Actual + projected ${label(payload.target)}`
+                : `Projected ${label(payload.target)}`}
+            </span>
             <strong>{payload.total_points.toFixed(1)}</strong>
           </div>
           {hasLocks ? (
-            <div className="lineup-live-summary" aria-label="Locked lineup summary">
+            <div className="lineup-live-summary" role="group" aria-label="Locked lineup summary">
               <span>
                 <strong>{lockedCount}</strong> {lockedCount === 1 ? 'slot' : 'slots'} locked
               </span>
@@ -82,7 +86,8 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
                 <strong>{remainingPoints.toFixed(1)}</strong> projected remaining FP
               </span>
               <span>
-                <strong>{remainingSlots}</strong> {remainingSlots === 1 ? 'slot' : 'slots'} still open
+                <strong>{remainingSlots}</strong> {remainingSlots === 1 ? 'slot' : 'slots'} still
+                open
               </span>
             </div>
           ) : null}
@@ -104,7 +109,10 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
               </thead>
               <tbody>
                 {payload.lineup.map((row) => (
-                  <tr key={`${row.slot}:${row.name}`} className={row.locked ? 'locked-row' : undefined}>
+                  <tr
+                    key={`${row.slot}:${row.name}`}
+                    className={row.locked ? 'locked-row' : undefined}
+                  >
                     <td>
                       <strong>{row.slot}</strong>
                     </td>
@@ -117,7 +125,11 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
                           row.locked ? (row.game_status === 'live' ? 'live' : 'final') : 'open'
                         }`}
                       >
-                        {row.locked ? (row.game_status === 'live' ? 'Live · locked' : 'Final · locked') : 'Open'}
+                        {row.locked
+                          ? row.game_status === 'live'
+                            ? 'Live · locked'
+                            : 'Final · locked'
+                          : 'Open'}
                       </span>
                     </td>
                     <td className="number primary-decision-value">{row.points.toFixed(1)}</td>
