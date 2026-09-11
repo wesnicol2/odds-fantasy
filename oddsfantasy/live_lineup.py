@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 
 from . import ratelimit, services, sleeper_api
+from .config import SLEEPER_TO_ODDSAPI_TEAM
 from .lineup import DEFAULT_STARTERS, IGNORED_SLOTS, SLOT_ELIGIBILITY, build_best_lineup
 
 
@@ -36,8 +37,46 @@ def _actual_points(points: dict, player_id: str) -> float:
     return float(value) if isinstance(value, (int, float)) else 0.0
 
 
-def _game_start_by_team(planned: dict) -> dict[str, dt.datetime]:
+def _schedule_start_by_team(schedule: list[dict], nfl_week: int | None) -> dict[str, dt.datetime]:
+    """Durable kickoff map from Sleeper's season schedule.
+
+    The schedule keeps completed games after they disappear from live/upcoming
+    sportsbook event feeds. Some schedule payloads may expose a date without a
+    clock time; those rows are intentionally ignored rather than treating
+    midnight as kickoff and locking a lineup too early.
+    """
+    if nfl_week is None:
+        return {}
     starts: dict[str, dt.datetime] = {}
+    for game in schedule or []:
+        try:
+            game_week = int(game.get("week"))
+        except (TypeError, ValueError):
+            continue
+        if game_week != nfl_week:
+            continue
+        raw_date = str(game.get("date") or "")
+        if not raw_date or ("T" not in raw_date and ":" not in raw_date):
+            continue
+        commence = _parse_utc(raw_date)
+        if commence is None:
+            continue
+        for abbreviation in (game.get("home"), game.get("away")):
+            team = SLEEPER_TO_ODDSAPI_TEAM.get(str(abbreviation or "").upper())
+            if team:
+                starts[team] = commence
+    return starts
+
+
+def _game_start_by_team(
+    planned: dict,
+    schedule: list[dict] | None = None,
+    nfl_week: int | None = None,
+) -> dict[str, dt.datetime]:
+    # Sleeper schedule is durable across completed games. The already-loaded
+    # Odds API week plan may carry a more precise/current commence time for
+    # games still in its feed, so let it override the same team's schedule row.
+    starts = _schedule_start_by_team(schedule or [], nfl_week)
     for game in (planned or {}).values():
         commence = _parse_utc(getattr(game, "commence_time", None))
         if commence is None:
@@ -53,6 +92,8 @@ def build_live_state(
     roster_positions: list[str],
     matchup: dict,
     planned: dict,
+    schedule: list[dict] | None = None,
+    nfl_week: int | None = None,
     now: dt.datetime | None = None,
 ) -> dict:
     """Translate Sleeper's submitted lineup into immutable started decisions.
@@ -70,7 +111,7 @@ def build_live_state(
     starter_ids = [str(player_id) for player_id in (matchup.get("starters") or [])]
     starter_set = set(starter_ids)
     player_points = matchup.get("players_points") or {}
-    starts_by_team = _game_start_by_team(planned)
+    starts_by_team = _game_start_by_team(planned, schedule=schedule, nfl_week=nfl_week)
 
     started_ids: set[str] = set()
     for raw_player_id, info in roster_players.items():
@@ -178,8 +219,11 @@ def load_live_state(
         if not resolved_league_id or resolved_roster_id is None:
             return empty
         state = sleeper_api.get_nfl_state() or {}
-        nfl_week = state.get("week")
-        if not isinstance(nfl_week, int) or nfl_week < 1:
+        try:
+            nfl_week = int(state.get("week"))
+        except (TypeError, ValueError):
+            return empty
+        if nfl_week < 1:
             return empty
         matchups = sleeper_api.get_league_matchups(resolved_league_id, nfl_week) or []
         matchup = next(
@@ -192,11 +236,26 @@ def load_live_state(
         )
         if not matchup:
             return empty
+
+        schedule: list[dict] = []
+        schedule_season = str(state.get("season") or season)
+        season_type = str(state.get("season_type") or "regular").lower()
+        if season_type not in {"pre", "regular", "post"}:
+            season_type = "regular"
+        try:
+            schedule = sleeper_api.get_nfl_schedule(schedule_season, season_type)
+        except Exception as exc:
+            # The Odds week plan still gives a safe fallback for games that have
+            # not yet rolled off its event feed.
+            print(f"[live_lineup] Sleeper schedule unavailable: {exc}")
+
         return build_live_state(
             context.get("roster") or {},
             roster_positions,
             matchup,
             context.get("planned") or {},
+            schedule=schedule,
+            nfl_week=nfl_week,
         )
     except Exception as exc:
         print(f"[live_lineup] live Sleeper state unavailable: {exc}")
