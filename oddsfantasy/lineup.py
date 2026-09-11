@@ -84,15 +84,9 @@ def build_best_lineup(
     modeled_specs, unmodeled_specs = _starter_slot_specs(roster_positions)
     locks = [dict(row) for row in (locked_assignments or [])]
     locked_by_index = {
-        int(row["starter_index"]): row
-        for row in locks
-        if isinstance(row.get("starter_index"), int)
+        int(row["starter_index"]): row for row in locks if isinstance(row.get("starter_index"), int)
     }
-    locked_ids = {
-        str(row.get("player_id"))
-        for row in locks
-        if row.get("player_id") is not None
-    }
+    locked_ids = {str(row.get("player_id")) for row in locks if row.get("player_id") is not None}
     locked_names = {str(row.get("name")) for row in locks if row.get("name")}
     blocked_ids = {str(value) for value in (unavailable_player_ids or [])} | locked_ids
 
@@ -253,9 +247,7 @@ def build_best_lineup(
                 "pos": candidate.get("pos"),
                 "team": candidate.get("team"),
                 "points": round(candidate_score, 2),
-                "delta_to_lineup": round(
-                    max(0.0, baseline_remaining_total - forced_total), 2
-                ),
+                "delta_to_lineup": round(max(0.0, baseline_remaining_total - forced_total), 2),
                 "slot": forced_slot,
                 "displaces": displaced.get("name") if displaced else None,
                 "displaces_slot": (
