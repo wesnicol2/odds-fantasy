@@ -16,12 +16,16 @@ export interface ProjectionPlayer {
   books_used: number;
   markets_used: number;
   has_projection: boolean;
+  locked?: boolean;
+  lineup_status?: 'starter' | 'bench' | null;
+  actual_points?: number | null;
 }
 
 export interface ProjectionResponse {
   week: string;
   players: ProjectionPlayer[];
   roster_positions: string[];
+  started_count?: number;
   message?: string;
   error?: string;
   ratelimit?: string;
@@ -144,6 +148,8 @@ export interface LineupRow {
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
+  locked?: boolean;
+  actual_points?: number | null;
 }
 
 export interface BenchPressureRow {
@@ -157,11 +163,24 @@ export interface BenchPressureRow {
   displaces_slot: string | null;
 }
 
+export interface LockedBenchRow {
+  name: string;
+  pos: string | null;
+  team: string | null;
+  actual_points: number;
+  lineup_status: 'bench';
+}
+
 export interface LineupResponse {
   week: string;
   target: 'floor' | 'mid' | 'ceiling';
   lineup: LineupRow[];
   total_points: number;
+  actual_points?: number;
+  remaining_projected_points?: number;
+  locked_count?: number;
+  decisions_remaining?: number;
+  locked_bench?: LockedBenchRow[];
   bench_pressure: BenchPressureRow[];
   unmodeled_slots: string[];
   unfilled_slots: string[];
