@@ -22,6 +22,10 @@ function formatPoints(value: number | null): string {
   return value === null ? '—' : value.toFixed(1);
 }
 
+function hasStarted(player: ProjectionPlayer): boolean {
+  return player.game_status === 'live' || player.game_status === 'final';
+}
+
 export function PlayerRanking({
   players,
   target,
@@ -60,6 +64,9 @@ export function PlayerRanking({
 
     if (target === null) return filtered;
     return [...filtered].sort((left, right) => {
+      const leftStarted = hasStarted(left);
+      const rightStarted = hasStarted(right);
+      if (leftStarted !== rightStarted) return leftStarted ? 1 : -1;
       const leftProbability = probabilityAtTarget(left.curve, target) ?? -1;
       const rightProbability = probabilityAtTarget(right.curve, target) ?? -1;
       if (rightProbability !== leftProbability) return rightProbability - leftProbability;
@@ -124,6 +131,7 @@ export function PlayerRanking({
             {visiblePlayers.map((player) => {
               const isSelected = player.name === selectedPlayer;
               const isHovered = player.name === hoveredPlayer;
+              const started = hasStarted(player);
               const targetProbability = probabilityAtTarget(player.curve, target);
               const hasRange =
                 player.floor !== null && player.mid !== null && player.ceiling !== null;
@@ -131,7 +139,7 @@ export function PlayerRanking({
               return (
                 <tr
                   key={player.name}
-                  className={`${isSelected ? 'selected' : ''} ${isHovered ? 'hover-linked' : ''} ${player.has_projection ? '' : 'unavailable'}`}
+                  className={`${isSelected ? 'selected' : ''} ${isHovered ? 'hover-linked' : ''} ${player.has_projection ? '' : 'unavailable'} ${started ? 'already-played' : ''}`}
                   onMouseEnter={() => onHoverPlayer(player.name)}
                   onMouseLeave={() => onHoverPlayer(null)}
                 >
@@ -139,7 +147,7 @@ export function PlayerRanking({
                     <input
                       type="checkbox"
                       checked={compared.has(player.name)}
-                      disabled={!player.curve.length}
+                      disabled={!player.curve.length || started}
                       onChange={() => onToggleComparedPlayer(player.name)}
                       aria-label={`Graph ${player.name}`}
                     />
@@ -154,7 +162,9 @@ export function PlayerRanking({
                       <span>
                         {player.pos} · {player.team || 'Team unavailable'}
                       </span>
-                      {!player.has_projection ? <small>no priced markets</small> : null}
+                      {player.game_status === 'live' ? <small>LIVE · lineup decision locked</small> : null}
+                      {player.game_status === 'final' ? <small>FINAL · no longer actionable</small> : null}
+                      {!started && !player.has_projection ? <small>no priced markets</small> : null}
                     </button>
                   </td>
                   <td className="number">{formatPoints(player.floor)}</td>
