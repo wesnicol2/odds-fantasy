@@ -89,9 +89,7 @@ class LockedLineupOptimizerTest(unittest.TestCase):
         )
 
         self.assertEqual(result["lineup"][0]["name"], "Sunday Back")
-        self.assertNotIn(
-            "Thursday Bench Boom", {row["name"] for row in result["bench_pressure"]}
-        )
+        self.assertNotIn("Thursday Bench Boom", {row["name"] for row in result["bench_pressure"]})
 
 
 class LiveStateTest(unittest.TestCase):
