@@ -19,6 +19,11 @@ from .build_info import build_info
 from .config import DEFAULT_SEASON
 from .services import list_defenses, resolve_league, resolve_user_leagues
 
+# Keep these module-level seams stable: API tests and downstream callers patch
+# them directly, while their implementation is now live-lineup aware.
+compute_projections = live_lineup.compute_projections
+compute_best_lineup = live_lineup.compute_best_lineup
+
 _DEBUG_FLAG = False
 
 try:
@@ -171,7 +176,7 @@ def application(environ, start_response):
 
         if path == "/projections":
             _refresh_quota_snapshot()
-            data = live_lineup.compute_projections(**common())
+            data = compute_projections(**common())
             return _json_response(start_response, "200 OK", _attach_quota(data))
 
         if path == "/defenses":
@@ -189,7 +194,7 @@ def application(environ, start_response):
                     {"error": "target_must_be_floor_mid_or_ceiling"},
                 )
             _refresh_quota_snapshot()
-            data = live_lineup.compute_best_lineup(**params)
+            data = compute_best_lineup(**params)
             return _json_response(start_response, "200 OK", _attach_quota(data))
 
         if path == "/player/odds":
