@@ -114,7 +114,9 @@ export function DashboardView({
         >
           <div className="dashboard-section-heading">
             <div>
-              <span className="section-label">{hasLocks ? 'Best remaining lineup' : 'Ideal lineup'}</span>
+              <span className="section-label">
+                {hasLocks ? 'Best remaining lineup' : 'Ideal lineup'}
+              </span>
               <h3>{hasLocks ? 'Actual + remaining mid projection' : 'Mid projection'}</h3>
             </div>
             <div className="dashboard-total">
@@ -124,7 +126,7 @@ export function DashboardView({
           </div>
 
           {hasLocks ? (
-            <div className="dashboard-lock-summary" aria-label="Locked lineup summary">
+            <div className="dashboard-lock-summary" role="group" aria-label="Locked lineup summary">
               <span>
                 <strong>{lockedCount}</strong> {lockedCount === 1 ? 'slot' : 'slots'} locked
               </span>
@@ -132,11 +134,13 @@ export function DashboardView({
                 <strong>{lockedPoints.toFixed(1)}</strong> FP scored
               </span>
               <span>
-                <strong>{remainingSlots}</strong> {remainingSlots === 1 ? 'slot' : 'slots'} still open
+                <strong>{remainingSlots}</strong> {remainingSlots === 1 ? 'slot' : 'slots'} still
+                open
               </span>
               {lockedBench ? (
                 <span>
-                  <strong>{lockedBench}</strong> played bench {lockedBench === 1 ? 'player' : 'players'} excluded
+                  <strong>{lockedBench}</strong> played bench{' '}
+                  {lockedBench === 1 ? 'player' : 'players'} excluded
                 </span>
               ) : null}
             </div>
