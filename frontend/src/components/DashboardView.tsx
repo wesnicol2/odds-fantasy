@@ -89,6 +89,11 @@ export function DashboardView({
   onCompareBenchPlayer,
 }: DashboardViewProps) {
   const pressure = (lineup?.bench_pressure ?? []).slice(0, 4);
+  const lockedCount = lineup?.locked_count ?? 0;
+  const hasLocks = lockedCount > 0;
+  const lockedPoints = lineup?.locked_points ?? 0;
+  const remainingSlots = lineup?.remaining_slots ?? 0;
+  const lockedBench = lineup?.locked_bench_count ?? 0;
 
   return (
     <main className="dashboard-view" aria-label="Dashboard">
@@ -103,31 +108,64 @@ export function DashboardView({
       {error ? <div className="error-state">{error}</div> : null}
 
       <div className="dashboard-grid">
-        <section className="dashboard-lineup" aria-label="Ideal lineup this week">
+        <section
+          className="dashboard-lineup"
+          aria-label={hasLocks ? 'Best remaining lineup this week' : 'Ideal lineup this week'}
+        >
           <div className="dashboard-section-heading">
             <div>
-              <span className="section-label">Ideal lineup</span>
-              <h3>Mid projection</h3>
+              <span className="section-label">
+                {hasLocks ? 'Best remaining lineup' : 'Ideal lineup'}
+              </span>
+              <h3>{hasLocks ? 'Actual + remaining mid projection' : 'Mid projection'}</h3>
             </div>
             <div className="dashboard-total">
               <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
-              <span>total FP</span>
+              <span>{hasLocks ? 'current + projected FP' : 'total FP'}</span>
             </div>
           </div>
+
+          {hasLocks ? (
+            <div className="dashboard-lock-summary" role="group" aria-label="Locked lineup summary">
+              <span>
+                <strong>{lockedCount}</strong> {lockedCount === 1 ? 'slot' : 'slots'} locked
+              </span>
+              <span>
+                <strong>{lockedPoints.toFixed(1)}</strong> FP scored
+              </span>
+              <span>
+                <strong>{remainingSlots}</strong> {remainingSlots === 1 ? 'slot' : 'slots'} still
+                open
+              </span>
+              {lockedBench ? (
+                <span>
+                  <strong>{lockedBench}</strong> played bench{' '}
+                  {lockedBench === 1 ? 'player' : 'players'} excluded
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
           {lineup?.lineup.length ? (
             <div className="dashboard-lineup-list">
               {lineup.lineup.map((row) => (
-                <div className="dashboard-lineup-row" key={`${row.slot}:${row.name}`}>
+                <div
+                  className={row.locked ? 'dashboard-lineup-row locked' : 'dashboard-lineup-row'}
+                  key={`${row.slot}:${row.name}`}
+                >
                   <span className="dashboard-slot">{row.slot}</span>
                   <span className="dashboard-player">
                     <strong>{row.name}</strong>
                     <small>
                       {row.pos}
                       {row.team ? ` · ${row.team}` : ''}
+                      {row.locked ? ` · ${row.game_status === 'live' ? 'LIVE' : 'FINAL'}` : ''}
                     </small>
                   </span>
-                  <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
+                  <span className="dashboard-points-wrap">
+                    <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
+                    {row.locked ? <small>actual</small> : <small>projected</small>}
+                  </span>
                 </div>
               ))}
             </div>
@@ -144,7 +182,11 @@ export function DashboardView({
               <div className="dashboard-section-heading compact">
                 <div>
                   <span className="section-label">Closest bench calls</span>
-                  <h3>Distance from the ideal lineup</h3>
+                  <h3>
+                    {hasLocks
+                      ? 'Distance from the best remaining lineup'
+                      : 'Distance from the ideal lineup'}
+                  </h3>
                 </div>
               </div>
               <div className="bench-pressure-list">

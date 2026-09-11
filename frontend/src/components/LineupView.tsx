@@ -29,13 +29,23 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
   }
   if (payload?.defense_note) notices.push(payload.defense_note);
 
+  const lockedCount = payload?.locked_count ?? 0;
+  const hasLocks = lockedCount > 0;
+  const lockedPoints = payload?.locked_points ?? 0;
+  const remainingPoints = payload?.remaining_points ?? payload?.total_points ?? 0;
+  const remainingSlots = payload?.remaining_slots ?? 0;
+
   return (
     <main className="decision-view" aria-label="Best lineup">
       <header className="decision-heading lineup-heading">
         <div>
           <span className="eyebrow">Starter optimization</span>
-          <h2>Best lineup</h2>
-          <p>Choose the risk lens used to maximize the league's modeled starter slots.</p>
+          <h2>{hasLocks ? 'Best remaining lineup' : 'Best lineup'}</h2>
+          <p>
+            {hasLocks
+              ? 'Started players are frozen in their submitted slots. The selected risk lens optimizes only lineup decisions that can still change.'
+              : "Choose the risk lens used to maximize the league's modeled starter slots."}
+          </p>
         </div>
         <fieldset className="lineup-targets">
           <legend className="sr-only">Lineup optimization target</legend>
@@ -52,14 +62,35 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
         </fieldset>
       </header>
 
-      {loading ? <div className="decision-loading">Optimizing modeled starter slots…</div> : null}
+      {loading ? <div className="decision-loading">Optimizing remaining starter slots…</div> : null}
       {error ? <div className="error-state">{error}</div> : null}
       {!loading && !error && payload ? (
         <>
           <div className="lineup-total">
-            <span>Projected {label(payload.target)}</span>
+            <span>
+              {hasLocks
+                ? `Actual + projected ${label(payload.target)}`
+                : `Projected ${label(payload.target)}`}
+            </span>
             <strong>{payload.total_points.toFixed(1)}</strong>
           </div>
+          {hasLocks ? (
+            <div className="lineup-live-summary" role="group" aria-label="Locked lineup summary">
+              <span>
+                <strong>{lockedCount}</strong> {lockedCount === 1 ? 'slot' : 'slots'} locked
+              </span>
+              <span>
+                <strong>{lockedPoints.toFixed(1)}</strong> actual FP
+              </span>
+              <span>
+                <strong>{remainingPoints.toFixed(1)}</strong> projected remaining FP
+              </span>
+              <span>
+                <strong>{remainingSlots}</strong> {remainingSlots === 1 ? 'slot' : 'slots'} still
+                open
+              </span>
+            </div>
+          ) : null}
           {notices.length ? <div className="status-note">{notices.join(' ')}</div> : null}
           <div className="decision-table-scroll">
             <table className="decision-table lineup-table">
@@ -69,7 +100,8 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
                   <th>Player</th>
                   <th>Pos</th>
                   <th>Team</th>
-                  <th className="number">Selected</th>
+                  <th>Status</th>
+                  <th className="number">{hasLocks ? 'Actual / selected' : 'Selected'}</th>
                   <th className="number">Floor</th>
                   <th className="number">Mid</th>
                   <th className="number">Ceiling</th>
@@ -77,13 +109,29 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
               </thead>
               <tbody>
                 {payload.lineup.map((row) => (
-                  <tr key={`${row.slot}:${row.name}`}>
+                  <tr
+                    key={`${row.slot}:${row.name}`}
+                    className={row.locked ? 'locked-row' : undefined}
+                  >
                     <td>
                       <strong>{row.slot}</strong>
                     </td>
                     <td>{row.name}</td>
                     <td>{row.pos}</td>
                     <td>{row.team || '—'}</td>
+                    <td>
+                      <span
+                        className={`lineup-status ${
+                          row.locked ? (row.game_status === 'live' ? 'live' : 'final') : 'open'
+                        }`}
+                      >
+                        {row.locked
+                          ? row.game_status === 'live'
+                            ? 'Live · locked'
+                            : 'Final · locked'
+                          : 'Open'}
+                      </span>
+                    </td>
                     <td className="number primary-decision-value">{row.points.toFixed(1)}</td>
                     <td className="number">{formatValue(row.floor)}</td>
                     <td className="number">{formatValue(row.mid)}</td>

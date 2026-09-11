@@ -8,10 +8,10 @@
 
 The application has four primary destinations:
 
-1. **Dashboard** — the default low-noise command center. It synthesizes this week's ideal Mid lineup, optimizer-derived bench pressure, and the best available/owned defenses for this week and next week.
-2. **Players** — one linked analytical workstation: roster ranking, Floor / Mid / Ceiling, fantasy/stat probability visualizations, position/player comparison filters, Target FP and a persistent evidence inspector.
+1. **Dashboard** — the default low-noise command center. Before kickoff it synthesizes this week's ideal Mid lineup; once games begin it becomes the best remaining lineup, preserving actual locked results while keeping bench pressure limited to decisions that can still be changed. It also shows the best available/owned defenses for this week and next week.
+2. **Players** — one linked analytical workstation: roster ranking, Floor / Mid / Ceiling, fantasy/stat probability visualizations, position/player comparison filters, Target FP and a persistent evidence inspector. Live/final players remain inspectable historical context but are no longer actionable lineup candidates.
 3. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
-4. **Lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots.
+4. **Lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots while freezing any submitted starter whose NFL game has begun.
 
 Dashboard is synthesis, not a second analytical engine. It consumes the same backend optimizer and defense ranking used by the detailed Lineup and Defenses destinations. Player evidence remains progressive disclosure inside the Players workstation. There is no separate Graphs product surface and no alternate browser-side projection engine.
 
@@ -40,7 +40,7 @@ State ownership is strict:
 - Dashboard deliberately has no global week toggle because its defense plan spans both this and next week. Players, Defenses and Lineup treat week as page context rather than separate destinations.
 - React components consume shared state and API data.
 - ECharts receives data/options as a renderer and emits interaction events back to the application. It must not become the canonical owner of application state.
-- The Python backend remains canonical for projections, probability distributions, scoring, lineup eligibility and sportsbook modeling. Browser code may derive display-only quantities from canonical payloads (for example `P(FP >= target)` from the supplied fantasy-point curve) but must not refit sportsbook evidence or create a second projection/lineup model.
+- The Python backend remains canonical for projections, probability distributions, scoring, lineup eligibility, live lineup locks and sportsbook modeling. Browser code may derive display-only quantities from canonical payloads (for example `P(FP >= target)` from the supplied fantasy-point curve) but must not refit sportsbook evidence or create a second projection/lineup model.
 
 Primary navigation is a compact horizontal strip on desktop and a persistent bottom bar on narrow screens so navigation does not consume the width needed by the Players visualization. Navigation keeps the React application mounted; switching destinations must not unnecessarily clear comparison/filter state or trigger provider work unrelated to the destination being opened.
 
@@ -121,6 +121,10 @@ The selected player's fantasy-point inspector presents `StatProjection.expected_
 
 The report, lineup and player-evidence requests consume that same context, so evidence loading normally adds no fresh Odds API calls and cannot silently use different lines from the ranking row. Stat metric comparison may request details for multiple selected players, but those HTTP requests reuse the shared backend week context.
 
+Live lineup state is deliberately **not** inferred from that sportsbook cache. `live_lineup.py` reads the current Sleeper NFL state, the selected roster's weekly matchup row and Sleeper's game-status schedule. It maps the submitted `starters` array back to the league's starter-slot order, preserving exact FLEX/K/DEF placement. A player is locked because their NFL game is live/final, never because they have non-zero fantasy points. This distinction matters for a starter who is locked at 0.0.
+
+Prediction snapshots/backtesting are a separate concern. Live lineup state answers what decisions remain legal now; a future accuracy feature may consume the same game boundary but must persist immutable pregame model/output metadata separately instead of turning `live_lineup.py` into a historical store.
+
 ## Missing coverage semantics
 
 A player is valid when `project_player()` produces at least one scored stat. Missing an optional expected market does not invalidate the whole player.
@@ -144,19 +148,23 @@ Defense ranking is intentionally separate from the player-prop model.
 
 Dashboard does not rerank defenses in the browser. It keeps the server order, removes defenses owned by another fantasy team, removes non-playable rows, and shows only the first few Available/Yours rows for each week. The full evidence/ranking remains in Defenses.
 
-Lineup also needs a DEF Floor/Mid/Ceiling value. That range uses only Sleeper's points-allowed scoring brackets, with a Normal team-score uncertainty around the market implied total. It does **not** estimate sacks, interceptions, fumble recoveries or defensive touchdowns. Keep that limitation explicit.
+Lineup also needs a DEF Floor/Mid/Ceiling value. That range uses only Sleeper's points-allowed scoring brackets, with a Normal team-score uncertainty around the market implied total. It does **not** estimate sacks, interceptions, fumble recoveries or defensive touchdowns. Keep that limitation explicit before kickoff. Once a submitted DEF is locked, its Sleeper actual fantasy points replace the partial projection for that fixed slot.
 
 ## Best lineup and bench pressure
 
-`lineup.py` is pure and has no network knowledge. It accepts already-projected players, the selected roster's owned defenses, and Sleeper `roster_positions`.
+`lineup.py` is pure and has no network knowledge. It accepts already-projected players, the selected roster's owned defenses, Sleeper `roster_positions`, optional submitted-slot locks and optional already-started player IDs. `live_lineup.py` owns the network-to-domain translation; do not teach the pure optimizer to call Sleeper itself.
 
-A memoized assignment search maximizes the requested target across eligible starter slots. It supports QB/RB/WR/TE/DEF plus FLEX, WRRB_FLEX, REC_FLEX and SUPER_FLEX. Bench/IR/TAXI slots are ignored.
+A memoized assignment search maximizes the requested target across **open** eligible starter slots. It supports QB/RB/WR/TE/DEF plus FLEX, WRRB_FLEX, REC_FLEX and SUPER_FLEX. Bench/IR/TAXI slots are ignored. A live/final submitted starter is fixed at its exact submitted starter index and contributes Sleeper actual fantasy points instead of Floor/Mid/Ceiling. A future unsupported slot such as K remains `unmodeled`; a K that has already started can still appear as a fixed actual result because no projection is needed to preserve an outcome that already happened.
 
-The optimizer also returns `bench_pressure`. For every modeled bench player, it solves the lineup again with that player required to occupy an eligible starter slot. `delta_to_lineup` is the optimal unconstrained lineup total minus that forced-lineup total. This is the authoritative "FP back" measure used by Dashboard; the browser must not approximate it by comparing raw player projections or recreating FLEX eligibility. The forced solution also identifies the starter displaced by that bench player when one exists.
+Already-started bench players are unavailable candidates. They must never enter the optimal remaining lineup or `bench_pressure`, regardless of how many points they scored. Likewise, forcing an actionable bench player may displace only another open starter; a locked starter cannot be displaced.
+
+The optimizer returns both the combined total and its decomposition: locked actual points plus the projected value of remaining open slots. Once anything is locked, Dashboard/Lineup should frame this as **best remaining lineup**, not retroactively rewrite Thursday as if another choice were still possible.
+
+The optimizer also returns `bench_pressure`. For every modeled, still-actionable bench player, it solves the remaining lineup again with that player required to occupy an eligible open starter slot. `delta_to_lineup` is the optimal remaining projected total minus that forced-lineup total. This is the authoritative "FP back" measure used by Dashboard; the browser must not approximate it by comparing raw player projections or recreating FLEX eligibility. The forced solution also identifies the open starter displaced by that bench player when one exists.
 
 Selecting a Dashboard bench-pressure row carries that exact bench player/displaced starter pair and `delta_to_lineup` into Players as start/sit comparison context. The browser narrows the existing comparison series to those two players and loads both canonical `/player/odds` payloads from the shared week context. The inspector presents a weekly tie-breaker matrix: projection ranges, same-week game lines, `StatProjection.expected_points` aligned by market, and the same markets measured again in raw stat value from `StatProjection.stat_range`. Selecting either row changes the shared metric so the central chart compares the two backend-supplied stat distributions. Floor/mid/ceiling is drawn with the shared `RangeThermometer` glyph on a zero-anchored scale shared by the row's two players; the glyph maps supplied percentiles to CSS offsets and must not compute a percentile of its own. Fantasy-point and stat-value row wins are tallied separately because a stat and the points it produces are one market, and stat-value direction follows the sign of the modeled contribution rather than assuming a larger stat is better. When a running back is compared with a wide receiver or tight end, rushing and receiving yardage collapse into one `rush_reception_yds` row: the contribution is the summed `StatProjection.expected_points`, and the range comes from `projection.combined_stat_range`, which samples the component distributions because percentiles are not additive. `/player/odds` carries it as `combined_markets`. Every other pairing, and every other market, stays per-market. While a comparison is open the Players workspace stacks in decision order — matrix, then chart, then ranking — by reordering the keyed pane elements themselves so tab order follows the layout, not by CSS `order` alone. It must not show ADP, draft rank, season win totals, rest-of-season projections, multi-week SOS or any input outside the requested week. The lineup recommendation remains optimizer-derived; the browser may count higher comparable rows only as a display aid and must not pretend those correlated rows are independent evidence or a confidence score.
 
-Unsupported starter slots (currently most importantly K) are returned as `unmodeled_slots`; the optimizer must not invent scores just to fill them. Starter positions with no priced candidate are returned as `unfilled_slots`.
+Unsupported open starter slots (currently most importantly K) are returned as `unmodeled_slots`; the optimizer must not invent scores just to fill them. Starter positions with no priced candidate are returned as `unfilled_slots`.
 
 ## Odds API efficiency
 
@@ -175,7 +183,7 @@ Feature/main CI builds the exact Dockerfile, runs the image, verifies `/health` 
 The runtime smoke covers:
 
 - fresh-browser username → league → team setup and cookie persistence;
-- Dashboard as the default destination, including ideal lineup, bench pressure, start/sit comparison drill-down and two-week defense summary;
+- Dashboard as the default destination, including ideal/best-remaining lineup, locked results, bench pressure, start/sit comparison drill-down and two-week defense summary;
 - primary navigation plus browser-history restoration of destination/week context;
 - linked player ranking/chart/inspector behavior and Target FP;
 - continuous yardage density, discrete exact-value PMF and low-granularity threshold-gauge rendering;
@@ -183,7 +191,7 @@ The runtime smoke covers:
 - operational odds data mode reaching API requests;
 - Change league preserving the active identity when canceled;
 - defense comparison;
-- Floor/Mid/Ceiling Lineup switching and unsupported slots.
+- Floor/Mid/Ceiling Lineup switching, live/final locks and unsupported open slots.
 
 This catches broken multi-stage Docker builds, compiled static assets, React wiring and primary interaction regressions. Watchtower/GHCR/Unraid-specific behavior remains an optional deployment smoke test when those systems themselves change.
 
