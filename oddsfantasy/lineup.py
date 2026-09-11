@@ -46,11 +46,20 @@ def build_best_lineup(
     target: str = "mid",
     roster_positions: list[str] | None = None,
     defenses: list[dict] | None = None,
+    locked_starters: list[dict] | None = None,
+    unavailable_names: set[str] | None = None,
 ) -> dict:
-    """Maximize the selected range across the league's modeled starter slots."""
+    """Maximize the selected range across only the starter slots still movable.
+
+    ``locked_starters`` are submitted starters whose games have begun. Their
+    actual points are sunk outcomes: they remain fixed in their original slot
+    and contribute actual points instead of a projection. ``unavailable_names``
+    removes already-started bench players from every possible solution.
+    """
     if target not in {"floor", "mid", "ceiling"}:
         raise ValueError("target must be floor, mid, or ceiling")
 
+    unavailable = set(unavailable_names or set())
     player_count = len(players)
     candidates = [dict(player) for player in players]
     candidates.extend(
@@ -66,6 +75,36 @@ def build_best_lineup(
     )
 
     modeled_slots, unmodeled_slots = _starter_slots(roster_positions)
+
+    locked_by_slot: dict[int, tuple[int, dict]] = {}
+    for raw_lock in locked_starters or []:
+        try:
+            slot_index = int(raw_lock.get("slot_index"))
+        except (TypeError, ValueError):
+            continue
+        if slot_index < 0 or slot_index >= len(modeled_slots):
+            continue
+        name = str(raw_lock.get("name") or "")
+        if not name:
+            continue
+        candidate_index = next(
+            (index for index, candidate in enumerate(candidates) if candidate.get("name") == name),
+            None,
+        )
+        if candidate_index is None:
+            candidate_index = len(candidates)
+            candidates.append(
+                {
+                    "name": name,
+                    "pos": raw_lock.get("pos"),
+                    "team": raw_lock.get("team"),
+                    "floor": None,
+                    "mid": None,
+                    "ceiling": None,
+                }
+            )
+        locked_by_slot[slot_index] = (candidate_index, dict(raw_lock))
+
     eligible_by_slot: list[list[int]] = []
     for slot in modeled_slots:
         eligible_positions = SLOT_ELIGIBILITY[slot]
@@ -74,7 +113,8 @@ def build_best_lineup(
                 index
                 for index, candidate in enumerate(candidates)
                 if (
-                    candidate.get("pos") in eligible_positions
+                    candidate.get("name") not in unavailable
+                    and candidate.get("pos") in eligible_positions
                     and _score(candidate, target) is not None
                 )
             ]
@@ -89,6 +129,19 @@ def build_best_lineup(
                 if required_candidate is not None and not used_mask & required_bit:
                     return float("-inf"), ()
                 return 0.0, ()
+
+            locked = locked_by_slot.get(slot_index)
+            if locked is not None:
+                candidate_index, lock = locked
+                bit = 1 << candidate_index
+                if used_mask & bit:
+                    return float("-inf"), ()
+                rest_total, rest_choices = solve(slot_index + 1, used_mask | bit)
+                if rest_total == float("-inf"):
+                    return rest_total, ()
+                actual = lock.get("actual_points")
+                actual_points = float(actual) if isinstance(actual, (int, float)) else 0.0
+                return actual_points + rest_total, (candidate_index, *rest_choices)
 
             best_total = float("-inf")
             best_choices: tuple[int | None, ...] | None = None
@@ -115,21 +168,30 @@ def build_best_lineup(
     def lineup_rows(choices: tuple[int | None, ...]) -> tuple[list[dict], list[str]]:
         rows: list[dict] = []
         unfilled_slots: list[str] = []
-        for slot, choice in zip(modeled_slots, choices, strict=True):
+        for slot_index, (slot, choice) in enumerate(zip(modeled_slots, choices, strict=True)):
             if choice is None:
                 unfilled_slots.append(slot)
                 continue
             candidate = candidates[choice]
+            locked = locked_by_slot.get(slot_index)
+            lock = locked[1] if locked is not None else None
+            if lock is not None:
+                actual = lock.get("actual_points")
+                selected_points = float(actual) if isinstance(actual, (int, float)) else 0.0
+            else:
+                selected_points = float(_score(candidate, target) or 0.0)
             rows.append(
                 {
                     "slot": slot,
                     "name": candidate.get("name"),
                     "pos": candidate.get("pos"),
                     "team": candidate.get("team"),
-                    "points": round(float(_score(candidate, target) or 0.0), 2),
+                    "points": round(selected_points, 2),
                     "floor": candidate.get("floor"),
                     "mid": candidate.get("mid"),
                     "ceiling": candidate.get("ceiling"),
+                    "locked": lock is not None,
+                    "actual_points": round(selected_points, 2) if lock is not None else None,
                 }
             )
         return rows, unfilled_slots
@@ -154,6 +216,8 @@ def build_best_lineup(
     }
     for candidate_index, candidate in enumerate(candidates[:player_count]):
         if candidate_index in baseline_indices:
+            continue
+        if candidate.get("name") in unavailable:
             continue
         if candidate.get("pos") not in modeled_player_positions:
             continue
@@ -205,10 +269,17 @@ def build_best_lineup(
         )
     )
 
+    actual_points = sum(
+        float(lock.get("actual_points") or 0.0) for _, lock in locked_by_slot.values()
+    )
     return {
         "target": target,
         "lineup": rows,
         "total_points": round(baseline_total, 2),
+        "actual_points": round(actual_points, 2),
+        "remaining_projected_points": round(baseline_total - actual_points, 2),
+        "locked_count": len(locked_by_slot),
+        "decisions_remaining": len(modeled_slots) - len(locked_by_slot),
         "bench_pressure": bench_pressure,
         "unmodeled_slots": unmodeled_slots,
         "unfilled_slots": unfilled_slots,
