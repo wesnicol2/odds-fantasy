@@ -15,6 +15,7 @@ from .config import (
 )
 from .defense import defense_fantasy_range, opponent_implied_total
 from .lineup import build_best_lineup
+from .live_lineup import current_lineup_lock_state
 from .planner import plan_relevant_games_and_markets
 from .projection import project_player, survival_curve
 from .weekly_windows import resolve_week_windows
@@ -215,13 +216,14 @@ def _load_week_context(
 
 def _roster_skill_players(roster: dict) -> list[dict]:
     rows: list[dict] = []
-    for player in (roster.get("players", {}) or {}).values():
+    for player_id, player in (roster.get("players", {}) or {}).items():
         name = (player.get("name", {}) or {}).get("full")
         pos = (player.get("primary_position") or "").upper()
         if not name or pos not in SUPPORTED_POSITIONS:
             continue
         rows.append(
             {
+                "player_id": str(player_id),
                 "name": name,
                 "alias": SLEEPER_ODDS_API_PLAYER_NAME_MAPPING.get(name, name),
                 "pos": pos,
@@ -229,6 +231,16 @@ def _roster_skill_players(roster: dict) -> list[dict]:
             }
         )
     return rows
+
+
+def _empty_live_state() -> dict:
+    return {
+        "locked_assignments": [],
+        "unavailable_player_ids": [],
+        "player_statuses": {},
+        "week": None,
+        "season": None,
+    }
 
 
 def compute_projections(
@@ -264,6 +276,17 @@ def compute_projections(
     roster = context.get("roster") or {}
     scoring_rules = context.get("scoring_rules") or {}
     players_odds = context.get("players_odds") or {}
+    roster_positions = (
+        context.get("roster_positions")
+        or _resolve_roster_positions(username, season, league_id)
+        or []
+    )
+    live_state = (
+        current_lineup_lock_state(league_id, roster_id, season, roster_positions)
+        if week == "this"
+        else _empty_live_state()
+    )
+    player_statuses = live_state.get("player_statuses") or {}
     rows: list[dict] = []
 
     for player in _roster_skill_players(roster):
@@ -281,17 +304,21 @@ def compute_projections(
                 "books_used": len(by_book),
                 "markets_used": len(projection.stats) if has_projection else 0,
                 "has_projection": has_projection,
+                "game_status": player_statuses.get(player["player_id"], "upcoming"),
             }
         )
 
     rows.sort(
-        key=lambda row: row["mid"] if isinstance(row.get("mid"), (int, float)) else float("-inf"),
-        reverse=True,
+        key=lambda row: (
+            row.get("game_status") in {"live", "final"},
+            -(row["mid"] if isinstance(row.get("mid"), (int, float)) else float("-inf")),
+        )
     )
     payload = {
         "week": week,
         "players": rows,
-        "roster_positions": context.get("roster_positions") or [],
+        "roster_positions": roster_positions,
+        "live_state": live_state,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }
@@ -509,7 +536,7 @@ def compute_best_lineup(
     league_id: str | None = None,
     roster_id: int | None = None,
 ) -> dict:
-    """Best modeled starting lineup for floor, mid, or ceiling."""
+    """Best remaining modeled lineup for floor, mid, or ceiling."""
     projections = compute_projections(
         username=username,
         season=season,
@@ -535,11 +562,15 @@ def compute_best_lineup(
         for defense in defenses.get("defenses", [])
         if defense.get("owned_by_current") and defense.get(target) is not None
     ]
+    roster_positions = projections.get("roster_positions") or None
+    live_state = projections.get("live_state") or _empty_live_state()
     result = build_best_lineup(
         projections.get("players", []),
         target=target,
-        roster_positions=_resolve_roster_positions(username, season, league_id) or None,
+        roster_positions=roster_positions,
         defenses=owned_defenses,
+        locked_assignments=live_state.get("locked_assignments") or [],
+        unavailable_player_ids=live_state.get("unavailable_player_ids") or [],
     )
     result.update(
         {
