@@ -96,6 +96,22 @@ def get_league_rosters(league_id):
     return response.json()
 
 
+def get_league_matchups(league_id, week):
+    """Fetch one league's submitted starters and live points for an NFL week."""
+    url = f"{SLEEPER_BASE_URL}/league/{league_id}/matchups/{week}"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_nfl_state():
+    """Fetch Sleeper's current NFL season/week state."""
+    url = f"{SLEEPER_BASE_URL}/state/nfl"
+    response = requests.get(url, timeout=REQ_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+
 def get_league_users(league_id):
     """
     Fetch all user profiles for a given league to map owner_id -> display_name/username.
