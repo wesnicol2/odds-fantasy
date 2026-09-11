@@ -82,6 +82,20 @@
   background: #0f141a;
 }
 
+.ranking-table tr.already-played {
+  opacity: 0.56;
+  background: #0e1217;
+}
+
+.ranking-table tr.already-played.selected,
+.ranking-table tr.already-played.hover-linked {
+  opacity: 0.82;
+}
+
+.ranking-table tr.already-played .player-name-button small {
+  color: #8fa3b8;
+}
+
 .row-secondary {
   display: block;
   margin-top: 2px;
