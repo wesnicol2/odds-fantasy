@@ -110,6 +110,12 @@
   gap: 10px;
 }
 
+.dashboard-slot {
+  color: #778290;
+  font-size: 10px;
+  font-weight: 750;
+}
+
 .dashboard-lineup-row.locked {
   background: #0f141a;
 }
@@ -117,12 +123,6 @@
 .dashboard-lineup-row.locked .dashboard-slot,
 .dashboard-lineup-row.locked .dashboard-player small {
   color: #8fa3b8;
-}
-
-.dashboard-slot {
-  color: #778290;
-  font-size: 10px;
-  font-weight: 750;
 }
 
 .dashboard-player {
