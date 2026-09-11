@@ -96,7 +96,7 @@ class LockedLineupOptimizerTest(unittest.TestCase):
 
 class LiveStateTest(unittest.TestCase):
     def test_submitted_started_slots_and_bench_are_classified_from_kickoff(self):
-        now = dt.datetime(2026, 9, 10, 20, 0, tzinfo=dt.timezone.utc)
+        now = dt.datetime(2026, 9, 10, 20, 0, tzinfo=dt.UTC)
         roster = {
             "players": {
                 "a": {
@@ -188,7 +188,7 @@ class LiveStateTest(unittest.TestCase):
             planned={},
             schedule=schedule,
             nfl_week=1,
-            now=dt.datetime(2026, 9, 11, 12, 0, tzinfo=dt.timezone.utc),
+            now=dt.datetime(2026, 9, 11, 12, 0, tzinfo=dt.UTC),
         )
 
         self.assertEqual(len(state["locked_starters"]), 1)
@@ -212,7 +212,7 @@ class LiveStateTest(unittest.TestCase):
             planned={},
             schedule=[{"week": 1, "home": "BUF", "away": "MIA", "date": "2026-09-10"}],
             nfl_week=1,
-            now=dt.datetime(2026, 9, 10, 12, 0, tzinfo=dt.timezone.utc),
+            now=dt.datetime(2026, 9, 10, 12, 0, tzinfo=dt.UTC),
         )
         self.assertEqual(state["locked_starters"], [])
         self.assertNotIn("Not Yet Locked", state["unavailable_names"])
