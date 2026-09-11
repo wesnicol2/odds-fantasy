@@ -293,6 +293,7 @@ def compute_projections(
         by_book = players_odds.get(player["alias"], {})
         projection = project_player(by_book, scoring_rules) if by_book else None
         has_projection = bool(projection and projection.has_projection)
+        game_status = player_statuses.get(player["player_id"], "upcoming")
         rows.append(
             {
                 **player,
@@ -300,11 +301,15 @@ def compute_projections(
                 "mid": round(projection.mid, 2) if has_projection else None,
                 "ceiling": round(projection.ceiling, 2) if has_projection else None,
                 "mean": round(projection.mean, 2) if has_projection else None,
-                "curve": survival_curve(projection.samples) if has_projection else [],
+                "curve": (
+                    survival_curve(projection.samples)
+                    if has_projection and game_status == "upcoming"
+                    else []
+                ),
                 "books_used": len(by_book),
                 "markets_used": len(projection.stats) if has_projection else 0,
                 "has_projection": has_projection,
-                "game_status": player_statuses.get(player["player_id"], "upcoming"),
+                "game_status": game_status,
             }
         )
 
