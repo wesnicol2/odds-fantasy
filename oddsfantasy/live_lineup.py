@@ -17,8 +17,8 @@ def _parse_utc(value: str | None) -> dt.datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt.timezone.utc)
-    return parsed.astimezone(dt.timezone.utc)
+        parsed = parsed.replace(tzinfo=dt.UTC)
+    return parsed.astimezone(dt.UTC)
 
 
 def _player_name(player_id: str, info: dict) -> str:
@@ -102,10 +102,10 @@ def build_live_state(
     rather than ``live``/``final`` because the sources used here prove that a
     kickoff has passed, not whether the NFL game has officially ended.
     """
-    current = now or dt.datetime.now(dt.timezone.utc)
+    current = now or dt.datetime.now(dt.UTC)
     if current.tzinfo is None:
-        current = current.replace(tzinfo=dt.timezone.utc)
-    current = current.astimezone(dt.timezone.utc)
+        current = current.replace(tzinfo=dt.UTC)
+    current = current.astimezone(dt.UTC)
 
     roster_players = roster.get("players", {}) or {}
     starter_ids = [str(player_id) for player_id in (matchup.get("starters") or [])]
