@@ -160,6 +160,63 @@ class LiveStateTest(unittest.TestCase):
         self.assertIn("Kicker", state["unavailable_names"])
         self.assertNotIn("Sunday Player", state["unavailable_names"])
 
+    def test_sleeper_schedule_keeps_completed_thursday_locked_after_odds_rolloff(self):
+        roster = {
+            "players": {
+                "buf": {
+                    "name": {"full": "Thursday Bill"},
+                    "primary_position": "RB",
+                    "editorial_team_full_name": "Buffalo Bills",
+                }
+            }
+        }
+        matchup = {"starters": ["buf"], "players_points": {"buf": 12.25}}
+        schedule = [
+            {
+                "week": 1,
+                "home": "BUF",
+                "away": "MIA",
+                "date": "2026-09-10T00:20:00Z",
+                "status": "complete",
+            }
+        ]
+
+        state = build_live_state(
+            roster,
+            ["RB"],
+            matchup,
+            planned={},
+            schedule=schedule,
+            nfl_week=1,
+            now=dt.datetime(2026, 9, 11, 12, 0, tzinfo=dt.timezone.utc),
+        )
+
+        self.assertEqual(len(state["locked_starters"]), 1)
+        self.assertEqual(state["locked_starters"][0]["name"], "Thursday Bill")
+        self.assertEqual(state["locked_starters"][0]["actual_points"], 12.25)
+
+    def test_date_only_schedule_row_does_not_lock_at_midnight(self):
+        roster = {
+            "players": {
+                "buf": {
+                    "name": {"full": "Not Yet Locked"},
+                    "primary_position": "RB",
+                    "editorial_team_full_name": "Buffalo Bills",
+                }
+            }
+        }
+        state = build_live_state(
+            roster,
+            ["RB"],
+            {"starters": ["buf"], "players_points": {"buf": 0.0}},
+            planned={},
+            schedule=[{"week": 1, "home": "BUF", "away": "MIA", "date": "2026-09-10"}],
+            nfl_week=1,
+            now=dt.datetime(2026, 9, 10, 12, 0, tzinfo=dt.timezone.utc),
+        )
+        self.assertEqual(state["locked_starters"], [])
+        self.assertNotIn("Not Yet Locked", state["unavailable_names"])
+
 
 if __name__ == "__main__":
     unittest.main()
