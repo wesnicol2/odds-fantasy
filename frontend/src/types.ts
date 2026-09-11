@@ -3,7 +3,10 @@ export interface FantasyCurvePoint {
   survival: number;
 }
 
+export type PlayerGameStatus = 'upcoming' | 'live' | 'final';
+
 export interface ProjectionPlayer {
+  player_id?: string;
   name: string;
   alias: string;
   pos: string;
@@ -16,6 +19,7 @@ export interface ProjectionPlayer {
   books_used: number;
   markets_used: number;
   has_projection: boolean;
+  game_status?: PlayerGameStatus;
 }
 
 export interface ProjectionResponse {
@@ -136,6 +140,7 @@ export interface DefenseResponse {
 }
 
 export interface LineupRow {
+  starter_index?: number;
   slot: string;
   name: string;
   pos: string;
@@ -144,6 +149,9 @@ export interface LineupRow {
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
+  locked?: boolean;
+  game_status?: PlayerGameStatus;
+  actual_points?: number | null;
 }
 
 export interface BenchPressureRow {
@@ -162,6 +170,12 @@ export interface LineupResponse {
   target: 'floor' | 'mid' | 'ceiling';
   lineup: LineupRow[];
   total_points: number;
+  locked_points?: number;
+  remaining_points?: number;
+  locked_count?: number;
+  remaining_slots?: number;
+  remaining_modeled_slots?: number;
+  locked_bench_count?: number;
   bench_pressure: BenchPressureRow[];
   unmodeled_slots: string[];
   unfilled_slots: string[];
