@@ -162,8 +162,12 @@ export function PlayerRanking({
                       <span>
                         {player.pos} · {player.team || 'Team unavailable'}
                       </span>
-                      {player.game_status === 'live' ? <small>LIVE · lineup decision locked</small> : null}
-                      {player.game_status === 'final' ? <small>FINAL · no longer actionable</small> : null}
+                      {player.game_status === 'live' ? (
+                        <small>LIVE · lineup decision locked</small>
+                      ) : null}
+                      {player.game_status === 'final' ? (
+                        <small>FINAL · no longer actionable</small>
+                      ) : null}
                       {!started && !player.has_projection ? <small>no priced markets</small> : null}
                     </button>
                   </td>
