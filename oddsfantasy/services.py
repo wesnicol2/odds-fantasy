@@ -13,7 +13,11 @@ from .config import (
     SLEEPER_ODDS_API_PLAYER_NAME_MAPPING,
     SLEEPER_TO_ODDSAPI_TEAM,
 )
-from .defense import defense_fantasy_range, opponent_implied_total
+from .defense import (
+    defense_fantasy_range,
+    defense_range_breakdown,
+    opponent_implied_breakdown,
+)
 from .lineup import build_best_lineup
 from .planner import plan_relevant_games_and_markets
 from .projection import project_player, survival_curve
@@ -454,13 +458,19 @@ def list_defenses(
         opponent = "BYE"
         game_date = None
         floor = mid = ceiling = None
+        implied_books: list[dict] = []
+        range_breakdown = None
         if game:
             opponent = game["opponent"]
             event = game["event"]
             game_date = event.get("commence_time")
-            implied, book_count = opponent_implied_total(game_lines.get(event.get("id")), opponent)
+            breakdown = opponent_implied_breakdown(game_lines.get(event.get("id")), opponent)
+            implied = breakdown["median"]
+            book_count = breakdown["book_count"]
+            implied_books = breakdown["books"]
             if implied is not None:
                 floor, mid, ceiling = defense_fantasy_range(implied, scoring)
+                range_breakdown = defense_range_breakdown(implied, scoring)
 
         rows.append(
             {
@@ -476,6 +486,10 @@ def list_defenses(
                 "floor": round(floor, 2) if floor is not None else None,
                 "mid": round(mid, 2) if mid is not None else None,
                 "ceiling": round(ceiling, 2) if ceiling is not None else None,
+                # Every derived number ships with the inputs it was derived
+                # from, so the UI never has to recompute one to explain it.
+                "implied_books": implied_books,
+                "range_breakdown": range_breakdown,
             }
         )
 
