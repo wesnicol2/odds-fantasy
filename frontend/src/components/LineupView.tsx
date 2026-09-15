@@ -51,7 +51,7 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
           <h2>{remainingMode ? 'Best remaining lineup' : 'Best lineup'}</h2>
           <p>
             {remainingMode
-              ? "Started players are fixed where you submitted them; choose the risk lens for the decisions you can still change."
+              ? 'Started players are fixed where you submitted them; choose the risk lens for the decisions you can still change.'
               : "Choose the risk lens used to maximize the league's modeled starter slots."}
           </p>
         </div>
@@ -75,7 +75,11 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
       {!loading && !error && payload ? (
         <>
           <div className="lineup-total">
-            <span>{remainingMode ? `Actual + projected ${label(payload.target)}` : `Projected ${label(payload.target)}`}</span>
+            <span>
+              {remainingMode
+                ? `Actual + projected ${label(payload.target)}`
+                : `Projected ${label(payload.target)}`}
+            </span>
             <strong>{payload.total_points.toFixed(1)}</strong>
           </div>
           {remainingMode ? (
