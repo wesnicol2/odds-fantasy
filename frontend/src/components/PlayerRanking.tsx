@@ -18,8 +18,8 @@ interface PlayerRankingProps {
   onHoverPlayer: (name: string | null) => void;
 }
 
-function formatPoints(value: number | null): string {
-  return value === null ? '—' : value.toFixed(1);
+function formatPoints(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : value.toFixed(1);
 }
 
 export function PlayerRanking({
@@ -58,11 +58,13 @@ export function PlayerRanking({
         .includes(normalizedQuery);
     });
 
-    if (target === null) return filtered;
     return [...filtered].sort((left, right) => {
-      const leftProbability = probabilityAtTarget(left.curve, target) ?? -1;
-      const rightProbability = probabilityAtTarget(right.curve, target) ?? -1;
-      if (rightProbability !== leftProbability) return rightProbability - leftProbability;
+      if (Boolean(left.locked) !== Boolean(right.locked)) return left.locked ? 1 : -1;
+      if (target !== null) {
+        const leftProbability = probabilityAtTarget(left.curve, target) ?? -1;
+        const rightProbability = probabilityAtTarget(right.curve, target) ?? -1;
+        if (rightProbability !== leftProbability) return rightProbability - leftProbability;
+      }
       return (right.mid ?? -1) - (left.mid ?? -1);
     });
   }, [players, query, selectedPositions, target]);
@@ -127,11 +129,12 @@ export function PlayerRanking({
               const targetProbability = probabilityAtTarget(player.curve, target);
               const hasRange =
                 player.floor !== null && player.mid !== null && player.ceiling !== null;
+              const unavailable = !player.has_projection || player.locked;
 
               return (
                 <tr
                   key={player.name}
-                  className={`${isSelected ? 'selected' : ''} ${isHovered ? 'hover-linked' : ''} ${player.has_projection ? '' : 'unavailable'}`}
+                  className={`${isSelected ? 'selected' : ''} ${isHovered ? 'hover-linked' : ''} ${unavailable ? 'unavailable' : ''}`}
                   onMouseEnter={() => onHoverPlayer(player.name)}
                   onMouseLeave={() => onHoverPlayer(null)}
                 >
@@ -154,7 +157,14 @@ export function PlayerRanking({
                       <span>
                         {player.pos} · {player.team || 'Team unavailable'}
                       </span>
-                      {!player.has_projection ? <small>no priced markets</small> : null}
+                      {player.locked ? (
+                        <small>
+                          LOCKED {player.lineup_status === 'bench' ? 'ON BENCH' : 'STARTER'} ·{' '}
+                          {formatPoints(player.actual_points)} actual FP
+                        </small>
+                      ) : !player.has_projection ? (
+                        <small>no priced markets</small>
+                      ) : null}
                     </button>
                   </td>
                   <td className="number">{formatPoints(player.floor)}</td>

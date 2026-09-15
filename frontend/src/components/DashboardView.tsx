@@ -13,8 +13,8 @@ interface DashboardViewProps {
   onCompareBenchPlayer: (player: BenchPressureRow) => void;
 }
 
-function formatPoints(value: number | null): string {
-  return value === null ? '—' : value.toFixed(1);
+function formatPoints(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : value.toFixed(1);
 }
 
 function actionableDefenses(payload: DefenseResponse | null): DefenseRow[] {
@@ -89,6 +89,9 @@ export function DashboardView({
   onCompareBenchPlayer,
 }: DashboardViewProps) {
   const pressure = (lineup?.bench_pressure ?? []).slice(0, 4);
+  const lockedCount = lineup?.locked_count ?? 0;
+  const remainingMode = lockedCount > 0;
+  const lockedBench = lineup?.locked_bench ?? [];
 
   return (
     <main className="dashboard-view" aria-label="Dashboard">
@@ -103,17 +106,31 @@ export function DashboardView({
       {error ? <div className="error-state">{error}</div> : null}
 
       <div className="dashboard-grid">
-        <section className="dashboard-lineup" aria-label="Ideal lineup this week">
+        <section
+          className="dashboard-lineup"
+          aria-label={remainingMode ? 'Best remaining lineup this week' : 'Ideal lineup this week'}
+        >
           <div className="dashboard-section-heading">
             <div>
-              <span className="section-label">Ideal lineup</span>
-              <h3>Mid projection</h3>
+              <span className="section-label">
+                {remainingMode ? 'Best remaining lineup' : 'Ideal lineup'}
+              </span>
+              <h3>{remainingMode ? 'Actual + remaining Mid' : 'Mid projection'}</h3>
             </div>
             <div className="dashboard-total">
               <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
-              <span>total FP</span>
+              <span>{remainingMode ? 'modeled week FP' : 'total FP'}</span>
             </div>
           </div>
+
+          {remainingMode ? (
+            <div className="status-note">
+              {lockedCount} {lockedCount === 1 ? 'slot' : 'slots'} locked ·{' '}
+              {formatPoints(lineup?.actual_points)} FP scored ·{' '}
+              {formatPoints(lineup?.remaining_projected_points)} projected remaining ·{' '}
+              {lineup?.decisions_remaining ?? 0} lineup decisions remain.
+            </div>
+          ) : null}
 
           {lineup?.lineup.length ? (
             <div className="dashboard-lineup-list">
@@ -125,6 +142,7 @@ export function DashboardView({
                     <small>
                       {row.pos}
                       {row.team ? ` · ${row.team}` : ''}
+                      {row.locked ? ` · LOCKED · ${formatPoints(row.actual_points)} actual` : ''}
                     </small>
                   </span>
                   <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
@@ -144,7 +162,9 @@ export function DashboardView({
               <div className="dashboard-section-heading compact">
                 <div>
                   <span className="section-label">Closest bench calls</span>
-                  <h3>Distance from the ideal lineup</h3>
+                  <h3>
+                    Distance from the {remainingMode ? 'best remaining lineup' : 'ideal lineup'}
+                  </h3>
                 </div>
               </div>
               <div className="bench-pressure-list">
@@ -172,6 +192,31 @@ export function DashboardView({
                       <small>FP back</small>
                     </span>
                   </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {lockedBench.length ? (
+            <section className="bench-pressure" aria-label="Already played on bench">
+              <div className="dashboard-section-heading compact">
+                <div>
+                  <span className="section-label">Already played on bench</span>
+                  <h3>No longer actionable</h3>
+                </div>
+              </div>
+              <div className="bench-pressure-list">
+                {lockedBench.map((row) => (
+                  <div className="bench-pressure-row" key={row.name}>
+                    <span className="dashboard-player">
+                      <strong>{row.name}</strong>
+                      <small>{row.pos ?? '—'} · LOCKED</small>
+                    </span>
+                    <span className="bench-pressure-gap">
+                      <strong>{row.actual_points.toFixed(1)}</strong>
+                      <small>actual FP</small>
+                    </span>
+                  </div>
                 ))}
               </div>
             </section>
