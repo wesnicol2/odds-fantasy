@@ -153,21 +153,38 @@ def defense_range_breakdown(opponent_total: float, scoring_rules: dict[str, floa
             "points": round(float((scoring_rules or {}).get(key, 0.0) or 0.0), 2),
         }
 
-    brackets: list[dict] = []
+    mid_points = round(_points_allowed_ev(opponent_total, scoring_rules), 2)
+
+    rows: list[dict] = []
+    exact_cents: list[float] = []
     for key, low, high in DEF_PTS_ALLOWED_BRACKETS:
         p_low = 0.0 if low is None else dist.cdf(low)
         p_high = 1.0 if high is None else dist.cdf(high)
         probability = max(0.0, p_high - p_low)
         points = float((scoring_rules or {}).get(key, 0.0) or 0.0)
-        brackets.append(
+        exact_cents.append(probability * points * 100.0)
+        rows.append(
             {
                 "bracket": key,
                 "bracket_label": BRACKET_LABELS.get(key, key),
                 "probability": round(probability, 4),
                 "points": round(points, 2),
-                "contribution": round(probability * points, 3),
             }
         )
+
+    # Rounding each product on its own lets the column drift from the total it
+    # is presented as explaining. Settle the rounding in integer cents and fold
+    # the residual into the largest row, whose own two-decimal rounding already
+    # covers a nudge that size, so the shown parts sum to the shown Mid exactly.
+    cents = [round(value) for value in exact_cents]
+    residual = round(mid_points * 100) - sum(cents)
+    if residual and cents:
+        largest = max(range(len(cents)), key=lambda index: abs(cents[index]))
+        cents[largest] += residual
+
+    brackets = [
+        {**row, "contribution": value / 100.0} for row, value in zip(rows, cents, strict=True)
+    ]
 
     return {
         "opponent_mean": round(float(opponent_total), 2),
@@ -177,7 +194,7 @@ def defense_range_breakdown(opponent_total: float, scoring_rules: dict[str, floa
         "floor": bracket_row(opponent_high, CEILING_PERCENTILE),
         "ceiling": bracket_row(opponent_low, FLOOR_PERCENTILE),
         "mid": {
-            "points": round(_points_allowed_ev(opponent_total, scoring_rules), 2),
+            "points": mid_points,
             "brackets": brackets,
         },
     }

@@ -713,7 +713,8 @@ def main() -> None:
         assert bracket_table.locator("tbody tr").count() == 3
         assert "14-20" in bracket_table.inner_text()
         assert "60.0%" in bracket_table.inner_text()
-        mid_explain.get_by_text("Sum of contributions = 7.0", exact=True).wait_for()
+        # The derivation states its total at the same precision as the column above it.
+        mid_explain.get_by_text("Sum of contributions = 7.00", exact=True).wait_for()
 
         # Floor reads a single bracket at the high opponent percentile.
         detail.get_by_role("button", name="Floor").first.click()

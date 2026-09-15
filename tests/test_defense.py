@@ -98,8 +98,35 @@ class RangeBreakdownTest(unittest.TestCase):
         )
 
     def test_shown_contributions_add_up_to_the_shown_mid(self):
-        total = sum(row["contribution"] for row in self.breakdown["mid"]["brackets"])
-        self.assertAlmostEqual(total, self.breakdown["mid"]["points"], places=2)
+        """The column is labelled as summing to Mid, so it has to actually sum to it.
+
+        Rounding each product independently used to let the two drift apart, and
+        a single sample point was not enough to catch it: an implied total of
+        17.25 produced a column summing to 1.98 against a Mid of 1.97. Sweep the
+        realistic range instead of trusting one value.
+        """
+        for hundredths in range(0, 4001):
+            implied = hundredths / 100.0
+            breakdown = defense_range_breakdown(implied, DEF_SCORING)
+            shown = round(sum(row["contribution"] for row in breakdown["mid"]["brackets"]), 2)
+            self.assertEqual(
+                shown,
+                breakdown["mid"]["points"],
+                msg=f"contributions do not sum to Mid at implied total {implied}",
+            )
+
+    def test_absorbing_the_residual_stays_within_display_rounding(self):
+        """The adjusted row must still be the product it claims to be."""
+        for hundredths in range(1500, 2600):
+            implied = hundredths / 100.0
+            breakdown = defense_range_breakdown(implied, DEF_SCORING)
+            for row in breakdown["mid"]["brackets"]:
+                self.assertAlmostEqual(
+                    row["contribution"],
+                    row["probability"] * row["points"],
+                    delta=0.02,
+                    msg=f"{row['bracket']} contribution drifted at implied total {implied}",
+                )
 
     def test_bracket_probabilities_cover_every_outcome_once(self):
         total = sum(row["probability"] for row in self.breakdown["mid"]["brackets"])

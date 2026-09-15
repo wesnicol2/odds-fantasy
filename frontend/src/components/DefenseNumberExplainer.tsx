@@ -127,7 +127,7 @@ export function DefenseNumberExplainer({
           </table>
         </div>
         <p className="explain-result">
-          Sum of contributions = <strong>{formatResult(breakdown.mid.points)}</strong>
+          Sum of contributions = <strong>{breakdown.mid.points.toFixed(2)}</strong>
         </p>
       </div>
     );
