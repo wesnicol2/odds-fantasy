@@ -110,7 +110,7 @@ The selected player's fantasy-point inspector presents `StatProjection.expected_
 
 ## Shared player week context
 
-`services._load_week_context()` caches the expensive roster/player-prop path for `(identity, week, region)`:
+`services._load_week_context()` caches the expensive roster/player-prop path for `(identity, week, region, data mode)`:
 
 1. resolve Sleeper roster/scoring;
 2. fetch the NFL event list once;
@@ -119,13 +119,22 @@ The selected player's fantasy-point inspector presents `StatProjection.expected_
 5. normalize raw book lines;
 6. cache for `SERVICE_CACHE_TTL`.
 
+Data mode is part of the key so a cache-only partial/miss cannot satisfy a later Auto request during the short service TTL. The provider-level caches have different freshness horizons: the stable NFL event list uses `ODDS_TTL` (12 hours by default), while event player-prop payloads use `PLAYER_ODDS_TTL` (15 minutes by default). The latter prevents an early-week incomplete prop response from remaining authoritative through a much later market state.
+
 The report, lineup and player-evidence requests consume that same context, so evidence loading normally adds no fresh Odds API calls and cannot silently use different lines from the ranking row. Stat metric comparison may request details for multiple selected players, but those HTTP requests reuse the shared backend week context.
 
 ## Missing coverage semantics
 
-A player is valid when `project_player()` produces at least one scored stat. Missing an optional expected market does not invalidate the whole player.
+A player is comparison-eligible only when every core market for that position successfully produces a usable `StatProjection`. The core set is deliberately narrower than every market we may request: it covers the normal scoring path without making uncommon peripheral props a prerequisite.
 
-No usable priced/scorable markets → `has_projection=false`, null report values and a muted `no priced markets` UI state. Never substitute fabricated zeroes.
+- QB: passing yards, passing TDs, interceptions, rushing yards.
+- RB: rushing yards, receiving yards, anytime TD.
+- WR/TE: receiving yards, anytime TD.
+- RB/WR/TE also require receptions when the league's reception scoring is non-zero.
+
+Peripheral markets such as WR/TE rushing yards remain optional. Alternate lines improve a market's reconstruction but are not independently required when the base market can already be modeled.
+
+The projection engine still builds any successfully priced stats so the backend can diagnose partial coverage, but `PlayerProjection.has_projection` is false whenever a core market is missing. `/projections` then returns null Floor/Mid/Ceiling/mean, an empty comparison curve, `coverage_status=partial|missing`, and explicit `required_markets`/`missing_markets`. The ranking keeps that player visible, names the missing markets, and disables comparison selection. Because Lineup and bench pressure only accept numeric projection values, incomplete players are excluded from optimizer-driven start/sit comparisons automatically. Unknown is never represented as 0 FP.
 
 ## Defense comparison
 
@@ -173,7 +182,7 @@ Unsupported starter slots (currently most importantly K) are returned as `unmode
 
 ## Odds API efficiency
 
-Player props and defense matchup data have separate caches because they use different market sets, but both avoid duplicate calls inside their flow.
+Player props and defense matchup data have separate caches because they use different market sets, but both avoid duplicate calls inside their flow. The NFL event list may stay cached for 12 hours by default, while player-prop event responses refresh after 15 minutes by default because player markets are materially more volatile. Override those separately with `ODDS_TTL` and `PLAYER_ODDS_TTL`.
 
 Dashboard intentionally loads more than Players because its job is two-horizon planning. The frontend starts the next-week defense request, loads the current-week Mid lineup, then requests the current-week defense list. In normal/cache modes the lineup call has already populated the service's current-week defense cache, so the shortlist request reuses it instead of fetching the same games twice. `fresh` remains an explicit instruction to bypass reusable service data.
 
