@@ -35,6 +35,26 @@ FLOOR_PERCENTILE = 0.10
 MID_PERCENTILE = 0.50
 CEILING_PERCENTILE = 0.90
 
+# A fantasy-points comparison is only meaningful when the main markets that
+# describe a position's normal scoring path are all usable. Peripheral markets
+# (for example a WR rushing prop) remain optional; their absence must not make
+# every player at that position look incomplete.
+REQUIRED_MARKETS_BY_POSITION: dict[str, tuple[str, ...]] = {
+    "QB": (
+        "player_pass_yds",
+        "player_pass_tds",
+        "player_pass_interceptions",
+        "player_rush_yds",
+    ),
+    "RB": (
+        "player_rush_yds",
+        "player_reception_yds",
+        "player_anytime_td",
+    ),
+    "WR": ("player_reception_yds", "player_anytime_td"),
+    "TE": ("player_reception_yds", "player_anytime_td"),
+}
+
 
 @dataclass
 class StatProjection:
@@ -59,6 +79,8 @@ class PlayerProjection:
     mean: float
     stats: dict[str, StatProjection] = field(default_factory=dict)
     samples: list[float] = field(default_factory=list)
+    required_markets: tuple[str, ...] = ()
+    missing_markets: tuple[str, ...] = ()
 
     @property
     def per_market_ranges(self) -> dict[str, tuple[float, float, float]]:
@@ -66,7 +88,12 @@ class PlayerProjection:
 
     @property
     def has_projection(self) -> bool:
-        return bool(self.stats and self.samples)
+        """Whether the player is safe to use in comparisons/optimization."""
+        return bool(self.stats and self.samples and not self.missing_markets)
+
+    @property
+    def has_partial_projection(self) -> bool:
+        return bool(self.stats and self.samples and self.missing_markets)
 
 
 def percentile(sorted_values: list[float], q: float) -> float:
@@ -124,6 +151,26 @@ def _position_from_odds(per_bookmaker_odds: dict) -> str | None:
         if position:
             return position
     return None
+
+
+def required_projection_markets(
+    scoring: ScoringConfig,
+    position: str | None,
+) -> tuple[str, ...]:
+    """Core markets required before a player may enter a comparison.
+
+    Receptions become core only when the league actually scores them. The
+    yards/TD coverage above remains core because it directly drives standard
+    fantasy scoring for the position. Unknown positions retain the historical
+    behavior so pure projection helpers without roster metadata stay generic.
+    """
+    pos = str(position or "").upper()
+    required = list(REQUIRED_MARKETS_BY_POSITION.get(pos, ()))
+    if pos in {"RB", "WR", "TE"}:
+        reception_scoring = scoring.for_market("player_receptions", position=pos)
+        if reception_scoring is not None and reception_scoring.is_scored:
+            required.append("player_receptions")
+    return tuple(required)
 
 
 def candidate_markets(
@@ -247,6 +294,7 @@ def project_player(
     resolved_position = (
         str(position or _position_from_odds(per_bookmaker_odds) or "").upper() or None
     )
+    required_markets = required_projection_markets(scoring, resolved_position)
 
     stats: dict[str, StatProjection] = {}
     for market_key in candidate_markets(per_bookmaker_odds, scoring, position=resolved_position):
@@ -262,8 +310,16 @@ def project_player(
         if stat is not None:
             stats[market_key] = stat
 
+    missing_markets = tuple(key for key in required_markets if key not in stats)
     if not stats:
-        return PlayerProjection(floor=0.0, mid=0.0, ceiling=0.0, mean=0.0)
+        return PlayerProjection(
+            floor=0.0,
+            mid=0.0,
+            ceiling=0.0,
+            mean=0.0,
+            required_markets=required_markets,
+            missing_markets=missing_markets,
+        )
 
     per_stat_draws: list[list[float]] = []
     for index, stat in enumerate(stats.values()):
@@ -282,4 +338,6 @@ def project_player(
         mean=mean,
         stats=stats,
         samples=totals,
+        required_markets=required_markets,
+        missing_markets=missing_markets,
     )
