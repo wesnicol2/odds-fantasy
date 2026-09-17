@@ -48,6 +48,11 @@ ROSTER = {
             "primary_position": "WR",
             "editorial_team_full_name": "Buffalo Bills",
         },
+        "5": {
+            "name": {"full": "Partial Receiver"},
+            "primary_position": "WR",
+            "editorial_team_full_name": "Buffalo Bills",
+        },
     },
 }
 
@@ -87,6 +92,17 @@ EVENT_ODDS = [
                         "outcomes": [
                             outcome("Over", 1.83, 3.5),
                             outcome("Under", 1.98, 3.5),
+                            outcome("Over", 1.9, 4.5, description="Beta Receiver"),
+                            outcome("Under", 1.9, 4.5, description="Beta Receiver"),
+                        ],
+                    },
+                    {
+                        "key": "player_reception_yds",
+                        "outcomes": [
+                            outcome("Over", 1.9, 28.5),
+                            outcome("Under", 1.9, 28.5),
+                            outcome("Over", 1.9, 55.5, description="Beta Receiver"),
+                            outcome("Under", 1.9, 55.5, description="Beta Receiver"),
                         ],
                     },
                     {
@@ -96,6 +112,8 @@ EVENT_ODDS = [
                             outcome("No", 1.7),
                             outcome("Yes", 2.0, description="Beta Receiver"),
                             outcome("No", 2.0, description="Beta Receiver"),
+                            outcome("Yes", 2.5, description="Partial Receiver"),
+                            outcome("No", 1.6, description="Partial Receiver"),
                         ],
                     },
                 ],
@@ -122,12 +140,14 @@ class ProjectionPipelineTest(unittest.TestCase):
         players = self._run()["players"]
         self.assertEqual(
             {player["name"] for player in players},
-            {"James Cook", "Bye Week WR", "Beta Receiver"},
+            {"James Cook", "Bye Week WR", "Beta Receiver", "Partial Receiver"},
         )
 
     def test_projected_player_has_ordered_numbers_and_curve(self):
         player = next(row for row in self._run()["players"] if row["name"] == "James Cook")
         self.assertTrue(player["has_projection"])
+        self.assertEqual(player["coverage_status"], "complete")
+        self.assertEqual(player["missing_markets"], [])
         self.assertLess(player["floor"], player["mid"])
         self.assertLess(player["mid"], player["ceiling"])
         self.assertGreater(len(player["curve"]), 20)
@@ -139,11 +159,11 @@ class ProjectionPipelineTest(unittest.TestCase):
     def test_receiver_anytime_td_uses_receiving_td_scoring(self):
         player = next(row for row in self._run()["players"] if row["name"] == "Beta Receiver")
         self.assertTrue(player["has_projection"])
-        self.assertAlmostEqual(player["mean"], 4.0, places=6)
-        self.assertEqual(player["floor"], 0.0)
-        self.assertEqual(player["ceiling"], 8.0)
-        self.assertEqual(player["curve"][0]["x"], 0.0)
-        self.assertEqual(player["curve"][-1]["x"], 8.0)
+        # The 50% anytime-TD line contributes 4 expected points at this
+        # receiver's configured 8-point receiving-TD value, on top of receiving
+        # yards/receptions. Using the RB/QB 5-point TD value would be lower.
+        self.assertGreater(player["mean"], 9.0)
+        self.assertGreater(player["ceiling"], player["mid"])
         self.assertGreaterEqual(
             player["curve"][0]["survival"],
             player["curve"][-1]["survival"],
@@ -152,14 +172,25 @@ class ProjectionPipelineTest(unittest.TestCase):
     def test_no_lines_does_not_fabricate_zero_projection(self):
         player = next(row for row in self._run()["players"] if row["name"] == "Bye Week WR")
         self.assertFalse(player["has_projection"])
+        self.assertEqual(player["coverage_status"], "missing")
         self.assertIsNone(player["floor"])
         self.assertIsNone(player["mid"])
         self.assertIsNone(player["ceiling"])
+        self.assertIn("player_reception_yds", player["missing_markets"])
+        self.assertIn("player_anytime_td", player["missing_markets"])
 
-    def test_partial_markets_still_report_valid_projection(self):
-        player = next(row for row in self._run()["players"] if row["name"] == "James Cook")
-        self.assertTrue(player["has_projection"])
-        self.assertIsNotNone(player["mid"])
+    def test_partial_core_markets_are_unknown_and_excluded(self):
+        player = next(
+            row for row in self._run()["players"] if row["name"] == "Partial Receiver"
+        )
+        self.assertFalse(player["has_projection"])
+        self.assertEqual(player["coverage_status"], "partial")
+        self.assertGreater(player["markets_used"], 0)
+        self.assertEqual(player["missing_markets"], ["player_reception_yds", "player_receptions"])
+        self.assertIsNone(player["floor"])
+        self.assertIsNone(player["mid"])
+        self.assertIsNone(player["ceiling"])
+        self.assertEqual(player["curve"], [])
 
 
 if __name__ == "__main__":
