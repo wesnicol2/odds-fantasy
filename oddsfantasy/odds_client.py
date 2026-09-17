@@ -26,8 +26,12 @@ _CACHE_LOCK = threading.RLock()
 _MEM_CACHE: dict | None = None
 _META: dict | None = None
 
-# TTL (seconds) for auto mode
-ODDS_TTL = int(os.getenv("ODDS_TTL", "43200"))  # 12h default
+# NFL schedules change slowly, while player props are posted/updated throughout
+# the week. Keep the historical 12h event-list cache but refresh player-prop
+# payloads often enough that an early incomplete slate cannot masquerade as the
+# current Thursday market for half a day.
+ODDS_TTL = int(os.getenv("ODDS_TTL", "43200"))  # 12h default for event lists
+PLAYER_ODDS_TTL = int(os.getenv("PLAYER_ODDS_TTL", "900"))  # 15m player props
 
 # The /v4/sports endpoint returns current usage headers without consuming credits.
 # Poll it at most once per minute so quota display remains current without creating
@@ -117,20 +121,20 @@ def _load_meta() -> dict:
         return _META
 
 
-def _is_fresh_enough(url: str) -> bool:
+def _is_fresh_enough(url: str, ttl: int = ODDS_TTL) -> bool:
     meta = _load_meta()
     ts = meta.get(url)
     if not ts:
         return False
     age = int(time.time()) - int(ts)
-    return age < ODDS_TTL
+    return age < ttl
 
 
 def refresh_quota_status(force: bool = False) -> dict:
     """Refresh current Odds API usage headers without consuming usage credits.
 
     The provider's ``GET /v4/sports`` endpoint reports the same usage headers as
-    odds calls but has a quota cost of zero.  Keep a short in-process TTL so a
+    odds calls but has a quota cost of zero. Keep a short in-process TTL so a
     burst of app requests shares one status check.
     """
     global _QUOTA_STATUS_CHECKED_AT
@@ -225,7 +229,7 @@ def get_event_player_odds(
         _log(f"event:{event_id} CACHE_MISS strict")
         ratelimit.update_cached(f"event_odds:{event_id}")
         return {}
-    if mode == "auto" and url in cache and _is_fresh_enough(url):
+    if mode == "auto" and url in cache and _is_fresh_enough(url, PLAYER_ODDS_TTL):
         _log(f"event:{event_id} TTL_HIT dt_ms={(time.perf_counter() - t0) * 1000.0:.1f}")
         ratelimit.update_cached(f"event_odds:{event_id}")
         return cache[url]
