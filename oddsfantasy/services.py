@@ -123,9 +123,7 @@ def _fetch_odds(
     output: dict[str, object] = {}
     workers = min(8, len(planned_games))
     with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-        futures = {
-            executor.submit(task, item): item[0] for item in planned_games.items()
-        }
+        futures = {executor.submit(task, item): item[0] for item in planned_games.items()}
         for future in as_completed(futures):
             game_id = futures[future]
             try:
