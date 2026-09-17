@@ -16,6 +16,9 @@ export interface ProjectionPlayer {
   books_used: number;
   markets_used: number;
   has_projection: boolean;
+  coverage_status?: 'complete' | 'partial' | 'missing';
+  required_markets?: string[];
+  missing_markets?: string[];
   locked?: boolean;
   lineup_status?: 'starter' | 'bench' | null;
   actual_points?: number | null;

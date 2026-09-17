@@ -28,19 +28,24 @@ def player_alias(full_name: str) -> str:
 
 
 def _normalize_market(stat_key: str) -> str | None:
-    if stat_key in STAT_MARKET_MAPPING:
-        return STAT_MARKET_MAPPING[stat_key]
-    if stat_key.endswith("_tds") or stat_key.endswith("_tds_alternate"):
-        return "player_anytime_td"
-    if stat_key.endswith("_alternate"):
-        if stat_key.startswith("player_receptions"):
-            return "player_receptions_alternate"
-        if stat_key.startswith("player_rush_yds"):
-            return "player_rush_yds_alternate"
-        if stat_key.startswith("player_reception_yds"):
-            return "player_reception_yds_alternate"
-        return None
-    return stat_key
+    """Translate configured stat names into the Odds API market to request.
+
+    Alternate markets must be translated from their base market first. The old
+    ordering silently dropped QB alternate passing yards and translated QB
+    alternate passing TDs into anytime-TD, which reduced the useful ladder even
+    when the provider had the requested props available.
+    """
+    alternate_suffix = "_alternate"
+    if stat_key.endswith(alternate_suffix):
+        base_key = stat_key[: -len(alternate_suffix)]
+        normalized_base = STAT_MARKET_MAPPING.get(base_key, base_key)
+        # Rushing/receiving touchdown config intentionally maps to the pooled
+        # anytime-TD market. There is no corresponding pooled alternate key in
+        # this projection model, so keep the canonical market instead.
+        if normalized_base == "player_anytime_td":
+            return normalized_base
+        return f"{normalized_base}{alternate_suffix}"
+    return STAT_MARKET_MAPPING.get(stat_key, stat_key)
 
 
 def _markets_for_positions(positions: Iterable[str]) -> list[str]:

@@ -18,8 +18,28 @@ interface PlayerRankingProps {
   onHoverPlayer: (name: string | null) => void;
 }
 
+const MARKET_LABELS: Record<string, string> = {
+  player_pass_yds: 'pass yds',
+  player_pass_tds: 'pass TDs',
+  player_pass_interceptions: 'INTs',
+  player_rush_yds: 'rush yds',
+  player_reception_yds: 'rec yds',
+  player_receptions: 'receptions',
+  player_anytime_td: 'TD',
+};
+
 function formatPoints(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : value.toFixed(1);
+}
+
+function coverageMessage(player: ProjectionPlayer): string {
+  const missing = (player.missing_markets ?? []).map(
+    (market) => MARKET_LABELS[market] ?? market.replace(/^player_/, '').replaceAll('_', ' '),
+  );
+  const prefix = player.coverage_status === 'partial' ? 'INCOMPLETE' : 'NO CORE LINES';
+  return missing.length
+    ? `${prefix} · missing ${missing.join(', ')} · excluded`
+    : `${prefix} · excluded from comparisons`;
 }
 
 export function PlayerRanking({
@@ -45,6 +65,7 @@ export function PlayerRanking({
   const projected = players.filter(
     (player) => player.floor !== null && player.mid !== null && player.ceiling !== null,
   );
+  const incompleteCount = players.filter((player) => !player.has_projection).length;
   const glyphMinimum = Math.min(0, ...projected.map((player) => player.floor ?? 0));
   const glyphMaximum = Math.max(1, ...projected.map((player) => player.ceiling ?? 0));
 
@@ -71,6 +92,12 @@ export function PlayerRanking({
 
   return (
     <div className="ranking-content">
+      {incompleteCount > 0 ? (
+        <div className="status-note">
+          {incompleteCount} {incompleteCount === 1 ? 'player is' : 'players are'} missing core
+          betting lines and excluded from comparisons. Missing means unknown, not 0 FP.
+        </div>
+      ) : null}
       <div className="ranking-tools">
         <input
           className="player-search"
@@ -142,7 +169,7 @@ export function PlayerRanking({
                     <input
                       type="checkbox"
                       checked={compared.has(player.name)}
-                      disabled={!player.curve.length}
+                      disabled={!player.has_projection || !player.curve.length}
                       onChange={() => onToggleComparedPlayer(player.name)}
                       aria-label={`Graph ${player.name}`}
                     />
@@ -163,7 +190,7 @@ export function PlayerRanking({
                           {formatPoints(player.actual_points)} actual FP
                         </small>
                       ) : !player.has_projection ? (
-                        <small>no priced markets</small>
+                        <small>{coverageMessage(player)}</small>
                       ) : null}
                     </button>
                   </td>
