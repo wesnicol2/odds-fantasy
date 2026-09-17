@@ -94,8 +94,8 @@ export function PlayerRanking({
     <div className="ranking-content">
       {incompleteCount > 0 ? (
         <div className="status-note">
-          {incompleteCount} {incompleteCount === 1 ? 'player is' : 'players are'} missing core betting
-          lines and excluded from comparisons. Missing means unknown, not 0 FP.
+          {incompleteCount} {incompleteCount === 1 ? 'player is' : 'players are'} missing core
+          betting lines and excluded from comparisons. Missing means unknown, not 0 FP.
         </div>
       ) : null}
       <div className="ranking-tools">
