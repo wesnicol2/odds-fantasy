@@ -2,7 +2,7 @@
 
 import unittest
 
-from oddsfantasy.planner import _normalize_market, _markets_for_positions
+from oddsfantasy.planner import _markets_for_positions, _normalize_market
 
 
 class PlannerMarketMappingTest(unittest.TestCase):
