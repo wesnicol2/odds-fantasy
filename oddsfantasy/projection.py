@@ -45,6 +45,7 @@ REQUIRED_MARKETS_BY_POSITION: dict[str, tuple[str, ...]] = {
         "player_pass_tds",
         "player_pass_interceptions",
         "player_rush_yds",
+        "player_anytime_td",
     ),
     "RB": (
         "player_rush_yds",
