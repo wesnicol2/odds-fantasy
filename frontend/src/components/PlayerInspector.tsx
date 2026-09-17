@@ -271,7 +271,15 @@ export function PlayerInspector({
           </div>
         </>
       ) : (
-        <div className="empty-state">No usable priced markets are available for this player.</div>
+        <div className="empty-state">
+          {player.coverage_status === 'partial'
+            ? 'Projection withheld because core betting-line coverage is incomplete.'
+            : 'No complete core betting-line coverage is available for this player.'}
+          {player.missing_markets?.length ? (
+            <span> Missing: {player.missing_markets.map(metricLabel).join(', ')}.</span>
+          ) : null}
+          <span> Missing coverage is unknown, not 0 FP.</span>
+        </div>
       )}
     </div>
   );
