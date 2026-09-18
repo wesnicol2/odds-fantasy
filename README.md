@@ -4,10 +4,10 @@ Odds Fantasy turns sportsbook markets into fantasy-football decision support for
 
 The app has four focused destinations:
 
-- **Dashboard** — the default low-noise command center: this week's ideal Mid lineup, the bench players closest to cracking it, and the best available/owned defenses for this week and next week.
+- **Dashboard** — the default low-noise command center: this week's ideal Mid lineup before kickoff, the best remaining lineup after games begin, the bench players closest to cracking it, and the best available/owned defenses for this week and next week.
 - **Players** — a linked analytical workstation with roster ranking, Floor / Mid / Ceiling, probability curves, position/player filters, Target FP analysis and sportsbook evidence.
 - **Defenses** — every NFL defense ranked by its opponent's implied team total, with league ownership shown.
-- **Lineup** — optimize your modeled starters for Floor, Mid, or Ceiling.
+- **Lineup** — optimize your modeled starters for Floor, Mid, or Ceiling while respecting already-locked games.
 
 Dashboard intentionally summarizes conclusions rather than recreating projection logic. Its lineup and bench-pressure values come from the same backend optimizer used by Lineup, and its defense shortlists reuse the same ranked defense payload used by Defenses.
 
@@ -29,23 +29,25 @@ Continuous and high-granularity charts support axis-specific rescaling. On touch
 
 Sportsbook evidence stays mathematically consistent with those views. Exact source-book thresholds can be marked on the x-axis of `P(x)` charts, while de-vigged consensus anchors remain inspectable in **Explain betting lines** because they are cumulative `P(X ≥ x)` quantities and therefore do not share the density/PMF y-axis. Low-granularity gauges already use the same cumulative threshold semantics directly.
 
-A player with no usable priced markets stays visible with dashes and a `no priced markets` state. Missing one optional market does not hide an otherwise valid projection.
+A player is comparison-eligible only when the core markets for that position are usable: QB requires passing yards, passing TDs, interceptions, rushing yards and anytime TD (for rushing-TD scoring); RB requires rushing yards, receiving yards and anytime TD; WR/TE require receiving yards and anytime TD. Receptions are also required when the league awards reception points. Peripheral markets such as WR rushing yards remain optional. If any core market is missing, the player stays visible with dashes, an explicit `INCOMPLETE`/`NO CORE LINES` state and the missing markets named, but is excluded from graphs, lineup optimization and start/sit comparisons. Missing coverage is unknown, never a zero-point projection.
 
-The header quota readout is refreshed independently of the odds cache. It uses The Odds API's zero-credit sports endpoint to obtain current remaining/used headers, throttled to one provider check per minute.
+The header quota readout is refreshed independently of the odds cache. It uses The Odds API's zero-credit sports endpoint to obtain current remaining/used headers, throttled to one provider check per minute. In Auto mode, the stable NFL event list keeps the historical 12-hour cache by default, while event player-prop payloads use a separate `PLAYER_ODDS_TTL` with a 15-minute default so an early incomplete slate does not remain authoritative for half a day.
 
 ## Using the app
 
 1. On a fresh browser, enter your Sleeper username, choose a league, then choose your team. The selection is saved in browser cookies.
-2. Start on **Dashboard** for the current decision: ideal lineup, closest bench calls, and this/next-week defense targets.
+2. Start on **Dashboard** for the current decision. Before any game starts it shows the ideal lineup. Once a submitted starter's game has begun, that player is fixed in the submitted slot at their current Sleeper fantasy points and Dashboard becomes **Best remaining lineup**. Players whose games already began on your bench are no longer eligible for recommendations.
 3. Use **Players**, **Defenses**, or **Lineup** when you want to drill down. Those destinations have their own **This week / Next week** context selector; Dashboard intentionally spans both defense weeks itself.
-4. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. The fantasy-points inspector breaks the player's mean into exact per-stat expected-point contributions; select any contribution to open that stat's distribution and betting-line evidence. You can also choose a metric above the graph directly.
+4. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. Already-started players remain inspectable but are marked `LOCKED` and sorted behind players whose decisions are still actionable. The fantasy-points inspector breaks the player's mean into exact per-stat expected-point contributions; select any contribution to open that stat's distribution and betting-line evidence.
 5. Enter or drag **Target FP** to compare each visible player's chance of reaching a specific fantasy score. Use **Explain betting lines** when you want the consensus anchors and source sportsbook prices.
-6. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken.
-7. In **Lineup**, choose Floor, Mid, or Ceiling. The optimizer uses the league's Sleeper starter slots and only players/DEF on your roster.
+6. In **Defenses**, lower opponent implied total ranks higher. The table marks a defense as Available, Yours, or Taken. Select any number — implied total, Floor, Mid, Ceiling or the book count — to open that team's detail panel showing exactly how the number was calculated: the per-sportsbook totals and spreads behind the implied total, or the points-allowed bracket and league scoring behind the range.
+7. In **Lineup**, choose Floor, Mid, or Ceiling. If games have started, the objective applies only to slots you can still change; locked starters contribute actual points and stay in their submitted slots.
 
 Primary navigation preserves the analytical workspace in memory instead of rebuilding it as a set of disconnected pages. Browser Back/Forward restores the destination and week context. On desktop the primary navigation is a compact horizontal strip; on narrow screens it becomes a persistent bottom navigation bar so the Players visualization keeps its horizontal space.
 
-Dashboard bench pressure is an optimizer-derived opportunity cost. For each bench player, the backend forces that player into the best valid lineup and reports how much total projected value is lost versus the unconstrained ideal lineup. A small `FP back` value therefore means the player is close to cracking the ideal lineup without the browser needing to recreate roster-slot eligibility rules.
+Dashboard bench pressure is an optimizer-derived opportunity cost. Before kickoff it is measured against the unconstrained ideal lineup. After games begin, started starters are fixed, started bench players are removed from the candidate pool, and the same forced-lineup calculation is performed only across the remaining movable slots. A small `FP back` value therefore means the player is close to cracking the best lineup you can still submit, not that the app is rewriting decisions that are already locked. Selecting that row opens this week's tie-breaker matrix with the displaced starter: aligned projection ranges, game spread/total and team implied total, per-stat expected-point contributions, and one-click stat distribution drill-downs. The matrix measures the week twice — once in league fantasy points and once in raw stat value — and deliberately excludes ADP, season-long rank, rest-of-season schedule and every other draft or multi-week input.
+
+The lock boundary is kickoff. Sleeper's submitted starter order supplies the actual fantasy slots and Sleeper matchup scoring supplies current fantasy points; game commence times determine whether a decision is still movable. The UI says `LOCKED`, not `LIVE` or `FINAL`, because kickoff alone proves that the fantasy decision is closed, not the NFL game's final status.
 
 **Settings** contains operational odds-data controls: Auto (cached), Cache only, and Force fresh. Changing modes changes subsequent API requests and does not change projection mathematics.
 
@@ -115,6 +117,7 @@ Feature/main CI additionally builds the exact Docker image and runs Chromium aga
 - `frontend/` — React + TypeScript analytical workstation; Vite builds the production assets.
 - `oddsfantasy/api.py` — WSGI API and compiled-static-file server.
 - `oddsfantasy/services.py` — cached application data flows.
+- `oddsfantasy/live_lineup.py` — current-week Sleeper matchup state and the kickoff lock boundary used to freeze already-made lineup decisions.
 - `oddsfantasy/planner.py` — maps roster players to games and needed prop markets.
 - `oddsfantasy/aggregator.py` — normalizes raw per-book market data.
 - `oddsfantasy/market_math.py` — de-vigging and stat-distribution reconstruction.

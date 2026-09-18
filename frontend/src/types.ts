@@ -16,12 +16,19 @@ export interface ProjectionPlayer {
   books_used: number;
   markets_used: number;
   has_projection: boolean;
+  coverage_status?: 'complete' | 'partial' | 'missing';
+  required_markets?: string[];
+  missing_markets?: string[];
+  locked?: boolean;
+  lineup_status?: 'starter' | 'bench' | null;
+  actual_points?: number | null;
 }
 
 export interface ProjectionResponse {
   week: string;
   players: ProjectionPlayer[];
   roster_positions: string[];
+  started_count?: number;
   message?: string;
   error?: string;
   ratelimit?: string;
@@ -61,10 +68,19 @@ export interface SportsbookLine {
 
 export interface MarketDetail {
   stat_range: [number, number, number];
+  stat_mean?: number;
   expected_points: number;
   graph: StatGraph;
   anchors: ConsensusAnchor[];
   lines: SportsbookLine[];
+}
+
+/** Several markets summed into one comparable quantity by the backend. */
+export interface CombinedMarketDetail {
+  markets: string[];
+  stat_range: [number, number, number];
+  stat_mean?: number;
+  expected_points: number;
 }
 
 export interface PlayerOddsDetails {
@@ -80,7 +96,17 @@ export interface PlayerOddsDetails {
     mean: number;
     curve: FantasyCurvePoint[];
   } | null;
+  matchup?: {
+    opponent: string;
+    venue: 'home' | 'away';
+    commence_time: string;
+    game_total: number | null;
+    team_spread: number | null;
+    team_implied_total: number | null;
+    books_used: number;
+  } | null;
   markets: Record<string, MarketDetail>;
+  combined_markets?: Record<string, CombinedMarketDetail>;
   message?: string;
   error?: string;
   ratelimit?: string;
@@ -90,6 +116,38 @@ export interface ChartEvidence {
   playerId: string;
   anchors: ConsensusAnchor[];
   lines: SportsbookLine[];
+}
+
+/** One sportsbook's total and spread, plus the implied total they produce. */
+export interface ImpliedBookLine {
+  book: string;
+  game_total: number;
+  opponent_spread: number;
+  implied_total: number;
+}
+
+export interface DefenseBracketRow {
+  bracket: string;
+  bracket_label: string;
+  probability: number;
+  points: number;
+  contribution: number;
+}
+
+export interface DefenseBracketPick {
+  opponent_points: number;
+  percentile: number;
+  bracket: string;
+  bracket_label: string;
+  points: number;
+}
+
+export interface DefenseRangeBreakdown {
+  opponent_mean: number;
+  sigma: number;
+  floor: DefenseBracketPick;
+  ceiling: DefenseBracketPick;
+  mid: { points: number; brackets: DefenseBracketRow[] };
 }
 
 export interface DefenseRow {
@@ -105,6 +163,8 @@ export interface DefenseRow {
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
+  implied_books?: ImpliedBookLine[];
+  range_breakdown?: DefenseRangeBreakdown | null;
 }
 
 export interface DefenseResponse {
@@ -125,6 +185,8 @@ export interface LineupRow {
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
+  locked?: boolean;
+  actual_points?: number | null;
 }
 
 export interface BenchPressureRow {
@@ -138,11 +200,24 @@ export interface BenchPressureRow {
   displaces_slot: string | null;
 }
 
+export interface LockedBenchRow {
+  name: string;
+  pos: string | null;
+  team: string | null;
+  actual_points: number;
+  lineup_status: 'bench';
+}
+
 export interface LineupResponse {
   week: string;
   target: 'floor' | 'mid' | 'ceiling';
   lineup: LineupRow[];
   total_points: number;
+  actual_points?: number;
+  remaining_projected_points?: number;
+  locked_count?: number;
+  decisions_remaining?: number;
+  locked_bench?: LockedBenchRow[];
   bench_pressure: BenchPressureRow[];
   unmodeled_slots: string[];
   unfilled_slots: string[];

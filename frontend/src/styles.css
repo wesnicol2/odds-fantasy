@@ -150,6 +150,12 @@ input:focus-visible {
   grid-template-columns: minmax(360px, 0.95fr) minmax(540px, 1.65fr) minmax(250px, 0.65fr);
   min-height: calc(100vh - 104px);
 }
+/* Comparing two players makes the start/sit call the headline, so the workspace
+   stacks: matrix first, then the supporting chart, then the ranking checkboxes.
+   The DOM is reordered with it in App.tsx so reading and tab order match. */
+.workspace.comparison-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
 .ranking-pane,
 .analysis-pane,
 .inspector-pane {
@@ -625,4 +631,21 @@ input:focus-visible {
   .ranking-table tr {
     transition: none;
   }
+}
+
+/* Stacked comparison overrides, last so they apply at every breakpoint. */
+.comparison-workspace .inspector-pane,
+.comparison-workspace .analysis-pane {
+  border: 0;
+  border-bottom: 1px solid #232932;
+}
+.comparison-workspace .ranking-pane {
+  border: 0;
+  overflow: visible;
+}
+.comparison-workspace .start-sit-comparison {
+  max-width: 940px;
+}
+.comparison-workspace .ranking-scroll {
+  max-height: 460px;
 }

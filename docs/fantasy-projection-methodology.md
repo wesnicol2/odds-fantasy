@@ -271,6 +271,20 @@ Refinements:
 
 The rigorous version: simulate the full lineup vs the opponent's and pick the lineup maximizing P(win); this automatically leans ceiling when behind and floor when ahead. Floor/mid/ceiling are the human-readable readout of that.
 
+### 5.1 Combining two stats into one comparable range
+
+Comparing a running back with a receiver stat by stat is misleading: the back's yardage is priced as rushing and the receiver's as receiving, so each looks like it has none of what the other has. The comparable quantity is **rushing + receiving yards**.
+
+Percentiles are **not additive**, so that combined range cannot be produced by adding each market's own percentiles:
+
+$$Q_{A+B}(p) \neq Q_A(p) + Q_B(p)$$
+
+Adding the 10th percentiles assumes both stats land low in the same game, which is far less likely than either alone; the added floor therefore sits below the true joint floor, and the added ceiling above the true joint ceiling. The combined range is instead **sampled from both fitted distributions and read off the totals**, exactly as §2.5 already does for the fantasy-points total — and under the same unresolved independence assumption recorded there.
+
+When only one of the two markets is modeled there is nothing to combine, so the combined range is that market's own exact percentiles rather than a re-sampled approximation of them.
+
+Means are different: expected points **are** additive, so a combined expected-point contribution is simply the sum of the component contributions.
+
 ---
 
 ## 6. Open questions / to validate
@@ -302,6 +316,7 @@ Each points to the section that owns it:
 
 ## Changelog
 
+- **v0.10** — Added §5.1: combining rushing and receiving yardage into one cross-position comparable range, and why that range must be sampled rather than obtained by adding percentiles.
 - **v0.9** — Made the doc ruleset-agnostic: separated the (objective) method from this project's specific config and goal — the top matter now frames the method as producing a full distribution for *any* ruleset, with the top-3 goal recast as a usage lens (§5) and worked-example headings generalized ("a continuous stat", "a discrete count"). Enabled receptions / PPR: receptions are always modeled as a count (§4.5) and scored by the configured per-reception value — 0 here (non-PPR) so no impact, but enabling PPR is a pure config change. Updated §2.3/§2.4/§2.5/§3.7 accordingly.
 - **v0.8** — Added QB passing stats, all reusing existing engines via config: passing yards (§3.7), passing TDs and interceptions (§4.5, the first negative stat). Established **scoring is configuration** with the §2.4 parameter table.
 - **v0.7** — Added the Touchdowns worked example (§4): cumulative scorer lines differenced into a pooled rush+rec TD count, ×6 for points, using only the lines the book posts.

@@ -13,7 +13,11 @@ from .config import (
     SLEEPER_ODDS_API_PLAYER_NAME_MAPPING,
     SLEEPER_TO_ODDSAPI_TEAM,
 )
-from .defense import defense_fantasy_range, opponent_implied_total
+from .defense import (
+    defense_fantasy_range,
+    defense_range_breakdown,
+    opponent_implied_breakdown,
+)
 from .lineup import build_best_lineup
 from .planner import plan_relevant_games_and_markets
 from .projection import project_player, survival_curve
@@ -119,13 +123,14 @@ def _fetch_odds(
     output: dict[str, object] = {}
     workers = min(8, len(planned_games))
     with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-        futures = [executor.submit(task, item) for item in planned_games.items()]
+        futures = {executor.submit(task, item): item[0] for item in planned_games.items()}
         for future in as_completed(futures):
+            game_id = futures[future]
             try:
-                game_id, data = future.result()
+                _, data = future.result()
                 output[game_id] = data
             except Exception as exc:
-                print(f"[services] odds fetch failed: {exc}")
+                print(f"[services] odds fetch failed for {game_id}: {exc}")
     return output
 
 
@@ -149,7 +154,10 @@ def _load_week_context(
 ) -> dict:
     """Load and cache the normalized source data shared by report and drill-down."""
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
-    key = (username, season, week, region, league_id, roster_id)
+    # Operational cache modes must not satisfy one another. In particular, a
+    # cache-only miss/partial response should not be reused by a subsequent auto
+    # request just because both happened inside this short service TTL.
+    key = (username, season, week, region, cache_mode, league_id, roster_id)
     now = time.time()
     cache = _context_cache()
     if not fresh and key in cache:
@@ -268,8 +276,17 @@ def compute_projections(
 
     for player in _roster_skill_players(roster):
         by_book = players_odds.get(player["alias"], {})
-        projection = project_player(by_book, scoring_rules) if by_book else None
-        has_projection = bool(projection and projection.has_projection)
+        # Always project with explicit roster position, even with zero matched
+        # lines, so the report can say exactly which core markets are missing.
+        projection = project_player(by_book, scoring_rules, position=player["pos"])
+        has_projection = projection.has_projection
+        coverage_status = (
+            "complete"
+            if has_projection
+            else "partial"
+            if projection.has_partial_projection
+            else "missing"
+        )
         rows.append(
             {
                 **player,
@@ -279,8 +296,13 @@ def compute_projections(
                 "mean": round(projection.mean, 2) if has_projection else None,
                 "curve": survival_curve(projection.samples) if has_projection else [],
                 "books_used": len(by_book),
-                "markets_used": len(projection.stats) if has_projection else 0,
+                # Keep diagnostic coverage visible even when the player is not
+                # comparison-eligible. Unknown is not a zero-point projection.
+                "markets_used": len(projection.stats),
                 "has_projection": has_projection,
+                "coverage_status": coverage_status,
+                "required_markets": list(projection.required_markets),
+                "missing_markets": list(projection.missing_markets),
             }
         )
 
@@ -454,13 +476,19 @@ def list_defenses(
         opponent = "BYE"
         game_date = None
         floor = mid = ceiling = None
+        implied_books: list[dict] = []
+        range_breakdown = None
         if game:
             opponent = game["opponent"]
             event = game["event"]
             game_date = event.get("commence_time")
-            implied, book_count = opponent_implied_total(game_lines.get(event.get("id")), opponent)
+            breakdown = opponent_implied_breakdown(game_lines.get(event.get("id")), opponent)
+            implied = breakdown["median"]
+            book_count = breakdown["book_count"]
+            implied_books = breakdown["books"]
             if implied is not None:
                 floor, mid, ceiling = defense_fantasy_range(implied, scoring)
+                range_breakdown = defense_range_breakdown(implied, scoring)
 
         rows.append(
             {
@@ -476,6 +504,10 @@ def list_defenses(
                 "floor": round(floor, 2) if floor is not None else None,
                 "mid": round(mid, 2) if mid is not None else None,
                 "ceiling": round(ceiling, 2) if ceiling is not None else None,
+                # Every derived number ships with the inputs it was derived
+                # from, so the UI never has to recompute one to explain it.
+                "implied_books": implied_books,
+                "range_breakdown": range_breakdown,
             }
         )
 

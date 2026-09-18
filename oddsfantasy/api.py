@@ -14,16 +14,15 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
-from . import odds_client, odds_details, ratelimit
+from . import live_lineup, odds_client, odds_details, ratelimit
 from .build_info import build_info
 from .config import DEFAULT_SEASON
-from .services import (
-    compute_best_lineup,
-    compute_projections,
-    list_defenses,
-    resolve_league,
-    resolve_user_leagues,
-)
+from .services import list_defenses, resolve_league, resolve_user_leagues
+
+# Keep these module-level seams stable: API tests and downstream callers patch
+# them directly, while their implementation is now live-lineup aware.
+compute_projections = live_lineup.compute_projections
+compute_best_lineup = live_lineup.compute_best_lineup
 
 _DEBUG_FLAG = False
 
