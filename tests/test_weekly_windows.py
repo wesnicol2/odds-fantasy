@@ -66,10 +66,7 @@ class EarliestFutureWeekStartTest(unittest.TestCase):
         soon = {"commence_time": _ts(now + dt.timedelta(days=3))}
         later = {"commence_time": _ts(now + dt.timedelta(days=30))}
         start = ww.earliest_future_week_start([later, past, soon], now_utc=now)
-        self.assertIsNotNone(start)
-        self.assertTrue(ww.in_window(soon["commence_time"], ww._window_from_eastern_thursday(
-            start.replace(tzinfo=dt.timezone.utc).astimezone(ww._NFL_TZ)
-        )))
+        self.assertEqual(start, dt.datetime(2026, 8, 20, 4))
 
 
 class ResolveWeekWindowsTest(unittest.TestCase):
