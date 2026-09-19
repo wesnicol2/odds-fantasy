@@ -2,7 +2,7 @@ import datetime as _dt
 from zoneinfo import ZoneInfo
 
 _NFL_TZ = ZoneInfo("America/New_York")
-_UTC = _dt.timezone.utc
+_UTC = _dt.UTC
 
 
 def _as_utc_aware(value: _dt.datetime) -> _dt.datetime:
@@ -38,7 +38,9 @@ def _window_from_eastern_thursday(
     thursday: _dt.datetime,
 ) -> tuple[_dt.datetime, _dt.datetime]:
     """Convert Thu 00:00 -> Mon 23:59:59 Eastern into naive UTC bounds."""
-    thursday = thursday.astimezone(_NFL_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    thursday = thursday.astimezone(_NFL_TZ).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
     monday_end = (thursday + _dt.timedelta(days=4)).replace(hour=23, minute=59, second=59)
     return _to_utc_naive(thursday), _to_utc_naive(monday_end)
 
@@ -66,7 +68,10 @@ def compute_week_windows(
     this_thu = prev_thu if now_eastern <= prev_mon_end else next_thu
     next_thu2 = this_thu + _dt.timedelta(days=7)
 
-    return _window_from_eastern_thursday(this_thu), _window_from_eastern_thursday(next_thu2)
+    return (
+        _window_from_eastern_thursday(this_thu),
+        _window_from_eastern_thursday(next_thu2),
+    )
 
 
 def in_window(ts_iso_utc: str, window: tuple[_dt.datetime, _dt.datetime]) -> bool:
