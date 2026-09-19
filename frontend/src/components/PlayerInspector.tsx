@@ -177,7 +177,11 @@ export function PlayerInspector({
                     </div>
                   </dl>
                   <details className="evidence-details">
-                    <summary>View {market.lines.length} exact sportsbook lines</summary>
+                    <summary>
+                      <strong>View {market.lines.length} exact sportsbook lines</strong>
+                      {' · '}
+                      <span>Explain betting lines</span>
+                    </summary>
                     <div className="evidence-block">
                       <h3>Exact sportsbook lines</h3>
                       <p className="subtle">
