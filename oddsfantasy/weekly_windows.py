@@ -38,9 +38,7 @@ def _window_from_eastern_thursday(
     thursday: _dt.datetime,
 ) -> tuple[_dt.datetime, _dt.datetime]:
     """Convert Thu 00:00 -> Mon 23:59:59 Eastern into naive UTC bounds."""
-    thursday = thursday.astimezone(_NFL_TZ).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    thursday = thursday.astimezone(_NFL_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
     monday_end = (thursday + _dt.timedelta(days=4)).replace(hour=23, minute=59, second=59)
     return _to_utc_naive(thursday), _to_utc_naive(monday_end)
 
@@ -61,9 +59,7 @@ def compute_week_windows(
 
     prev_thu = _prev_weekday(now_eastern, 3)
     next_thu = _next_weekday(now_eastern, 3)
-    prev_mon_end = (prev_thu + _dt.timedelta(days=4)).replace(
-        hour=23, minute=59, second=59
-    )
+    prev_mon_end = (prev_thu + _dt.timedelta(days=4)).replace(hour=23, minute=59, second=59)
 
     this_thu = prev_thu if now_eastern <= prev_mon_end else next_thu
     next_thu2 = this_thu + _dt.timedelta(days=7)
