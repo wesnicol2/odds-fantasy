@@ -176,45 +176,17 @@ export function PlayerInspector({
                       <dd>{formatValue(market.stat_range[2])}</dd>
                     </div>
                   </dl>
-                  <div className="evidence-summary">
-                    <span>{market.anchors.length} consensus thresholds</span>
-                    <span>{market.lines.length} source lines</span>
-                    <span>{sportsbookCount} books</span>
-                  </div>
-                  <p className="evidence-explainer">
-                    Consensus thresholds are de-vigged cross-book P(≥x) evidence. Exact sportsbook
-                    lines show the source prices. The chart re-expresses the same backend-fitted
-                    distribution using the visualization appropriate for this stat.
-                  </p>
                   <details className="evidence-details">
-                    <summary>Explain betting lines</summary>
-                    <div className="evidence-block">
-                      <h3>Consensus anchors</h3>
-                      {market.anchors.length ? (
-                        <div className="evidence-table-scroll">
-                          <table className="evidence-table">
-                            <thead>
-                              <tr>
-                                <th>Threshold</th>
-                                <th className="number">Fair P(over)</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {market.anchors.map((anchor) => (
-                                <tr key={`${anchor.threshold}:${anchor.survival}`}>
-                                  <td>{formatValue(anchor.threshold)}</td>
-                                  <td className="number">{formatProbability(anchor.survival)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <p className="subtle">No consensus anchors.</p>
-                      )}
-                    </div>
+                    <summary>
+                      <strong>View {market.lines.length} exact sportsbook lines</strong>
+                      {' · '}
+                      <span>Explain betting lines</span>
+                    </summary>
                     <div className="evidence-block">
                       <h3>Exact sportsbook lines</h3>
+                      <p className="subtle">
+                        These are the raw main and alternate prices used to fit the curve above.
+                      </p>
                       {market.lines.length ? (
                         <div className="evidence-table-scroll raw-lines">
                           <table className="evidence-table">
@@ -246,7 +218,42 @@ export function PlayerInspector({
                         <p className="subtle">No exact source lines.</p>
                       )}
                     </div>
+                    <div className="evidence-block">
+                      <h3>Consensus anchors</h3>
+                      {market.anchors.length ? (
+                        <div className="evidence-table-scroll">
+                          <table className="evidence-table">
+                            <thead>
+                              <tr>
+                                <th>Threshold</th>
+                                <th className="number">Fair P(over)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {market.anchors.map((anchor) => (
+                                <tr key={`${anchor.threshold}:${anchor.survival}`}>
+                                  <td>{formatValue(anchor.threshold)}</td>
+                                  <td className="number">{formatProbability(anchor.survival)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="subtle">No consensus anchors.</p>
+                      )}
+                    </div>
                   </details>
+                  <div className="evidence-summary">
+                    <span>{market.anchors.length} consensus thresholds</span>
+                    <span>{market.lines.length} source lines</span>
+                    <span>{sportsbookCount} books</span>
+                  </div>
+                  <p className="evidence-explainer">
+                    Consensus thresholds are de-vigged cross-book P(≥x) evidence. Exact sportsbook
+                    lines are the source prices. The chart re-expresses the same backend-fitted
+                    distribution using the visualization appropriate for this stat.
+                  </p>
                 </>
               ) : null}
             </div>
