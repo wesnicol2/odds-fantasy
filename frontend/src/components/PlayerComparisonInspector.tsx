@@ -58,6 +58,10 @@ function formatValue(value: number | null | undefined): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function formatOdds(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : value.toFixed(2);
+}
+
 function formatLine(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return value > 0 ? `+${formatValue(value)}` : formatValue(value);
@@ -84,6 +88,52 @@ function marketRange(market: MarketDetail | undefined): MatrixRange | null {
 
 function rangeValue(market: MarketDetail | undefined, index: 0 | 1 | 2): string {
   return formatValue(market?.stat_range[index]);
+}
+
+function RawMarketLines({
+  playerName,
+  market,
+}: {
+  playerName: string;
+  market: MarketDetail | undefined;
+}) {
+  return (
+    <div className="evidence-block">
+      <h3>{playerName}</h3>
+      {!market ? (
+        <p className="subtle">No priced market is available for this player. Missing is unknown, not 0.</p>
+      ) : market.lines.length ? (
+        <div className="evidence-table-scroll raw-lines">
+          <table className="evidence-table" aria-label={`${playerName} raw sportsbook lines`}>
+            <thead>
+              <tr>
+                <th>Book</th>
+                <th>Type</th>
+                <th className="number">Line</th>
+                <th className="number">Over</th>
+                <th className="number">Under</th>
+              </tr>
+            </thead>
+            <tbody>
+              {market.lines.map((line) => (
+                <tr
+                  key={`${line.book}:${line.source}:${line.point}:${line.over_odds}:${line.under_odds}`}
+                >
+                  <td>{line.book}</td>
+                  <td>{line.source === 'alternate' ? 'Alt' : 'Main'}</td>
+                  <td className="number">{formatValue(line.point)}</td>
+                  <td className="number">{formatOdds(line.over_odds)}</td>
+                  <td className="number">{formatOdds(line.under_odds)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="subtle">No exact source lines are available for this market.</p>
+      )}
+    </div>
+  );
 }
 
 const COMBINED_YARDAGE_KEY = 'rush_reception_yds';
@@ -660,6 +710,25 @@ export function PlayerComparisonInspector({
               </tbody>
             </table>
           </div>
+          <details className="evidence-details">
+            <summary>
+              <strong>View raw sportsbook lines</strong>
+              {' · '}
+              <span>
+                {(challengerMarket?.lines.length ?? 0) + (starterMarket?.lines.length ?? 0)} source
+                lines
+              </span>
+            </summary>
+            <p className="subtle">
+              Exact provider decimal prices used by the model, grouped by player. Main and alternate
+              lines are shown unchanged so a strange fitted result can be traced back to its inputs.
+            </p>
+            {detailsLoading && (!challengerMarket || !starterMarket) ? (
+              <p className="subtle evidence-status">Loading both players’ source lines…</p>
+            ) : null}
+            <RawMarketLines playerName={challenger.name} market={challengerMarket} />
+            <RawMarketLines playerName={starter.name} market={starterMarket} />
+          </details>
           <p>
             The central chart compares the complete fitted distributions for this week’s stat. The
             range thermometers place both players on one shared stat-value scale.
