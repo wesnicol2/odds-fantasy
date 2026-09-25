@@ -101,7 +101,9 @@ function RawMarketLines({
     <div className="evidence-block">
       <h3>{playerName}</h3>
       {!market ? (
-        <p className="subtle">No priced market is available for this player. Missing is unknown, not 0.</p>
+        <p className="subtle">
+          No priced market is available for this player. Missing is unknown, not 0.
+        </p>
       ) : market.lines.length ? (
         <div className="evidence-table-scroll raw-lines">
           <table className="evidence-table" aria-label={`${playerName} raw sportsbook lines`}>
