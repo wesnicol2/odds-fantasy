@@ -1,5 +1,6 @@
 import { useRef } from 'react';
-import type { DataMode } from '../state/workspace';
+import type { OddsFormat } from '../analysis/odds';
+import { type DataMode, useWorkspaceStore } from '../state/workspace';
 
 interface AppSettingsProps {
   dataMode: DataMode;
@@ -9,6 +10,8 @@ interface AppSettingsProps {
 
 export function AppSettings({ dataMode, onDataModeChange, onChangeLeague }: AppSettingsProps) {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const oddsFormat = useWorkspaceStore((state) => state.oddsFormat);
+  const setOddsFormat = useWorkspaceStore((state) => state.setOddsFormat);
 
   const handleChangeLeague = () => {
     if (detailsRef.current) detailsRef.current.open = false;
@@ -19,6 +22,17 @@ export function AppSettings({ dataMode, onDataModeChange, onChangeLeague }: AppS
     <details ref={detailsRef} className="app-settings">
       <summary>Settings</summary>
       <div className="settings-popover">
+        <label className="settings-field">
+          <span>Odds display</span>
+          <select
+            value={oddsFormat}
+            onChange={(event) => setOddsFormat(event.target.value as OddsFormat)}
+          >
+            <option value="american">American</option>
+            <option value="decimal">Decimal</option>
+          </select>
+        </label>
+        <p>American is the default. This changes display only; model inputs remain decimal.</p>
         <label className="settings-field">
           <span>Odds data</span>
           <select
