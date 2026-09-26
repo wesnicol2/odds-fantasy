@@ -91,9 +91,7 @@
 }
 
 .setup-backdrop-required {
-  background:
-    radial-gradient(circle at 50% 28%, rgb(50 119 204 / 18%), transparent 36rem),
-    #080b0f;
+  background: radial-gradient(circle at 50% 28%, rgb(50 119 204 / 18%), transparent 36rem), #080b0f;
 }
 
 .setup-dialog {
@@ -108,9 +106,7 @@
 .setup-dialog-required {
   width: min(560px, 100%);
   border-color: #2f4259;
-  background:
-    linear-gradient(145deg, rgb(90 162 255 / 8%), transparent 42%),
-    #0e1217;
+  background: linear-gradient(145deg, rgb(90 162 255 / 8%), transparent 42%), #0e1217;
   box-shadow: 0 24px 90px rgb(0 0 0 / 55%);
 }
 
