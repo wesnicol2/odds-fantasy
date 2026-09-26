@@ -101,12 +101,13 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
       }
 
       const resolvedUserId = payload.user_id ?? '';
+      const onlyLeague = payload.leagues[0];
       setUsername(value);
       setUserId(resolvedUserId);
       setLeagues(payload.leagues);
 
-      if (payload.leagues.length === 1 && resolvedUserId) {
-        const leagueId = payload.leagues[0].league_id;
+      if (payload.leagues.length === 1 && onlyLeague && resolvedUserId) {
+        const leagueId = onlyLeague.league_id;
         setSelectedLeagueId(leagueId);
         await resolveLeague(leagueId, resolvedUserId);
       } else {
