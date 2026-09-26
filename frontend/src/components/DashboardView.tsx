@@ -13,6 +13,15 @@ interface DashboardViewProps {
   onCompareBenchPlayer: (player: BenchPressureRow) => void;
 }
 
+type IndexedLineupRow = LineupResponse['lineup'][number] & {
+  slot_index?: number | null;
+};
+
+type IndexedBenchPressureRow = BenchPressureRow & {
+  slot_index?: number | null;
+  displaces_slot_index?: number | null;
+};
+
 function formatPoints(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : value.toFixed(1);
 }
@@ -26,6 +35,27 @@ function actionableDefenses(payload: DefenseResponse | null): DefenseRow[] {
 
 function defenseStatus(row: DefenseRow): string {
   return row.owned_by_current ? 'Yours' : 'Available';
+}
+
+function decisionSlotKey(
+  decision: IndexedBenchPressureRow,
+  lineupRows: IndexedLineupRow[],
+): number | null {
+  if (decision.slot_index !== null && decision.slot_index !== undefined) {
+    return decision.slot_index;
+  }
+
+  const displacedIndex = lineupRows.findIndex((row) => row.name === decision.displaces);
+  if (displacedIndex >= 0) {
+    return lineupRows[displacedIndex]?.slot_index ?? displacedIndex;
+  }
+
+  const matchingSlotIndex = lineupRows.findIndex((row) => row.slot === decision.slot && !row.locked);
+  if (matchingSlotIndex >= 0) {
+    return lineupRows[matchingSlotIndex]?.slot_index ?? matchingSlotIndex;
+  }
+
+  return null;
 }
 
 function DefenseShortlist({
@@ -88,9 +118,21 @@ export function DashboardView({
   onOpenDefenses,
   onCompareBenchPlayer,
 }: DashboardViewProps) {
+  const lineupRows = (lineup?.lineup ?? []) as IndexedLineupRow[];
   const decisions = (lineup?.bench_pressure ?? [])
     .filter((row) => Boolean(row.displaces))
-    .slice(0, 3);
+    .slice(0, 3) as IndexedBenchPressureRow[];
+  const decisionRanks = new Map(decisions.map((row, index) => [row.name, index + 1]));
+  const decisionsBySlot = new Map<number, IndexedBenchPressureRow[]>();
+
+  for (const decision of decisions) {
+    const slotKey = decisionSlotKey(decision, lineupRows);
+    if (slotKey === null) continue;
+    const rows = decisionsBySlot.get(slotKey) ?? [];
+    rows.push(decision);
+    decisionsBySlot.set(slotKey, rows);
+  }
+
   const lockedCount = lineup?.locked_count ?? 0;
   const remainingMode = lockedCount > 0;
 
@@ -100,59 +142,12 @@ export function DashboardView({
         <div>
           <span className="eyebrow">This week</span>
           <h2>Lineup & pickups</h2>
-          <p>Your closest start/sit decisions come first.</p>
+          <p>Close calls are highlighted directly in the lineup slots they affect.</p>
         </div>
         {loading ? <span className="dashboard-loading">Refreshing market…</span> : null}
       </header>
 
       {error ? <div className="error-state">{error}</div> : null}
-
-      <section className="dashboard-decision-hero" aria-label="Start sit decisions">
-        <div className="dashboard-decision-heading">
-          <div>
-            <span className="section-label">Your decisions</span>
-            <h3>
-              {decisions.length
-                ? `${decisions.length} ${decisions.length === 1 ? 'call' : 'calls'} worth a look`
-                : loading && !lineup
-                  ? 'Finding your closest calls…'
-                  : 'No actionable swaps found'}
-            </h3>
-          </div>
-          <span className="dashboard-decision-source">Sleeper roster × betting market</span>
-        </div>
-
-        {decisions.length ? (
-          <div className="dashboard-decision-grid">
-            {decisions.map((row, index) => (
-              <button
-                key={row.name}
-                type="button"
-                className="dashboard-decision-card"
-                onClick={() => onCompareBenchPlayer(row)}
-                aria-label={`Compare ${row.name} with ${row.displaces}`}
-              >
-                <span className="dashboard-decision-index">0{index + 1}</span>
-                <span className="dashboard-decision-copy">
-                  <strong>Start {row.displaces}</strong>
-                  <span>
-                    over <span>{row.name}</span>
-                  </span>
-                </span>
-                <span className="dashboard-decision-gap">
-                  <strong>{row.delta_to_lineup.toFixed(1)}</strong>
-                  <small>FP back</small>
-                </span>
-                <span className="dashboard-decision-cta">See why →</span>
-              </button>
-            ))}
-          </div>
-        ) : !loading ? (
-          <p className="dashboard-decision-empty">
-            The optimizer does not currently have a bench player paired with a movable starter.
-          </p>
-        ) : null}
-      </section>
 
       <div className="dashboard-support-grid">
         <section
@@ -161,12 +156,19 @@ export function DashboardView({
         >
           <div className="dashboard-section-heading">
             <div>
-              <span className="section-label">Recommended lineup</span>
+              <span className="section-label">Your lineup</span>
               <h3>{remainingMode ? 'Best remaining Mid lineup' : 'Best Mid lineup'}</h3>
             </div>
-            <div className="dashboard-total">
-              <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
-              <span>{remainingMode ? 'modeled week FP' : 'total FP'}</span>
+            <div className="dashboard-lineup-summary">
+              <div className="dashboard-total">
+                <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
+                <span>{remainingMode ? 'modeled week FP' : 'total FP'}</span>
+              </div>
+              <span className={`dashboard-decision-count${decisions.length ? ' active' : ''}`}>
+                {decisions.length
+                  ? `${decisions.length} close ${decisions.length === 1 ? 'call' : 'calls'}`
+                  : 'No close calls'}
+              </span>
             </div>
           </div>
 
@@ -178,22 +180,75 @@ export function DashboardView({
             </div>
           ) : null}
 
-          {lineup?.lineup.length ? (
+          {lineupRows.length ? (
             <div className="dashboard-lineup-list">
-              {lineup.lineup.map((row) => (
-                <div className="dashboard-lineup-row" key={`${row.slot}:${row.name}`}>
-                  <span className="dashboard-slot">{row.slot}</span>
-                  <span className="dashboard-player">
-                    <strong>{row.name}</strong>
-                    <small>
-                      {row.pos}
-                      {row.team ? ` · ${row.team}` : ''}
-                      {row.locked ? ` · LOCKED · ${formatPoints(row.actual_points)} actual` : ''}
-                    </small>
-                  </span>
-                  <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
-                </div>
-              ))}
+              {lineupRows.map((row, rowIndex) => {
+                const slotKey = row.slot_index ?? rowIndex;
+                const slotDecisions = decisionsBySlot.get(slotKey) ?? [];
+                const hasClosestDecision = slotDecisions.some(
+                  (decision) => decisionRanks.get(decision.name) === 1,
+                );
+
+                return (
+                  <div
+                    className={`dashboard-lineup-slot${slotDecisions.length ? ' has-decision' : ''}${hasClosestDecision ? ' has-closest-decision' : ''}`}
+                    key={`${slotKey}:${row.slot}:${row.name}`}
+                  >
+                    <div className="dashboard-lineup-row">
+                      <span className="dashboard-slot">{row.slot}</span>
+                      <span className="dashboard-player">
+                        <strong>{row.name}</strong>
+                        <small>
+                          {row.pos}
+                          {row.team ? ` · ${row.team}` : ''}
+                          {row.locked ? ` · LOCKED · ${formatPoints(row.actual_points)} actual` : ''}
+                        </small>
+                      </span>
+                      <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
+                    </div>
+
+                    {slotDecisions.length ? (
+                      <div className="dashboard-slot-decisions" aria-label={`${row.slot} alternatives`}>
+                        {slotDecisions.map((decision) => {
+                          const rank = decisionRanks.get(decision.name) ?? 0;
+                          const reshufflesLineup =
+                            Boolean(decision.displaces) && decision.displaces !== row.name;
+
+                          return (
+                            <button
+                              key={decision.name}
+                              type="button"
+                              className={`dashboard-slot-decision${rank === 1 ? ' is-closest' : ''}`}
+                              onClick={() => onCompareBenchPlayer(decision)}
+                              aria-label={`Compare ${decision.name} with ${decision.displaces}`}
+                            >
+                              <span className="dashboard-slot-decision-rank">0{rank}</span>
+                              <span className="dashboard-slot-decision-player">
+                                <small>{rank === 1 ? 'Closest call' : 'Also close'}</small>
+                                <strong>{decision.name}</strong>
+                                <span>
+                                  {decision.pos}
+                                  {decision.team ? ` · ${decision.team}` : ''}
+                                  {reshufflesLineup ? ` · moves out ${decision.displaces}` : ''}
+                                </span>
+                              </span>
+                              <span className="dashboard-slot-decision-projection">
+                                <strong>{decision.points.toFixed(1)}</strong>
+                                <small>proj.</small>
+                              </span>
+                              <span className="dashboard-slot-decision-gap">
+                                <strong>{decision.delta_to_lineup.toFixed(1)}</strong>
+                                <small>FP back</small>
+                              </span>
+                              <span className="dashboard-slot-decision-cta">Compare →</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           ) : !loading ? (
             <p className="dashboard-empty-copy">No modeled lineup is available.</p>
