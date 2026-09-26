@@ -146,13 +146,6 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
     commitTeam(league, selectedLeagueId, team);
   };
 
-  const setupTitle =
-    step === 'username'
-      ? 'Set up your league'
-      : step === 'league'
-        ? 'Choose a league'
-        : 'Choose your team';
-
   return (
     <div className={`setup-backdrop${required ? ' setup-backdrop--required' : ''}`}>
       <section
@@ -164,7 +157,7 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
         <header className="setup-header">
           <div>
             <span className="eyebrow">Odds Fantasy</span>
-            <h2 id="setup-title">{setupTitle}</h2>
+            <h2 id="setup-title">Set up your league</h2>
           </div>
           {!required ? (
             <button
@@ -190,7 +183,9 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
               <span className="setup-pitch-mark">↗</span>
               <div>
                 <h3>Your lineup. Sharpened by the market.</h3>
-                <p>Enter one Sleeper username and we’ll surface the start/sit calls worth checking.</p>
+                <p>
+                  Enter one Sleeper username and we’ll surface the start/sit calls worth checking.
+                </p>
               </div>
             </div>
             <label className="setup-field setup-username-field">
