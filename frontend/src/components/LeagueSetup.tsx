@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchLeagueResolution, fetchUserLeagues } from '../api/client';
 import { getCookie, saveLeagueIdentity } from '../identity';
-import type {
-  LeagueResolution,
-  SleeperLeagueSummary,
-  SleeperLeagueTeam,
-} from '../types';
+import type { LeagueResolution, SleeperLeagueSummary, SleeperLeagueTeam } from '../types';
 
 export interface LeagueSelectionSummary {
   leagueName: string;
