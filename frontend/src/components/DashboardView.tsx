@@ -50,7 +50,9 @@ function decisionSlotKey(
     return lineupRows[displacedIndex]?.slot_index ?? displacedIndex;
   }
 
-  const matchingSlotIndex = lineupRows.findIndex((row) => row.slot === decision.slot && !row.locked);
+  const matchingSlotIndex = lineupRows.findIndex(
+    (row) => row.slot === decision.slot && !row.locked,
+  );
   if (matchingSlotIndex >= 0) {
     return lineupRows[matchingSlotIndex]?.slot_index ?? matchingSlotIndex;
   }
@@ -201,14 +203,20 @@ export function DashboardView({
                         <small>
                           {row.pos}
                           {row.team ? ` · ${row.team}` : ''}
-                          {row.locked ? ` · LOCKED · ${formatPoints(row.actual_points)} actual` : ''}
+                          {row.locked
+                            ? ` · LOCKED · ${formatPoints(row.actual_points)} actual`
+                            : ''}
                         </small>
                       </span>
                       <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
                     </div>
 
                     {slotDecisions.length ? (
-                      <div className="dashboard-slot-decisions" aria-label={`${row.slot} alternatives`}>
+                      <div
+                        className="dashboard-slot-decisions"
+                        role="group"
+                        aria-label={`${row.slot} alternatives`}
+                      >
                         {slotDecisions.map((decision) => {
                           const rank = decisionRanks.get(decision.name) ?? 0;
                           const reshufflesLineup =
