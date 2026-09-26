@@ -49,12 +49,16 @@
 .setup-field input,
 .setup-field select {
   width: 100%;
-  padding: 8px 9px;
+  padding: 10px 11px;
   border: 1px solid #303844;
-  border-radius: 3px;
-  background: #0a0d11;
-  color: #e6ebf0;
+  border-radius: 7px;
+  background: #090c10;
+  color: #eef4fb;
   font: inherit;
+}
+
+.setup-field input::placeholder {
+  color: #596675;
 }
 
 .settings-popover p {
@@ -66,7 +70,8 @@
 
 .settings-popover button,
 .setup-actions button,
-.setup-close {
+.setup-close,
+.setup-username-row button {
   border: 1px solid #303844;
   background: transparent;
   color: #aeb7c2;
@@ -87,14 +92,29 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgb(3 5 8 / 78%);
+  background: rgb(3 5 8 / 82%);
+  backdrop-filter: blur(8px);
+}
+
+.setup-backdrop--required {
+  background:
+    radial-gradient(circle at 18% 12%, rgb(44 104 180 / 22%), transparent 34%),
+    radial-gradient(circle at 84% 88%, rgb(93 66 163 / 18%), transparent 38%), #070a0e;
 }
 
 .setup-dialog {
-  width: min(480px, 100%);
+  width: min(500px, 100%);
+  overflow: hidden;
   border: 1px solid #303844;
+  border-radius: 14px;
   background: #0e1217;
-  box-shadow: 0 20px 60px rgb(0 0 0 / 45%);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 52%);
+}
+
+.setup-dialog--welcome {
+  width: min(660px, 100%);
+  border-color: #35465b;
+  background: linear-gradient(145deg, #101721 0%, #0b0f14 48%, #0d1016 100%);
 }
 
 .setup-header {
@@ -102,13 +122,13 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px;
+  padding: 18px 20px;
   border-bottom: 1px solid #252c35;
 }
 
 .setup-header h2 {
-  margin: 2px 0 0;
-  color: #f1f4f7;
+  margin: 3px 0 0;
+  color: #f4f7fa;
   font-size: 18px;
 }
 
@@ -120,39 +140,117 @@
   font-size: 20px;
 }
 
-.setup-progress {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid #252c35;
-}
-
-.setup-progress span {
-  padding: 8px 10px;
-  color: #59636f;
-  font-size: 9px;
-  text-align: center;
-}
-
-.setup-progress span.active {
-  background: #121a24;
-  color: #9ec8ff;
-}
-
 .setup-body {
   display: grid;
   gap: 16px;
-  padding: 18px 16px 14px;
+  padding: 20px;
+}
+
+.setup-intro {
+  gap: 22px;
+  padding: 28px 28px 24px;
+}
+
+.setup-pitch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.setup-pitch-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #31547d;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #17365a, #152238);
+  color: #b8d8ff;
+  font-size: 20px;
+  box-shadow: inset 0 0 24px rgb(95 160 235 / 10%);
+}
+
+.setup-pitch h3 {
+  margin: 0;
+  color: #f7f9fc;
+  font-size: clamp(24px, 5vw, 36px);
+  font-weight: 720;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.setup-pitch p {
+  max-width: 510px;
+  margin: 9px 0 0;
+  color: #8f9cac;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .setup-field {
   display: grid;
-  gap: 6px;
-  color: #9ca6b3;
+  gap: 7px;
+  color: #aab4c0;
   font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.setup-username-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.setup-username-row input {
+  min-height: 44px;
+  border-color: #3a4655;
+  background: rgb(5 8 12 / 72%);
+  font-size: 14px;
+}
+
+.setup-username-row input:focus {
+  border-color: #5889c4;
+}
+
+.setup-username-row button,
+.setup-actions button {
+  padding: 10px 14px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.setup-username-row .primary-action,
+.setup-actions .primary-action {
+  border-color: #3f6c9f;
+  background: linear-gradient(180deg, #1d4f83, #183b63);
+  color: #f2f8ff;
+  box-shadow: 0 8px 24px rgb(22 79 136 / 24%);
+}
+
+.setup-username-row .primary-action:hover,
+.setup-actions .primary-action:hover {
+  border-color: #6196d1;
+  background: linear-gradient(180deg, #245d97, #1a4777);
+}
+
+.setup-username-row button:disabled,
+.setup-actions button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.setup-footnote,
+.setup-step-copy {
+  margin: 0;
+  color: #718090;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.setup-step-copy strong {
+  color: #d9e2ec;
 }
 
 .setup-actions {
@@ -161,32 +259,17 @@
   gap: 8px;
 }
 
-.setup-actions button {
-  padding: 8px 12px;
-  font-size: 10px;
-}
-
-.setup-actions button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.setup-actions .primary-action {
-  border-color: #35577e;
-  background: #14243a;
-  color: #d8eaff;
-}
-
 .split-actions {
   justify-content: space-between;
 }
 
 .setup-error {
-  margin: 0 16px 16px;
-  padding: 8px 10px;
-  border-left: 2px solid #b65f62;
+  margin: 0 20px 20px;
+  padding: 9px 11px;
+  border: 1px solid #65383b;
+  border-radius: 7px;
   background: #1d1215;
-  color: #df9b9d;
+  color: #e5a4a6;
   font-size: 10px;
 }
 
@@ -208,9 +291,38 @@
     padding: 0;
   }
 
-  .setup-dialog {
+  .setup-dialog,
+  .setup-dialog--welcome {
     width: 100%;
-    max-height: 90vh;
+    max-height: 92vh;
     overflow-y: auto;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .setup-intro {
+    padding: 24px 20px 22px;
+  }
+}
+
+@media (max-width: 520px) {
+  .setup-pitch {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-pitch-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .setup-username-row {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-username-row button {
+    min-height: 42px;
   }
 }

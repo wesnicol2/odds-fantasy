@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchLeagueResolution, fetchUserLeagues } from '../api/client';
 import { getCookie, saveLeagueIdentity } from '../identity';
-import type { LeagueResolution, SleeperLeagueSummary } from '../types';
+import type { LeagueResolution, SleeperLeagueSummary, SleeperLeagueTeam } from '../types';
 
 export interface LeagueSelectionSummary {
   leagueName: string;
@@ -17,9 +17,14 @@ interface LeagueSetupProps {
 
 type SetupStep = 'username' | 'league' | 'team';
 
+function teamLabel(team: SleeperLeagueTeam): string {
+  return team.team_name || team.display_name || `Team ${team.roster_id}`;
+}
+
 export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetupProps) {
   const [step, setStep] = useState<SetupStep>('username');
   const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState('');
   const [leagues, setLeagues] = useState<SleeperLeagueSummary[]>([]);
   const [selectedLeagueId, setSelectedLeagueId] = useState('');
   const [league, setLeague] = useState<LeagueResolution | null>(null);
@@ -32,6 +37,7 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
     if (!open) return;
     setStep('username');
     setUsername(getCookie('sleeper_username') ?? '');
+    setUserId('');
     setLeagues([]);
     setSelectedLeagueId('');
     setLeague(null);
@@ -47,49 +53,82 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
 
   if (!open) return null;
 
+  const commitTeam = (
+    resolvedLeague: LeagueResolution,
+    leagueId: string,
+    team: SleeperLeagueTeam,
+  ) => {
+    saveLeagueIdentity(username.trim(), leagueId, String(team.roster_id));
+    onComplete({
+      leagueName: resolvedLeague.name || leagueId,
+      teamName: teamLabel(team),
+    });
+  };
+
+  const resolveLeague = async (leagueId: string, ownerUserId: string) => {
+    const payload = await fetchLeagueResolution(leagueId);
+    if (!payload.teams.length) {
+      throw new Error('No teams were found in that league.');
+    }
+
+    const ownedTeam = ownerUserId
+      ? payload.teams.find((team) => team.owner_id === ownerUserId)
+      : undefined;
+    if (ownedTeam) {
+      commitTeam(payload, leagueId, ownedTeam);
+      return;
+    }
+
+    setLeague(payload);
+    setSelectedRosterId('');
+    setStep('team');
+  };
+
   const submitUsername = async () => {
     const value = username.trim();
     if (!value) {
       setError('Enter a Sleeper username.');
       return;
     }
+
     setBusy(true);
     setError(null);
     try {
       const payload = await fetchUserLeagues(value);
       if (!payload.leagues.length) {
-        setError('No leagues found for that username.');
+        setError('No current leagues found for that username.');
         return;
       }
+
+      const resolvedUserId = payload.user_id ?? '';
+      const onlyLeague = payload.leagues[0];
       setUsername(value);
+      setUserId(resolvedUserId);
       setLeagues(payload.leagues);
-      setSelectedLeagueId('');
-      setStep('league');
-    } catch {
-      setError('Could not load leagues for that username.');
+
+      if (payload.leagues.length === 1 && onlyLeague && resolvedUserId) {
+        const leagueId = onlyLeague.league_id;
+        setSelectedLeagueId(leagueId);
+        await resolveLeague(leagueId, resolvedUserId);
+      } else {
+        setSelectedLeagueId('');
+        setStep('league');
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load that Sleeper account.');
     } finally {
       setBusy(false);
     }
   };
 
-  const submitLeague = async () => {
-    if (!selectedLeagueId) {
-      setError('Choose a league.');
-      return;
-    }
+  const chooseLeague = async (leagueId: string) => {
     setBusy(true);
     setError(null);
+    setSelectedLeagueId(leagueId);
     try {
-      const payload = await fetchLeagueResolution(selectedLeagueId);
-      if (!payload.teams.length) {
-        setError('No teams were found in that league.');
-        return;
-      }
-      setLeague(payload);
-      setSelectedRosterId('');
-      setStep('team');
-    } catch {
-      setError('Could not load that league.');
+      await resolveLeague(leagueId, userId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load that league.');
     } finally {
       setBusy(false);
     }
@@ -105,24 +144,20 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
       setError('Choose your team.');
       return;
     }
-    saveLeagueIdentity(username, selectedLeagueId, selectedRosterId);
-    onComplete({
-      leagueName: league.name || selectedLeagueId,
-      teamName: team.team_name || team.display_name || `Team ${selectedRosterId}`,
-    });
+    commitTeam(league, selectedLeagueId, team);
   };
 
   return (
-    <div className="setup-backdrop">
+    <div className={`setup-backdrop${required ? ' setup-backdrop--required' : ''}`}>
       <section
-        className="setup-dialog"
+        className={`setup-dialog${required ? ' setup-dialog--welcome' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="setup-title"
       >
         <header className="setup-header">
           <div>
-            <span className="eyebrow">Sleeper identity</span>
+            <span className="eyebrow">Odds Fantasy</span>
             <h2 id="setup-title">Set up your league</h2>
           </div>
           {!required ? (
@@ -137,37 +172,48 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
           ) : null}
         </header>
 
-        <fieldset className="setup-progress">
-          <legend className="sr-only">Setup progress</legend>
-          <span className={step === 'username' ? 'active' : ''}>1 Username</span>
-          <span className={step === 'league' ? 'active' : ''}>2 League</span>
-          <span className={step === 'team' ? 'active' : ''}>3 Team</span>
-        </fieldset>
-
         {step === 'username' ? (
           <form
-            className="setup-body"
+            className="setup-body setup-intro"
             onSubmit={(event) => {
               event.preventDefault();
               void submitUsername();
             }}
           >
-            <label className="setup-field">
-              <span>Sleeper username</span>
-              <input
-                ref={usernameInputRef}
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="Sleeper username"
-              />
-            </label>
-            <div className="setup-actions">
-              <button type="submit" className="primary-action" disabled={busy}>
-                {busy ? 'Finding leagues…' : 'Continue'}
-              </button>
+            <div className="setup-pitch">
+              <span className="setup-pitch-mark">↗</span>
+              <div>
+                <h3>Your lineup. Sharpened by the market.</h3>
+                <p>
+                  Enter one Sleeper username and we’ll surface the start/sit calls worth checking.
+                </p>
+              </div>
             </div>
+            <label className="setup-field setup-username-field">
+              <span>Sleeper username</span>
+              <div className="setup-username-row">
+                <input
+                  ref={usernameInputRef}
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="Your Sleeper username"
+                  disabled={busy}
+                />
+                <button
+                  type="submit"
+                  className="primary-action"
+                  aria-label="Continue"
+                  disabled={busy}
+                >
+                  {busy ? 'Loading…' : 'Load my team'}
+                </button>
+              </div>
+            </label>
+            <p className="setup-footnote">
+              No player-by-player setup. We use your existing Sleeper roster.
+            </p>
           </form>
         ) : null}
 
@@ -176,14 +222,20 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
             className="setup-body"
             onSubmit={(event) => {
               event.preventDefault();
-              void submitLeague();
+              if (selectedLeagueId) void chooseLeague(selectedLeagueId);
+              else setError('Choose a league.');
             }}
           >
+            <div className="setup-step-copy">
+              <strong>{username}</strong> is in {leagues.length} current{' '}
+              {leagues.length === 1 ? 'league' : 'leagues'}.
+            </div>
             <label className="setup-field">
               <span>League for {username}</span>
               <select
                 value={selectedLeagueId}
                 onChange={(event) => setSelectedLeagueId(event.target.value)}
+                disabled={busy}
               >
                 <option value="">Choose a league…</option>
                 {leagues.map((row) => (
@@ -198,7 +250,7 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
                 Back
               </button>
               <button type="submit" className="primary-action" disabled={busy}>
-                {busy ? 'Loading teams…' : 'Continue'}
+                {busy ? 'Loading…' : 'Continue'}
               </button>
             </div>
           </form>
@@ -212,6 +264,9 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
               submitTeam();
             }}
           >
+            <div className="setup-step-copy">
+              Sleeper did not identify an owned roster automatically. Choose the team to use.
+            </div>
             <label className="setup-field">
               <span>Team in {league.name || 'this league'}</span>
               <select
@@ -221,13 +276,16 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
                 <option value="">Choose a team…</option>
                 {league.teams.map((row) => (
                   <option key={row.roster_id} value={String(row.roster_id)}>
-                    {row.team_name || row.display_name || `Team ${row.roster_id}`}
+                    {teamLabel(row)}
                   </option>
                 ))}
               </select>
             </label>
             <div className="setup-actions split-actions">
-              <button type="button" onClick={() => setStep('league')}>
+              <button
+                type="button"
+                onClick={() => setStep(leagues.length > 1 ? 'league' : 'username')}
+              >
                 Back
               </button>
               <button type="submit" className="primary-action">
