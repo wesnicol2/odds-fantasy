@@ -20,61 +20,42 @@ function formatPoints(value: number | null | undefined): string {
 function actionableDefenses(payload: DefenseResponse | null): DefenseRow[] {
   return (payload?.defenses ?? [])
     .filter((row) => row.owned_by_current || !row.taken)
-    .filter((row) => row.implied_total !== null)
-    .slice(0, 3);
+    .filter((row) => row.implied_total !== null);
 }
 
-function defenseStatus(row: DefenseRow): string {
-  return row.owned_by_current ? 'Yours' : 'Available';
-}
-
-function DefenseShortlist({
-  title,
+function DefenseWatch({
+  label,
   week,
   payload,
   onOpen,
 }: {
-  title: string;
+  label: string;
   week: WeekWindow;
   payload: DefenseResponse | null;
   onOpen: (week: WeekWindow) => void;
 }) {
-  const rows = actionableDefenses(payload);
+  const row = actionableDefenses(payload)[0] ?? null;
   return (
-    <section className="dashboard-defense-window" aria-label={`${title} defense targets`}>
-      <div className="dashboard-section-heading compact">
-        <h3>{title}</h3>
-        <button type="button" className="quiet-action" onClick={() => onOpen(week)}>
-          View all
-        </button>
-      </div>
-      {rows.length ? (
-        <div className="dashboard-defense-list">
-          {rows.map((row) => (
-            <button
-              key={row.defense}
-              type="button"
-              className="dashboard-defense-row"
-              onClick={() => onOpen(week)}
-            >
-              <span className="dashboard-defense-name">
-                <strong>{row.abbr || row.defense}</strong>
-                <small>vs {row.opponent}</small>
-              </span>
-              <span className="dashboard-defense-matchup">
-                <strong>{formatPoints(row.implied_total)}</strong>
-                <small>opp. implied</small>
-              </span>
-              <span className={`dashboard-defense-status ${row.owned_by_current ? 'yours' : ''}`}>
-                {defenseStatus(row)}
-              </span>
-            </button>
-          ))}
-        </div>
+    <button type="button" className="defense-watch-row" onClick={() => onOpen(week)}>
+      <span className="defense-watch-window">{label}</span>
+      {row ? (
+        <>
+          <span className="defense-watch-team">
+            <strong>{row.abbr || row.defense}</strong>
+            <small>vs {row.opponent}</small>
+          </span>
+          <span className="defense-watch-total">
+            <strong>{formatPoints(row.implied_total)}</strong>
+            <small>opp. implied</small>
+          </span>
+        </>
       ) : (
-        <p className="dashboard-empty-copy">No playable available or owned defenses found.</p>
+        <span className="defense-watch-empty">No playable defense found</span>
       )}
-    </section>
+      <span className="decision-arrow" aria-hidden="true">
+        →
+      </span>
+    </button>
   );
 }
 
@@ -88,160 +69,149 @@ export function DashboardView({
   onOpenDefenses,
   onCompareBenchPlayer,
 }: DashboardViewProps) {
-  const pressure = (lineup?.bench_pressure ?? []).slice(0, 4);
+  const pairedPressure = (lineup?.bench_pressure ?? []).filter((row) => Boolean(row.displaces));
+  const decisions = pairedPressure.slice(0, 3);
+  const extraDecisionCount = Math.max(0, pairedPressure.length - decisions.length);
   const lockedCount = lineup?.locked_count ?? 0;
   const remainingMode = lockedCount > 0;
-  const lockedBench = lineup?.locked_bench ?? [];
 
   return (
     <main className="dashboard-view" aria-label="Dashboard">
       <header className="dashboard-heading">
         <div>
           <span className="eyebrow">This week</span>
-          <h2>Lineup & pickups</h2>
+          <h2>Your lineup decisions</h2>
+          <span className="sr-only">Lineup & pickups</span>
+          <p>Start with the calls that can actually change your optimized lineup.</p>
         </div>
-        {loading ? <span className="dashboard-loading">Updating plan…</span> : null}
+        {loading ? <span className="dashboard-loading">Updating…</span> : null}
       </header>
 
       {error ? <div className="error-state">{error}</div> : null}
 
-      <div className="dashboard-grid">
-        <section
-          className="dashboard-lineup"
-          aria-label={remainingMode ? 'Best remaining lineup this week' : 'Ideal lineup this week'}
-        >
-          <div className="dashboard-section-heading">
-            <div>
-              <span className="section-label">
-                {remainingMode ? 'Best remaining lineup' : 'Ideal lineup'}
-              </span>
-              <h3>{remainingMode ? 'Actual + remaining Mid' : 'Mid projection'}</h3>
-            </div>
-            <div className="dashboard-total">
-              <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
-              <span>{remainingMode ? 'modeled week FP' : 'total FP'}</span>
-            </div>
+      <section className="decision-panel" aria-label="Start sit decisions">
+        <div className="decision-panel-heading">
+          <div>
+            <span className="section-label">Start / sit</span>
+            <h3>
+              {decisions.length
+                ? `${decisions.length}${extraDecisionCount ? '+' : ''} calls worth checking`
+                : loading
+                  ? 'Finding your closest calls…'
+                  : 'No close calls to flag'}
+            </h3>
+            <p>
+              {decisions.length
+                ? 'Tap a matchup to compare the two players using this week’s sportsbook evidence.'
+                : loading
+                  ? 'We’re comparing your modeled bench against the best remaining lineup.'
+                  : 'Your modeled lineup has clear separation right now. Use Players when you want an ad-hoc comparison.'}
+            </p>
           </div>
-
-          {remainingMode ? (
-            <div className="status-note">
-              {lockedCount} {lockedCount === 1 ? 'slot' : 'slots'} locked ·{' '}
-              {formatPoints(lineup?.actual_points)} FP scored ·{' '}
-              {formatPoints(lineup?.remaining_projected_points)} projected remaining ·{' '}
-              {lineup?.decisions_remaining ?? 0} lineup decisions remain.
+          {lineup ? (
+            <div className="decision-total">
+              <strong>{lineup.total_points.toFixed(1)}</strong>
+              <span>{remainingMode ? 'modeled week FP' : 'lineup FP'}</span>
             </div>
           ) : null}
+        </div>
 
-          {lineup?.lineup.length ? (
-            <div className="dashboard-lineup-list">
-              {lineup.lineup.map((row) => (
-                <div className="dashboard-lineup-row" key={`${row.slot}:${row.name}`}>
-                  <span className="dashboard-slot">{row.slot}</span>
-                  <span className="dashboard-player">
-                    <strong>{row.name}</strong>
-                    <small>
-                      {row.pos}
-                      {row.team ? ` · ${row.team}` : ''}
-                      {row.locked ? ` · LOCKED · ${formatPoints(row.actual_points)} actual` : ''}
-                    </small>
+        {decisions.length ? (
+          <div className="decision-list">
+            {decisions.map((row) => (
+              <button
+                key={`${row.name}:${row.displaces}`}
+                type="button"
+                className="decision-row"
+                onClick={() => onCompareBenchPlayer(row)}
+                aria-label={`Compare ${row.name} with ${row.displaces}`}
+              >
+                <span className="decision-player">
+                  <small>Bench option</small>
+                  <strong>{row.name}</strong>
+                  <span>
+                    {row.pos}
+                    {row.team ? ` · ${row.team}` : ''}
                   </span>
-                  <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
-                </div>
-              ))}
+                </span>
+                <span className="decision-vs">vs</span>
+                <span className="decision-player decision-player-starting">
+                  <small>Current best lineup</small>
+                  <strong>{row.displaces}</strong>
+                  <span>{row.displaces_slot || 'starter'}</span>
+                </span>
+                <span className="decision-gap">
+                  <strong>{row.delta_to_lineup.toFixed(1)}</strong>
+                  <small>FP lineup gap</small>
+                </span>
+                <span className="decision-arrow" aria-hidden="true">
+                  →
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {extraDecisionCount ? (
+          <div className="decision-panel-footer">
+            <span>{extraDecisionCount} more modeled bench calls are available in Lineup.</span>
+          </div>
+        ) : null}
+      </section>
+
+      <div className="dashboard-secondary-grid">
+        <section className="dashboard-snapshot" aria-label="Lineup snapshot">
+          <div className="dashboard-section-heading">
+            <div>
+              <span className="section-label">Lineup snapshot</span>
+              <h3>{remainingMode ? 'Best remaining lineup' : 'Optimized Mid lineup'}</h3>
+            </div>
+            <button type="button" className="quiet-action" onClick={onOpenLineup}>
+              Full lineup →
+            </button>
+          </div>
+
+          {lineup ? (
+            <div className="lineup-snapshot-body">
+              <div className="snapshot-number">
+                <strong>{lineup.total_points.toFixed(1)}</strong>
+                <span>{remainingMode ? 'modeled week FP' : 'projected FP'}</span>
+              </div>
+              <div className="snapshot-copy">
+                <strong>{lineup.lineup.length} modeled starters</strong>
+                <span>
+                  {remainingMode
+                    ? `${lockedCount} locked · ${formatPoints(lineup.actual_points)} FP scored · ${lineup.decisions_remaining ?? 0} decisions left`
+                    : 'Floor and ceiling alternatives stay one level deeper.'}
+                </span>
+              </div>
             </div>
           ) : !loading ? (
             <p className="dashboard-empty-copy">No modeled lineup is available.</p>
           ) : null}
-
-          <button type="button" className="dashboard-detail-action" onClick={onOpenLineup}>
-            Open lineup details
-          </button>
-
-          {pressure.length ? (
-            <section className="bench-pressure" aria-label="Bench pressure">
-              <div className="dashboard-section-heading compact">
-                <div>
-                  <span className="section-label">Closest bench calls</span>
-                  <h3>
-                    Distance from the {remainingMode ? 'best remaining lineup' : 'ideal lineup'}
-                  </h3>
-                </div>
-              </div>
-              <div className="bench-pressure-list">
-                {pressure.map((row) => (
-                  <button
-                    key={row.name}
-                    type="button"
-                    className="bench-pressure-row"
-                    onClick={() => onCompareBenchPlayer(row)}
-                    aria-label={
-                      row.displaces
-                        ? `Compare ${row.name} with ${row.displaces}`
-                        : `Inspect ${row.name}`
-                    }
-                  >
-                    <span className="dashboard-player">
-                      <strong>{row.name}</strong>
-                      <small>
-                        {row.pos}
-                        {row.displaces ? ` · behind ${row.displaces} · compare` : ''}
-                      </small>
-                    </span>
-                    <span className="bench-pressure-gap">
-                      <strong>{row.delta_to_lineup.toFixed(1)}</strong>
-                      <small>FP back</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {lockedBench.length ? (
-            <section className="bench-pressure" aria-label="Already played on bench">
-              <div className="dashboard-section-heading compact">
-                <div>
-                  <span className="section-label">Already played on bench</span>
-                  <h3>No longer actionable</h3>
-                </div>
-              </div>
-              <div className="bench-pressure-list">
-                {lockedBench.map((row) => (
-                  <div className="bench-pressure-row" key={row.name}>
-                    <span className="dashboard-player">
-                      <strong>{row.name}</strong>
-                      <small>{row.pos ?? '—'} · LOCKED</small>
-                    </span>
-                    <span className="bench-pressure-gap">
-                      <strong>{row.actual_points.toFixed(1)}</strong>
-                      <small>actual FP</small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </section>
 
-        <section className="dashboard-defenses" aria-label="Defense pickup plan">
+        <section className="dashboard-defense-watch" aria-label="Defense watch">
           <div className="dashboard-section-heading">
             <div>
-              <span className="section-label">Defense planning</span>
-              <h3>Available or already yours</h3>
+              <span className="section-label">Defense watch</span>
+              <h3>Best playable matchup</h3>
             </div>
           </div>
-          <DefenseShortlist
-            title="This week"
-            week="this"
-            payload={defensesThisWeek}
-            onOpen={onOpenDefenses}
-          />
-          <DefenseShortlist
-            title="Next week"
-            week="next"
-            payload={defensesNextWeek}
-            onOpen={onOpenDefenses}
-          />
+          <div className="defense-watch-list">
+            <DefenseWatch
+              label="This week"
+              week="this"
+              payload={defensesThisWeek}
+              onOpen={onOpenDefenses}
+            />
+            <DefenseWatch
+              label="Next week"
+              week="next"
+              payload={defensesNextWeek}
+              onOpen={onOpenDefenses}
+            />
+          </div>
         </section>
       </div>
     </main>

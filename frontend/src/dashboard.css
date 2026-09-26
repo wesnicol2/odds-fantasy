@@ -1,291 +1,421 @@
 .dashboard-view {
-  width: min(1180px, calc(100% - 32px));
+  width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 24px 0 40px;
+  padding: 30px 0 44px;
 }
 
 .dashboard-heading,
-.dashboard-section-heading {
+.dashboard-section-heading,
+.decision-panel-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
 }
 
 .dashboard-heading {
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .dashboard-heading h2,
-.dashboard-section-heading h3 {
-  margin: 3px 0 0;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+.dashboard-section-heading h3,
+.decision-panel-heading h3 {
+  margin: 4px 0 0;
+  font-weight: 680;
+  letter-spacing: -0.03em;
 }
 
 .dashboard-heading h2 {
-  font-size: 22px;
+  font-size: clamp(24px, 4vw, 34px);
 }
 
-.dashboard-section-heading h3 {
-  font-size: 15px;
+.dashboard-heading p,
+.decision-panel-heading p {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: #8f9aa8;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
-.dashboard-section-heading.compact {
-  align-items: center;
+.dashboard-section-heading h3,
+.decision-panel-heading h3 {
+  font-size: 16px;
 }
 
 .dashboard-loading,
-.dashboard-total span,
-.dashboard-player small,
-.dashboard-defense-name small,
-.dashboard-defense-matchup small,
-.bench-pressure-gap small,
-.dashboard-empty-copy {
+.dashboard-empty-copy,
+.decision-panel-footer,
+.snapshot-number span,
+.snapshot-copy span,
+.defense-watch-row small,
+.defense-watch-empty {
   color: #778290;
   font-size: 10px;
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
-  gap: 1px;
-  border: 1px solid #232932;
-  background: #232932;
+.decision-panel {
+  overflow: hidden;
+  border: 1px solid #2b394a;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 92% 0%, rgb(90 162 255 / 14%), transparent 27rem),
+    linear-gradient(180deg, #111820, #0d1116 70%);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 18%);
 }
 
-.dashboard-lineup,
-.dashboard-defenses {
-  min-width: 0;
-  padding: 16px;
-  background: #0c0f13;
+.decision-panel-heading {
+  padding: 20px 20px 18px;
 }
 
-.dashboard-total {
+.decision-total {
   display: grid;
+  flex: 0 0 auto;
   justify-items: end;
 }
 
-.dashboard-total strong {
-  font-size: 22px;
+.decision-total strong {
+  color: #f8fbff;
+  font-size: 30px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
 }
 
-.dashboard-lineup-list,
-.dashboard-defense-list,
-.bench-pressure-list {
-  margin-top: 12px;
-  border-top: 1px solid #202630;
+.decision-total span {
+  color: #7d8a99;
+  font-size: 9px;
+  text-transform: uppercase;
 }
 
-.dashboard-lineup-row,
-.dashboard-defense-row,
-.bench-pressure-row {
-  min-height: 46px;
-  border-bottom: 1px solid #1b2129;
+.decision-list {
+  border-top: 1px solid #243140;
 }
 
-.dashboard-lineup-row {
+.decision-row {
+  width: 100%;
+  min-height: 84px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr) 90px 20px;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 0;
+  border-bottom: 1px solid #202b37;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
 }
 
-.dashboard-slot {
-  color: #778290;
-  font-size: 10px;
-  font-weight: 750;
+.decision-row:hover {
+  background: rgb(90 162 255 / 7%);
 }
 
-.dashboard-player {
+.decision-row:active {
+  transform: scale(0.997);
+}
+
+.decision-player {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 3px;
 }
 
-.dashboard-player strong,
-.dashboard-player small {
+.decision-player small {
+  color: #6f7d8d;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.decision-player strong,
+.decision-player span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dashboard-player strong {
-  font-size: 12px;
+.decision-player strong {
+  font-size: 15px;
 }
 
-.dashboard-points,
-.dashboard-defense-matchup strong,
-.bench-pressure-gap strong {
+.decision-player span {
+  color: #8995a4;
+  font-size: 10px;
+}
+
+.decision-player-starting strong {
+  color: #cfe4ff;
+}
+
+.decision-vs {
+  color: #566271;
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.decision-gap {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+}
+
+.decision-gap strong {
+  color: #8fc1ff;
+  font-size: 21px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
 }
 
-.dashboard-points {
-  font-size: 13px;
+.decision-gap small {
+  color: #758293;
+  font-size: 8px;
+  text-transform: uppercase;
 }
 
-.dashboard-detail-action,
+.decision-arrow {
+  color: #6aaeff;
+  font-size: 16px;
+}
+
+.decision-panel-footer {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 18px;
+}
+
+.secondary-action,
 .quiet-action,
-.dashboard-defense-row,
-.bench-pressure-row {
+.defense-watch-row {
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
 
-.dashboard-detail-action,
+.secondary-action,
 .quiet-action {
   color: #8ebeff;
   font-size: 10px;
 }
 
-.dashboard-detail-action {
-  margin-top: 10px;
-  padding: 5px 0;
+.secondary-action {
+  padding: 8px 0;
+  font-weight: 700;
 }
 
-.dashboard-detail-action:hover,
+.secondary-action:hover,
 .quiet-action:hover {
   color: #d9eaff;
 }
 
-.bench-pressure {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #242b34;
-}
-
-.bench-pressure-row,
-.dashboard-defense-row {
-  width: 100%;
+.dashboard-secondary-grid {
   display: grid;
-  align-items: center;
-  gap: 10px;
-  padding: 0;
-  text-align: left;
-}
-
-.bench-pressure-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.bench-pressure-row:hover,
-.dashboard-defense-row:hover {
-  background: #111820;
-}
-
-.bench-pressure-gap {
-  display: grid;
-  justify-items: end;
-  min-width: 54px;
-}
-
-.bench-pressure-gap strong {
-  font-size: 14px;
-}
-
-.dashboard-defenses > .dashboard-section-heading {
-  margin-bottom: 6px;
-}
-
-.dashboard-defense-window {
-  padding-top: 16px;
-}
-
-.dashboard-defense-window + .dashboard-defense-window {
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 12px;
   margin-top: 12px;
-  border-top: 1px solid #242b34;
 }
 
-.dashboard-defense-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+.dashboard-snapshot,
+.dashboard-defense-watch {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #242b34;
+  border-radius: 9px;
+  background: #0c0f13;
 }
 
-.dashboard-defense-name,
-.dashboard-defense-matchup {
+.lineup-snapshot-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.snapshot-number,
+.snapshot-copy {
   display: grid;
   gap: 2px;
 }
 
-.dashboard-defense-name {
-  min-width: 0;
+.snapshot-number {
+  min-width: 92px;
 }
 
-.dashboard-defense-name strong {
+.snapshot-number strong {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+}
+
+.snapshot-copy strong {
   font-size: 12px;
 }
 
-.dashboard-defense-name small {
+.snapshot-copy span {
+  line-height: 1.45;
+}
+
+.defense-watch-list {
+  margin-top: 10px;
+  border-top: 1px solid #202630;
+}
+
+.defense-watch-row {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border-bottom: 1px solid #1b2129;
+  text-align: left;
+}
+
+.defense-watch-row:hover {
+  background: #111820;
+}
+
+.defense-watch-window {
+  color: #718092;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.defense-watch-team,
+.defense-watch-total {
+  display: grid;
+  gap: 2px;
+}
+
+.defense-watch-team {
+  min-width: 0;
+}
+
+.defense-watch-team strong {
+  font-size: 12px;
+}
+
+.defense-watch-team small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dashboard-defense-matchup {
+.defense-watch-total {
   justify-items: end;
 }
 
-.dashboard-defense-matchup strong {
+.defense-watch-total strong {
   font-size: 13px;
-}
-
-.dashboard-defense-status {
-  min-width: 56px;
-  color: #9bbca5;
-  font-size: 9px;
-  font-weight: 750;
-  text-align: right;
-  text-transform: uppercase;
-}
-
-.dashboard-defense-status.yours {
-  color: #8ebeff;
+  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-empty-copy {
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .decision-row {
+    transition: none;
+  }
 }
 
 @media (max-width: 820px) {
   .dashboard-view {
     width: min(100% - 22px, 720px);
-    padding-top: 16px;
+    padding-top: 20px;
   }
 
-  .dashboard-grid {
-    display: block;
-    border: 0;
-    background: transparent;
+  .dashboard-secondary-grid {
+    grid-template-columns: 1fr;
   }
 
-  .dashboard-lineup,
-  .dashboard-defenses {
-    padding: 14px 0;
-    border-top: 1px solid #232932;
-    background: transparent;
+  .decision-row {
+    grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) 74px 16px;
+    gap: 8px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 
-  .dashboard-defenses {
-    margin-top: 8px;
+  .decision-gap strong {
+    font-size: 18px;
   }
 }
 
-@media (max-width: 520px) {
-  .dashboard-heading h2 {
-    font-size: 19px;
+@media (max-width: 560px) {
+  .dashboard-heading,
+  .decision-panel-heading {
+    align-items: flex-start;
   }
 
-  .dashboard-defense-row {
+  .decision-panel-heading {
+    display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .dashboard-defense-status {
-    grid-column: 1 / -1;
-    min-width: 0;
-    margin-top: -7px;
-    text-align: left;
+  .decision-total strong {
+    font-size: 24px;
+  }
+
+  .decision-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 14px;
+  }
+
+  .decision-player {
+    grid-column: 1;
+  }
+
+  .decision-player-starting {
+    margin-top: 7px;
+    padding-top: 10px;
+    border-top: 1px solid #1f2a36;
+  }
+
+  .decision-vs {
+    display: none;
+  }
+
+  .decision-gap {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .decision-arrow {
+    display: none;
+  }
+
+  .decision-panel-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .lineup-snapshot-body {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .defense-watch-row {
+    grid-template-columns: 60px minmax(0, 1fr) auto;
+  }
+
+  .defense-watch-row .decision-arrow {
+    display: none;
   }
 }
