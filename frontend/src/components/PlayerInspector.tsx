@@ -185,8 +185,8 @@ export function PlayerInspector({
                     <div className="evidence-block">
                       <h3>Exact sportsbook lines</h3>
                       <p className="subtle">
-                        These are the raw main and alternate prices used to fit the curve above. Odds
-                        are converted for display only.
+                        These are the raw main and alternate prices used to fit the curve above.
+                        Odds are converted for display only.
                       </p>
                       {market.lines.length ? (
                         <div className="evidence-table-scroll raw-lines">
@@ -208,8 +208,12 @@ export function PlayerInspector({
                                   <td>{line.book}</td>
                                   <td>{line.source === 'alternate' ? 'Alt' : 'Main'}</td>
                                   <td className="number">{formatValue(line.point)}</td>
-                                  <td className="number">{formatOdds(line.over_odds, oddsFormat)}</td>
-                                  <td className="number">{formatOdds(line.under_odds, oddsFormat)}</td>
+                                  <td className="number">
+                                    {formatOdds(line.over_odds, oddsFormat)}
+                                  </td>
+                                  <td className="number">
+                                    {formatOdds(line.under_odds, oddsFormat)}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
