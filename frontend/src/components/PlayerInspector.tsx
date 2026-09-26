@@ -1,5 +1,7 @@
 import { metricLabel } from '../analysis/metrics';
+import { formatOdds } from '../analysis/odds';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
+import { useWorkspaceStore } from '../state/workspace';
 import type { PlayerOddsDetails, ProjectionPlayer } from '../types';
 
 interface PlayerInspectorProps {
@@ -20,10 +22,6 @@ function formatValue(value: number | null | undefined): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function formatOdds(value: number | null): string {
-  return value === null ? '—' : value.toFixed(2);
-}
-
 function formatContribution(value: number): string {
   const normalized = Math.abs(value) < 0.05 ? 0 : value;
   return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)} FP`;
@@ -37,6 +35,8 @@ export function PlayerInspector({
   detailsLoading,
   onMetricChange,
 }: PlayerInspectorProps) {
+  const oddsFormat = useWorkspaceStore((state) => state.oddsFormat);
+
   if (!player) {
     return <div className="empty-state">Select a player to inspect their projection.</div>;
   }
@@ -185,7 +185,8 @@ export function PlayerInspector({
                     <div className="evidence-block">
                       <h3>Exact sportsbook lines</h3>
                       <p className="subtle">
-                        These are the raw main and alternate prices used to fit the curve above.
+                        These are the raw main and alternate prices used to fit the curve above. Odds
+                        are converted for display only.
                       </p>
                       {market.lines.length ? (
                         <div className="evidence-table-scroll raw-lines">
@@ -207,8 +208,8 @@ export function PlayerInspector({
                                   <td>{line.book}</td>
                                   <td>{line.source === 'alternate' ? 'Alt' : 'Main'}</td>
                                   <td className="number">{formatValue(line.point)}</td>
-                                  <td className="number">{formatOdds(line.over_odds)}</td>
-                                  <td className="number">{formatOdds(line.under_odds)}</td>
+                                  <td className="number">{formatOdds(line.over_odds, oddsFormat)}</td>
+                                  <td className="number">{formatOdds(line.under_odds, oddsFormat)}</td>
                                 </tr>
                               ))}
                             </tbody>
