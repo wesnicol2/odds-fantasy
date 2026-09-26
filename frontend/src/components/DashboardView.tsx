@@ -9,7 +9,6 @@ interface DashboardViewProps {
   loading: boolean;
   error: string | null;
   onOpenLineup: () => void;
-  onOpenPlayers: () => void;
   onOpenDefenses: (week: WeekWindow) => void;
   onCompareBenchPlayer: (player: BenchPressureRow) => void;
 }
@@ -67,7 +66,6 @@ export function DashboardView({
   loading,
   error,
   onOpenLineup,
-  onOpenPlayers,
   onOpenDefenses,
   onCompareBenchPlayer,
 }: DashboardViewProps) {
@@ -106,7 +104,7 @@ export function DashboardView({
                 ? 'Tap a matchup to compare the two players using this week’s sportsbook evidence.'
                 : loading
                   ? 'We’re comparing your modeled bench against the best remaining lineup.'
-                  : 'Your modeled lineup has clear separation right now. You can still compare any roster players.'}
+                  : 'Your modeled lineup has clear separation right now. Use Players when you want an ad-hoc comparison.'}
             </p>
           </div>
           {lineup ? (
@@ -153,14 +151,11 @@ export function DashboardView({
           </div>
         ) : null}
 
-        <div className="decision-panel-footer">
-          <button type="button" className="secondary-action" onClick={onOpenPlayers}>
-            Compare any roster players
-          </button>
-          {extraDecisionCount ? (
+        {extraDecisionCount ? (
+          <div className="decision-panel-footer">
             <span>{extraDecisionCount} more modeled bench calls are available in Lineup.</span>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </section>
 
       <div className="dashboard-secondary-grid">
