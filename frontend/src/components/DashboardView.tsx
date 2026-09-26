@@ -134,8 +134,7 @@ export function DashboardView({
               >
                 <span className="dashboard-decision-index">0{index + 1}</span>
                 <span className="dashboard-decision-copy">
-                  <small>Start</small>
-                  <strong>{row.displaces}</strong>
+                  <strong>Start {row.displaces}</strong>
                   <span>
                     over <span>{row.name}</span>
                   </span>
