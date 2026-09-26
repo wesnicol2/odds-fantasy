@@ -207,9 +207,7 @@ def build_best_lineup(
         if choice is not None
     }
     baseline_slot_index_by_index = {
-        choice: slot_index
-        for slot_index, choice in enumerate(choices)
-        if choice is not None
+        choice: slot_index for slot_index, choice in enumerate(choices) if choice is not None
     }
 
     bench_pressure: list[dict] = []
@@ -249,9 +247,7 @@ def build_best_lineup(
             ),
             None,
         )
-        forced_slot = (
-            modeled_slots[forced_slot_index] if forced_slot_index is not None else None
-        )
+        forced_slot = modeled_slots[forced_slot_index] if forced_slot_index is not None else None
         displaced = candidates[displaced_index] if displaced_index is not None else None
         bench_pressure.append(
             {
