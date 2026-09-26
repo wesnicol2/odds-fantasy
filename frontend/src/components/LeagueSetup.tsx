@@ -215,7 +215,12 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
               />
             </label>
             <div className="setup-actions">
-              <button type="submit" className="primary-action" disabled={busy}>
+              <button
+                type="submit"
+                className="primary-action"
+                disabled={busy}
+                aria-label="Continue — find my team"
+              >
                 {busy ? 'Finding your team…' : 'Find my team →'}
               </button>
             </div>
@@ -248,7 +253,12 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
               <button type="button" onClick={() => setStep('username')} disabled={busy}>
                 Back
               </button>
-              <button type="submit" className="primary-action" disabled={busy}>
+              <button
+                type="submit"
+                className="primary-action"
+                disabled={busy}
+                aria-label="Continue — use this league"
+              >
                 {busy ? 'Opening league…' : 'Use this league →'}
               </button>
             </div>
