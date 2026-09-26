@@ -183,6 +183,7 @@ def build_best_lineup(
             rows.append(
                 {
                     "slot": slot,
+                    "slot_index": slot_index,
                     "name": candidate.get("name"),
                     "pos": candidate.get("pos"),
                     "team": candidate.get("team"),
@@ -204,6 +205,9 @@ def build_best_lineup(
         choice: slot
         for slot, choice in zip(modeled_slots, choices, strict=True)
         if choice is not None
+    }
+    baseline_slot_index_by_index = {
+        choice: slot_index for slot_index, choice in enumerate(choices) if choice is not None
     }
 
     bench_pressure: list[dict] = []
@@ -235,14 +239,15 @@ def build_best_lineup(
             if choice is not None and choice not in forced_indices and choice < len(candidates)
         ]
         displaced_index = displaced_indices[0] if displaced_indices else None
-        forced_slot = next(
+        forced_slot_index = next(
             (
-                slot
-                for slot, choice in zip(modeled_slots, forced_choices, strict=True)
+                slot_index
+                for slot_index, choice in enumerate(forced_choices)
                 if choice == candidate_index
             ),
             None,
         )
+        forced_slot = modeled_slots[forced_slot_index] if forced_slot_index is not None else None
         displaced = candidates[displaced_index] if displaced_index is not None else None
         bench_pressure.append(
             {
@@ -252,9 +257,15 @@ def build_best_lineup(
                 "points": round(candidate_score, 2),
                 "delta_to_lineup": round(max(0.0, baseline_total - forced_total), 2),
                 "slot": forced_slot,
+                "slot_index": forced_slot_index,
                 "displaces": displaced.get("name") if displaced else None,
                 "displaces_slot": (
                     baseline_slot_by_index.get(displaced_index)
+                    if displaced_index is not None
+                    else None
+                ),
+                "displaces_slot_index": (
+                    baseline_slot_index_by_index.get(displaced_index)
                     if displaced_index is not None
                     else None
                 ),
