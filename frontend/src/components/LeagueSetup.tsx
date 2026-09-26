@@ -73,7 +73,7 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
       return;
     }
 
-    const ownedTeam = payload.teams.find((row) => row.owner_id === ownerId);
+    const ownedTeam = ownerId ? payload.teams.find((row) => row.owner_id === ownerId) : null;
     if (ownedTeam) {
       finishSelection(leagueId, payload, ownedTeam);
       return;
@@ -102,10 +102,10 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
       }
 
       setUsername(value);
-      setUserId(payload.user_id);
+      setUserId(payload.user_id || '');
       setLeagues(payload.leagues);
 
-      if (payload.leagues.length === 1) {
+      if (payload.leagues.length === 1 && payload.user_id) {
         const onlyLeague = payload.leagues[0];
         setSelectedLeagueId(onlyLeague.league_id);
         await resolveLeagueForUser(onlyLeague.league_id, payload.user_id);
@@ -165,12 +165,12 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
         className={`setup-dialog ${required ? 'setup-dialog-required' : ''}`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="setup-title"
+        aria-label="Set up your league"
       >
         <header className="setup-header">
           <div>
             <span className="eyebrow">Odds Fantasy</span>
-            <h2 id="setup-title">{title}</h2>
+            <h2>{title}</h2>
             <p className="setup-intro">
               {step === 'username'
                 ? 'Enter your Sleeper username. We’ll find your roster and surface the lineup decisions worth a second look.'
@@ -235,7 +235,7 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
             }}
           >
             <label className="setup-field">
-              <span>League</span>
+              <span>League for {username}</span>
               <select
                 value={selectedLeagueId}
                 onChange={(event) => setSelectedLeagueId(event.target.value)}
@@ -282,7 +282,10 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
               </select>
             </label>
             <div className="setup-actions split-actions">
-              <button type="button" onClick={() => setStep(leagues.length > 1 ? 'league' : 'username')}>
+              <button
+                type="button"
+                onClick={() => setStep(leagues.length > 1 ? 'league' : 'username')}
+              >
                 Back
               </button>
               <button type="submit" className="primary-action">
