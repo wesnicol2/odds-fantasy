@@ -21,7 +21,7 @@ function actionableDefenses(payload: DefenseResponse | null): DefenseRow[] {
   return (payload?.defenses ?? [])
     .filter((row) => row.owned_by_current || !row.taken)
     .filter((row) => row.implied_total !== null)
-    .slice(0, 3);
+    .slice(0, 1);
 }
 
 function defenseStatus(row: DefenseRow): string {
@@ -41,7 +41,7 @@ function DefenseShortlist({
 }) {
   const rows = actionableDefenses(payload);
   return (
-    <section className="dashboard-defense-window" aria-label={`${title} defense targets`}>
+    <section className="dashboard-defense-window" aria-label={`${title} defense target`}>
       <div className="dashboard-section-heading compact">
         <h3>{title}</h3>
         <button type="button" className="quiet-action" onClick={() => onOpen(week)}>
@@ -72,7 +72,7 @@ function DefenseShortlist({
           ))}
         </div>
       ) : (
-        <p className="dashboard-empty-copy">No playable available or owned defenses found.</p>
+        <p className="dashboard-empty-copy">No playable available or owned defense found.</p>
       )}
     </section>
   );
@@ -88,10 +88,11 @@ export function DashboardView({
   onOpenDefenses,
   onCompareBenchPlayer,
 }: DashboardViewProps) {
-  const pressure = (lineup?.bench_pressure ?? []).slice(0, 4);
+  const decisions = (lineup?.bench_pressure ?? [])
+    .filter((row) => Boolean(row.displaces))
+    .slice(0, 3);
   const lockedCount = lineup?.locked_count ?? 0;
   const remainingMode = lockedCount > 0;
-  const lockedBench = lineup?.locked_bench ?? [];
 
   return (
     <main className="dashboard-view" aria-label="Dashboard">
@@ -99,23 +100,68 @@ export function DashboardView({
         <div>
           <span className="eyebrow">This week</span>
           <h2>Lineup & pickups</h2>
+          <p>Your closest start/sit decisions come first.</p>
         </div>
-        {loading ? <span className="dashboard-loading">Updating plan…</span> : null}
+        {loading ? <span className="dashboard-loading">Refreshing market…</span> : null}
       </header>
 
       {error ? <div className="error-state">{error}</div> : null}
 
-      <div className="dashboard-grid">
+      <section className="dashboard-decision-hero" aria-label="Start sit decisions">
+        <div className="dashboard-decision-heading">
+          <div>
+            <span className="section-label">Your decisions</span>
+            <h3>
+              {decisions.length
+                ? `${decisions.length} ${decisions.length === 1 ? 'call' : 'calls'} worth a look`
+                : loading && !lineup
+                  ? 'Finding your closest calls…'
+                  : 'No actionable swaps found'}
+            </h3>
+          </div>
+          <span className="dashboard-decision-source">Sleeper roster × betting market</span>
+        </div>
+
+        {decisions.length ? (
+          <div className="dashboard-decision-grid">
+            {decisions.map((row, index) => (
+              <button
+                key={row.name}
+                type="button"
+                className="dashboard-decision-card"
+                onClick={() => onCompareBenchPlayer(row)}
+                aria-label={`Compare ${row.name} with ${row.displaces}`}
+              >
+                <span className="dashboard-decision-index">0{index + 1}</span>
+                <span className="dashboard-decision-copy">
+                  <small>Start</small>
+                  <strong>{row.displaces}</strong>
+                  <span>over {row.name}</span>
+                </span>
+                <span className="dashboard-decision-gap">
+                  <strong>{row.delta_to_lineup.toFixed(1)}</strong>
+                  <small>FP back</small>
+                </span>
+                <span className="dashboard-decision-cta">See why →</span>
+              </button>
+            ))}
+          </div>
+        ) : !loading ? (
+          <p className="dashboard-decision-empty">
+            The optimizer does not currently have a bench player paired with a movable starter.
+          </p>
+        ) : null}
+      </section>
+
+      <div className="dashboard-support-grid">
         <section
           className="dashboard-lineup"
           aria-label={remainingMode ? 'Best remaining lineup this week' : 'Ideal lineup this week'}
         >
           <div className="dashboard-section-heading">
             <div>
-              <span className="section-label">
-                {remainingMode ? 'Best remaining lineup' : 'Ideal lineup'}
-              </span>
-              <h3>{remainingMode ? 'Actual + remaining Mid' : 'Mid projection'}</h3>
+              <span className="section-label">Recommended lineup</span>
+              <h3>{remainingMode ? 'Best remaining Mid lineup' : 'Best Mid lineup'}</h3>
             </div>
             <div className="dashboard-total">
               <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
@@ -124,11 +170,10 @@ export function DashboardView({
           </div>
 
           {remainingMode ? (
-            <div className="status-note">
-              {lockedCount} {lockedCount === 1 ? 'slot' : 'slots'} locked ·{' '}
-              {formatPoints(lineup?.actual_points)} FP scored ·{' '}
-              {formatPoints(lineup?.remaining_projected_points)} projected remaining ·{' '}
-              {lineup?.decisions_remaining ?? 0} lineup decisions remain.
+            <div className="dashboard-lock-summary">
+              <strong>{lockedCount} locked</strong>
+              <span>{formatPoints(lineup?.actual_points)} FP scored</span>
+              <span>{lineup?.decisions_remaining ?? 0} decisions left</span>
             </div>
           ) : null}
 
@@ -154,80 +199,15 @@ export function DashboardView({
           ) : null}
 
           <button type="button" className="dashboard-detail-action" onClick={onOpenLineup}>
-            Open lineup details
+            Open full lineup →
           </button>
-
-          {pressure.length ? (
-            <section className="bench-pressure" aria-label="Bench pressure">
-              <div className="dashboard-section-heading compact">
-                <div>
-                  <span className="section-label">Closest bench calls</span>
-                  <h3>
-                    Distance from the {remainingMode ? 'best remaining lineup' : 'ideal lineup'}
-                  </h3>
-                </div>
-              </div>
-              <div className="bench-pressure-list">
-                {pressure.map((row) => (
-                  <button
-                    key={row.name}
-                    type="button"
-                    className="bench-pressure-row"
-                    onClick={() => onCompareBenchPlayer(row)}
-                    aria-label={
-                      row.displaces
-                        ? `Compare ${row.name} with ${row.displaces}`
-                        : `Inspect ${row.name}`
-                    }
-                  >
-                    <span className="dashboard-player">
-                      <strong>{row.name}</strong>
-                      <small>
-                        {row.pos}
-                        {row.displaces ? ` · behind ${row.displaces} · compare` : ''}
-                      </small>
-                    </span>
-                    <span className="bench-pressure-gap">
-                      <strong>{row.delta_to_lineup.toFixed(1)}</strong>
-                      <small>FP back</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {lockedBench.length ? (
-            <section className="bench-pressure" aria-label="Already played on bench">
-              <div className="dashboard-section-heading compact">
-                <div>
-                  <span className="section-label">Already played on bench</span>
-                  <h3>No longer actionable</h3>
-                </div>
-              </div>
-              <div className="bench-pressure-list">
-                {lockedBench.map((row) => (
-                  <div className="bench-pressure-row" key={row.name}>
-                    <span className="dashboard-player">
-                      <strong>{row.name}</strong>
-                      <small>{row.pos ?? '—'} · LOCKED</small>
-                    </span>
-                    <span className="bench-pressure-gap">
-                      <strong>{row.actual_points.toFixed(1)}</strong>
-                      <small>actual FP</small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </section>
 
         <section className="dashboard-defenses" aria-label="Defense pickup plan">
           <div className="dashboard-section-heading">
             <div>
-              <span className="section-label">Defense planning</span>
-              <h3>Available or already yours</h3>
+              <span className="section-label">Defense</span>
+              <h3>Best playable target</h3>
             </div>
           </div>
           <DefenseShortlist
