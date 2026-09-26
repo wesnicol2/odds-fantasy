@@ -99,8 +99,7 @@
 .setup-backdrop--required {
   background:
     radial-gradient(circle at 18% 12%, rgb(44 104 180 / 22%), transparent 34%),
-    radial-gradient(circle at 84% 88%, rgb(93 66 163 / 18%), transparent 38%),
-    #070a0e;
+    radial-gradient(circle at 84% 88%, rgb(93 66 163 / 18%), transparent 38%), #070a0e;
 }
 
 .setup-dialog {
