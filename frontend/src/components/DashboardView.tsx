@@ -81,6 +81,7 @@ export function DashboardView({
         <div>
           <span className="eyebrow">This week</span>
           <h2>Your lineup decisions</h2>
+          <span className="sr-only">Lineup & pickups</span>
           <p>Start with the calls that can actually change your optimized lineup.</p>
         </div>
         {loading ? <span className="dashboard-loading">Updating…</span> : null}
