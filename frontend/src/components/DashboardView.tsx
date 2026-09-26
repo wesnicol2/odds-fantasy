@@ -212,11 +212,7 @@ export function DashboardView({
                     </div>
 
                     {slotDecisions.length ? (
-                      <div
-                        className="dashboard-slot-decisions"
-                        role="group"
-                        aria-label={`${row.slot} alternatives`}
-                      >
+                      <div className="dashboard-slot-decisions">
                         {slotDecisions.map((decision) => {
                           const rank = decisionRanks.get(decision.name) ?? 0;
                           const reshufflesLineup =
