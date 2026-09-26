@@ -136,7 +136,9 @@ export function DashboardView({
                 <span className="dashboard-decision-copy">
                   <small>Start</small>
                   <strong>{row.displaces}</strong>
-                  <span>over {row.name}</span>
+                  <span>
+                    over <span>{row.name}</span>
+                  </span>
                 </span>
                 <span className="dashboard-decision-gap">
                   <strong>{row.delta_to_lineup.toFixed(1)}</strong>
