@@ -70,9 +70,7 @@
 }
 
 .dashboard-lineup {
-  background:
-    radial-gradient(circle at 0% 0%, rgb(45 105 173 / 8%), transparent 32%),
-    #0c0f13;
+  background: radial-gradient(circle at 0% 0%, rgb(45 105 173 / 8%), transparent 32%), #0c0f13;
 }
 
 .dashboard-lineup-summary {
@@ -141,9 +139,7 @@
 
 .dashboard-lineup-slot.has-closest-decision {
   border-color: #416b99;
-  background:
-    linear-gradient(90deg, rgb(31 78 128 / 22%), transparent 38%),
-    #0e151d;
+  background: linear-gradient(90deg, rgb(31 78 128 / 22%), transparent 38%), #0e151d;
   box-shadow: 0 8px 24px rgb(0 0 0 / 16%);
 }
 
