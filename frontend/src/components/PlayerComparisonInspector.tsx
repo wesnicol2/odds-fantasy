@@ -1,5 +1,7 @@
 import { metricLabel } from '../analysis/metrics';
+import { formatOdds } from '../analysis/odds';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
+import { useWorkspaceStore } from '../state/workspace';
 import type { MarketDetail, PlayerOddsDetails, ProjectionPlayer } from '../types';
 
 interface PlayerComparisonInspectorProps {
@@ -58,10 +60,6 @@ function formatValue(value: number | null | undefined): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function formatOdds(value: number | null | undefined): string {
-  return value === null || value === undefined ? '—' : value.toFixed(2);
-}
-
 function formatLine(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return value > 0 ? `+${formatValue(value)}` : formatValue(value);
@@ -97,6 +95,8 @@ function RawMarketLines({
   playerName: string;
   market: MarketDetail | undefined;
 }) {
+  const oddsFormat = useWorkspaceStore((state) => state.oddsFormat);
+
   return (
     <div className="evidence-block">
       <h3>{playerName}</h3>
@@ -124,8 +124,8 @@ function RawMarketLines({
                   <td>{line.book}</td>
                   <td>{line.source === 'alternate' ? 'Alt' : 'Main'}</td>
                   <td className="number">{formatValue(line.point)}</td>
-                  <td className="number">{formatOdds(line.over_odds)}</td>
-                  <td className="number">{formatOdds(line.under_odds)}</td>
+                  <td className="number">{formatOdds(line.over_odds, oddsFormat)}</td>
+                  <td className="number">{formatOdds(line.under_odds, oddsFormat)}</td>
                 </tr>
               ))}
             </tbody>
@@ -722,8 +722,9 @@ export function PlayerComparisonInspector({
               </span>
             </summary>
             <p className="subtle">
-              Exact provider decimal prices used by the model, grouped by player. Main and alternate
-              lines are shown unchanged so a strange fitted result can be traced back to its inputs.
+              Exact provider prices used by the model, grouped by player. Prices are converted only
+              for display according to the global odds setting; provider and model values remain
+              decimal.
             </p>
             {detailsLoading && (!challengerMarket || !starterMarket) ? (
               <p className="subtle evidence-status">Loading both players’ source lines…</p>
