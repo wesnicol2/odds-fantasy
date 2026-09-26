@@ -79,9 +79,8 @@ export function DashboardView({
     <main className="dashboard-view" aria-label="Dashboard">
       <header className="dashboard-heading">
         <div>
-          <span className="eyebrow">This week</span>
+          <span className="eyebrow">Lineup & pickups</span>
           <h2>Your lineup decisions</h2>
-          <span className="sr-only">Lineup & pickups</span>
           <p>Start with the calls that can actually change your optimized lineup.</p>
         </div>
         {loading ? <span className="dashboard-loading">Updating…</span> : null}
@@ -95,7 +94,7 @@ export function DashboardView({
             <span className="section-label">Start / sit</span>
             <h3>
               {decisions.length
-                ? `${decisions.length}${extraDecisionCount ? '+' : ''} calls worth checking`
+                ? `${decisions.length}${extraDecisionCount ? '+' : ''} closest calls`
                 : loading
                   ? 'Finding your closest calls…'
                   : 'No close calls to flag'}
