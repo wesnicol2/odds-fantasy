@@ -101,8 +101,8 @@ export function LeagueSetup({ open, required, onClose, onComplete }: LeagueSetup
       setUserId(payload.user_id || '');
       setLeagues(payload.leagues);
 
-      if (payload.leagues.length === 1 && payload.user_id) {
-        const onlyLeague = payload.leagues[0];
+      const onlyLeague = payload.leagues.length === 1 ? payload.leagues[0] : undefined;
+      if (onlyLeague && payload.user_id) {
         setSelectedLeagueId(onlyLeague.league_id);
         await resolveLeagueForUser(onlyLeague.league_id, payload.user_id);
         return;
