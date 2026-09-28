@@ -12,9 +12,7 @@ class KickerProjectionTest(unittest.TestCase):
         self.odds = {
             "bookA": {
                 "player_kicking_points": two_way(6.5, -110, -110),
-                "player_kicking_points_alternate": alt_ladder(
-                    [(4.5, -220, 180), (8.5, 180, -220)]
-                ),
+                "player_kicking_points_alternate": alt_ladder([(4.5, -220, 180), (8.5, 180, -220)]),
             }
         }
 
