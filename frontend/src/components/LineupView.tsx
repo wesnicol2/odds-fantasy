@@ -52,6 +52,14 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
   if (payload?.defense_note) notices.push(payload.defense_note);
   notices.push(...projectionNotes);
 
+  const totalLabel = usesProxy
+    ? remainingMode
+      ? `Actual + modeled ${label(payload?.target ?? target)}`
+      : `Modeled ${label(payload?.target ?? target)}`
+    : remainingMode
+      ? `Actual + projected ${label(payload?.target ?? target)}`
+      : `Projected ${label(payload?.target ?? target)}`;
+
   return (
     <main className="decision-view" aria-label="Best lineup">
       <header className="decision-heading lineup-heading">
@@ -84,11 +92,7 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
       {!loading && !error && payload ? (
         <>
           <div className="lineup-total">
-            <span>
-              {remainingMode
-                ? `Actual + modeled ${label(payload.target)}`
-                : `Modeled ${label(payload.target)}`}
-            </span>
+            <span>{totalLabel}</span>
             <strong>{payload.total_points.toFixed(1)}</strong>
           </div>
           {remainingMode ? (
