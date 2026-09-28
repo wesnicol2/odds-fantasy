@@ -91,8 +91,7 @@ def _paired_alternates(entry: dict) -> Iterable[tuple[float, dict | None, dict |
                 continue
             by_point.setdefault(point, {})[side] = record
     return [
-        (point, sides.get("over"), sides.get("under"))
-        for point, sides in sorted(by_point.items())
+        (point, sides.get("over"), sides.get("under")) for point, sides in sorted(by_point.items())
     ]
 
 

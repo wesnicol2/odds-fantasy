@@ -66,9 +66,7 @@ class OddsApiAdapterTest(unittest.TestCase):
         players = quotes_to_players_odds([result], {"AJ Brown": "WR"})
         book = players["AJ Brown"]["draftkings"]
         self.assertAlmostEqual(book["player_reception_yds"]["over"]["odds"], 1.91)
-        self.assertEqual(
-            book["player_reception_yds_alternate"]["alts"]["over"][0]["point"], 59.5
-        )
+        self.assertEqual(book["player_reception_yds_alternate"]["alts"]["over"][0]["point"], 59.5)
         self.assertEqual(book["__player_position__"]["value"], "WR")
 
 

@@ -49,9 +49,7 @@ class CanonicalEvidenceCompatibilityTest(unittest.TestCase):
             [ProviderResult(provider_id="kalshi", quotes=(quote,))],
             {"AJ Brown": "WR"},
         )
-        row = players["AJ Brown"]["kalshi"]["player_reception_yds_alternate"]["alts"][
-            "over"
-        ][0]
+        row = players["AJ Brown"]["kalshi"]["player_reception_yds_alternate"]["alts"]["over"][0]
         self.assertEqual(row["point"], 74.5)
         self.assertEqual(row["probability"], 0.55)
         self.assertAlmostEqual(row["odds"], 1 / 0.55)
@@ -68,9 +66,7 @@ class CanonicalEvidenceCompatibilityTest(unittest.TestCase):
             {"AJ Brown": "WR"},
         )
         self.assertEqual(list(players["AJ Brown"]), ["kalshi"])
-        row = players["AJ Brown"]["kalshi"]["player_reception_yds_alternate"]["alts"][
-            "over"
-        ][0]
+        row = players["AJ Brown"]["kalshi"]["player_reception_yds_alternate"]["alts"]["over"][0]
         self.assertEqual(row["probability"], 0.55)
         self.assertEqual(row["provider"], "kalshi")
 
