@@ -3,10 +3,11 @@ from unittest import TestCase, mock  # noqa: I001
 from oddsfantasy.odds_details import get_player_odds_details
 from oddsfantasy.planner import PlannedGame
 from oddsfantasy.projection import KICKER_PROXY_NOTE
+from tests.test_scoring import LEAGUE
 
 
 CONTEXT = {
-    "scoring_rules": {"rush_yd": 0.1},
+    "scoring_rules": LEAGUE,
     "info_by_alias": {
         "James Cook": {
             "full_name": "James Cook",
@@ -27,12 +28,28 @@ CONTEXT = {
                         "under": [{"odds": 3.0, "point": 50.0}],
                     }
                 },
+                "player_reception_yds": {
+                    "over": {"odds": 1.91, "point": 18.5},
+                    "under": {"odds": 1.91, "point": 18.5},
+                },
+                "player_anytime_td": {
+                    "over": {"odds": 2.2, "point": 0},
+                    "under": {"odds": 1.65, "point": 0},
+                },
             },
             "fanduel": {
                 "player_rush_yds": {
                     "over": {"odds": 1.87, "point": 75.5},
                     "under": {"odds": 1.95, "point": 75.5},
-                }
+                },
+                "player_reception_yds": {
+                    "over": {"odds": 1.87, "point": 19.5},
+                    "under": {"odds": 1.95, "point": 19.5},
+                },
+                "player_anytime_td": {
+                    "over": {"odds": 2.15, "point": 0},
+                    "under": {"odds": 1.67, "point": 0},
+                },
             },
         }
     },
@@ -164,14 +181,14 @@ class PlayerDetailsTest(TestCase):
             name="James Cook",
         )
         combined = result["combined_markets"]["rush_reception_yds"]
-        self.assertEqual(combined["markets"], ["player_rush_yds"])
         self.assertEqual(
-            combined["stat_range"],
-            result["markets"]["player_rush_yds"]["stat_range"],
+            combined["markets"],
+            ["player_rush_yds", "player_reception_yds"],
         )
         self.assertAlmostEqual(
             combined["expected_points"],
-            result["markets"]["player_rush_yds"]["expected_points"],
+            result["markets"]["player_rush_yds"]["expected_points"]
+            + result["markets"]["player_reception_yds"]["expected_points"],
             places=3,
         )
 
