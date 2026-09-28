@@ -260,7 +260,9 @@ class PolymarketProvider:
                 mode,
             )
             if isinstance(related, dict):
-                events.extend(event for event in related.get("events") or [] if isinstance(event, dict))
+                events.extend(
+                    event for event in related.get("events") or [] if isinstance(event, dict)
+                )
         unique = {}
         for event in events:
             key = str(event.get("id") or event.get("slug") or id(event))
@@ -463,7 +465,9 @@ class PolymarketProvider:
                             provider_market_id=str(
                                 market.get("id") or market.get("conditionId") or ""
                             ),
-                            raw_title=str(market.get("question") or market.get("groupItemTitle") or ""),
+                            raw_title=str(
+                                market.get("question") or market.get("groupItemTitle") or ""
+                            ),
                             raw_rules=str(market.get("description") or "") or None,
                         ),
                     )
