@@ -74,7 +74,10 @@ POSITION_STAT_CONFIG = {
         "player_receptions_alternate",
         "player_reception_yds",
     ],
-    "K": ["player_field_goals", "player_kicking_points", "player_pats"],
+    # The provider now exposes a direct kicker-points prop plus alternate
+    # thresholds. Use only markets the projection engine consumes so a kicker
+    # on the roster does not spend quota on unused field-goal/PAT requests.
+    "K": ["player_kicking_points", "player_kicking_points_alternate"],
     "DEF": ["spreads", "totals"],
 }
 
