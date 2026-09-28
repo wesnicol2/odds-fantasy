@@ -589,8 +589,8 @@ export function PlayerComparisonInspector({
       <div className="comparison-recommendation">
         <strong>Start {starter.name}</strong>
         <span className="comparison-recommendation-copy">
-          {challenger.name} is {lineupDelta.toFixed(1)}{' '}
-          {usesProxy ? 'modeled points' : 'lineup FP'} back after re-optimizing every eligible slot.
+          {challenger.name} is {lineupDelta.toFixed(1)} {usesProxy ? 'modeled points' : 'lineup FP'}{' '}
+          back after re-optimizing every eligible slot.
         </span>
         <span className="comparison-signal-score">{pointLead}</span>
         <span className="comparison-signal-score">{statLead}</span>
@@ -645,7 +645,9 @@ export function PlayerComparisonInspector({
               </thead>
               <tbody>
                 <tr className="matrix-group-row">
-                  <th colSpan={3}>{usesProxy ? 'Projection · modeled points' : 'Projection · fantasy points'}</th>
+                  <th colSpan={3}>
+                    {usesProxy ? 'Projection · modeled points' : 'Projection · fantasy points'}
+                  </th>
                 </tr>
                 <MatrixRows rows={projectionRows} onMetricChange={onMetricChange} />
                 <tr className="matrix-group-row">
