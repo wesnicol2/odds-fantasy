@@ -137,6 +137,7 @@ export function DashboardView({
 
   const lockedCount = lineup?.locked_count ?? 0;
   const remainingMode = lockedCount > 0;
+  const usesKickerProxy = [...lineupRows, ...decisions].some((row) => Boolean(row.projection_note));
 
   return (
     <main className="dashboard-view" aria-label="Dashboard">
@@ -164,7 +165,7 @@ export function DashboardView({
             <div className="dashboard-lineup-summary">
               <div className="dashboard-total">
                 <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
-                <span>{remainingMode ? 'modeled week FP' : 'total FP'}</span>
+                <span>{usesKickerProxy ? 'modeled score' : remainingMode ? 'modeled week FP' : 'total FP'}</span>
               </div>
               <span className={`dashboard-decision-count${decisions.length ? ' active' : ''}`}>
                 {decisions.length
@@ -179,6 +180,13 @@ export function DashboardView({
               <strong>{lockedCount} locked</strong>
               <span>{formatPoints(lineup?.actual_points)} FP scored</span>
               <span>{lineup?.decisions_remaining ?? 0} decisions left</span>
+            </div>
+          ) : null}
+
+          {usesKickerProxy ? (
+            <div className="dashboard-lock-summary">
+              <span>K uses sportsbook kicking points as a comparison proxy.</span>
+              <span>Distance bonuses and miss penalties are not included.</span>
             </div>
           ) : null}
 
@@ -205,7 +213,9 @@ export function DashboardView({
                           {row.team ? ` · ${row.team}` : ''}
                           {row.locked
                             ? ` · LOCKED · ${formatPoints(row.actual_points)} actual`
-                            : ''}
+                            : row.projection_note
+                              ? ' · KICKER MARKET PROXY'
+                              : ''}
                         </small>
                       </span>
                       <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
@@ -238,11 +248,11 @@ export function DashboardView({
                               </span>
                               <span className="dashboard-slot-decision-projection">
                                 <strong>{decision.points.toFixed(1)}</strong>
-                                <small>proj.</small>
+                                <small>{decision.projection_note ? 'proxy' : 'proj.'}</small>
                               </span>
                               <span className="dashboard-slot-decision-gap">
                                 <strong>{decision.delta_to_lineup.toFixed(1)}</strong>
-                                <small>FP back</small>
+                                <small>{decision.projection_note ? 'modeled pts back' : 'FP back'}</small>
                               </span>
                               <span className="dashboard-slot-decision-cta">Compare →</span>
                             </button>
