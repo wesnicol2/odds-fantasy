@@ -2,6 +2,7 @@ from unittest import TestCase, mock  # noqa: I001
 
 from oddsfantasy.odds_details import get_player_odds_details
 from oddsfantasy.planner import PlannedGame
+from oddsfantasy.projection import KICKER_PROXY_NOTE
 
 
 CONTEXT = {
@@ -33,6 +34,39 @@ CONTEXT = {
                     "under": {"odds": 1.95, "point": 75.5},
                 }
             },
+        }
+    },
+}
+
+KICKER_CONTEXT = {
+    "scoring_rules": {"fgm": 3, "xpm": 1},
+    "info_by_alias": {
+        "Tyler Bass": {
+            "full_name": "Tyler Bass",
+            "primary_position": "K",
+            "editorial_team_full_name": "Buffalo Bills",
+        }
+    },
+    "players_odds": {
+        "Tyler Bass": {
+            "draftkings": {
+                "player_kicking_points": {
+                    "over": {"odds": 1.9, "point": 6.5},
+                    "under": {"odds": 1.9, "point": 6.5},
+                },
+                "player_kicking_points_alternate": {
+                    "alts": {
+                        "over": [
+                            {"odds": 1.4, "point": 4.5},
+                            {"odds": 2.7, "point": 8.5},
+                        ],
+                        "under": [
+                            {"odds": 3.0, "point": 4.5},
+                            {"odds": 1.45, "point": 8.5},
+                        ],
+                    }
+                },
+            }
         }
     },
 }
@@ -104,6 +138,22 @@ class PlayerDetailsTest(TestCase):
         probabilities = [point["probability"] for point in points]
         self.assertTrue(all(probability >= 0 for probability in probabilities))
         self.assertGreater(max(probabilities), 0)
+
+    @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=KICKER_CONTEXT)
+    def test_kicker_detail_keeps_market_proxy_label_and_full_pmf(self, _mock_context):
+        result = get_player_odds_details(
+            username="u",
+            season="2026",
+            week="this",
+            name="Tyler Bass",
+        )
+
+        self.assertIsNotNone(result["projection"])
+        self.assertEqual(result["projection_note"], KICKER_PROXY_NOTE)
+        kicking = result["markets"]["player_kicking_points"]
+        self.assertEqual(kicking["graph"]["kind"], "discrete_pmf")
+        self.assertGreater(kicking["graph"]["points"][-1]["x"], 4.0)
+        self.assertEqual(len(kicking["lines"]), 3)
 
     @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=CONTEXT)
     def test_detail_exposes_combined_yardage_for_cross_position_comparison(self, _mock_context):
