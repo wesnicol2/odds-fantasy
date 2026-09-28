@@ -164,16 +164,18 @@ def collect_provider_evidence(
                     results.append(_failed_result(provider_id, exc))
 
     known = {"odds_api", *_DIRECT_PROVIDER_FACTORIES}
-    for provider_id in enabled:
-        if provider_id not in known:
-            diagnostics.append(
-                ProviderDiagnostic(
-                    provider_id=provider_id,
-                    code="unknown_provider",
-                    message=f"Unknown odds provider configured: {provider_id}",
-                    severity="warning",
-                )
+    diagnostics.extend(
+        [
+            ProviderDiagnostic(
+                provider_id=provider_id,
+                code="unknown_provider",
+                message=f"Unknown odds provider configured: {provider_id}",
+                severity="warning",
             )
+            for provider_id in enabled
+            if provider_id not in known
+        ]
+    )
 
     for result in results:
         diagnostics.extend(result.diagnostics)
