@@ -182,9 +182,7 @@ def collect_provider_evidence(
 
     players_odds = quotes_to_players_odds(results, position_by_player)
     benchmarks = tuple(
-        _serialize_benchmark(benchmark)
-        for result in results
-        for benchmark in result.benchmarks
+        _serialize_benchmark(benchmark) for result in results for benchmark in result.benchmarks
     )
     providers_used = tuple(sorted({result.provider_id for result in results}))
     return EvidenceBundle(
