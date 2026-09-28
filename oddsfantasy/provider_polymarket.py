@@ -75,11 +75,7 @@ def _norm_name(value: str) -> str:
     value = (value or "").lower().replace(chr(8217), "'")
     value = re.sub(r"[\.'`-]", " ", value)
     value = re.sub(r"[^a-z0-9 ]", "", value)
-    tokens = [
-        token
-        for token in value.split()
-        if token not in {"jr", "sr", "ii", "iii", "iv", "v"}
-    ]
+    tokens = [token for token in value.split() if token not in {"jr", "sr", "ii", "iii", "iv", "v"}]
     return " ".join(tokens)
 
 
@@ -264,11 +260,7 @@ class PolymarketProvider:
                 mode,
             )
             if isinstance(related, dict):
-                events.extend(
-                    event
-                    for event in related.get("events") or []
-                    if isinstance(event, dict)
-                )
+                events.extend(event for event in related.get("events") or [] if isinstance(event, dict))
         unique = {}
         for event in events:
             key = str(event.get("id") or event.get("slug") or id(event))
@@ -467,17 +459,11 @@ class PolymarketProvider:
                         ),
                         phase="pregame",
                         provenance=QuoteProvenance(
-                            provider_event_id=str(
-                                event.get("id") or event.get("gameId") or slug
-                            ),
+                            provider_event_id=str(event.get("id") or event.get("gameId") or slug),
                             provider_market_id=str(
                                 market.get("id") or market.get("conditionId") or ""
                             ),
-                            raw_title=str(
-                                market.get("question")
-                                or market.get("groupItemTitle")
-                                or ""
-                            ),
+                            raw_title=str(market.get("question") or market.get("groupItemTitle") or ""),
                             raw_rules=str(market.get("description") or "") or None,
                         ),
                     )
