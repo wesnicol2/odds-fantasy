@@ -4,7 +4,7 @@ Odds Fantasy turns sportsbook markets into fantasy-football decision support for
 
 The app has four focused destinations:
 
-- **Dashboard** — the default low-noise command center: this week's ideal Mid lineup before kickoff, the best remaining lineup after games begin, the bench players closest to cracking it, and the best available/owned defenses for this week and next week.
+- **Dashboard** — the default decision-first command center: the closest start/sit calls worth checking, this week's ideal Mid lineup before kickoff or best remaining lineup after games begin, and the best available/owned defenses for this week and next week.
 - **Players** — a linked analytical workstation with roster ranking, Floor / Mid / Ceiling, probability curves, position/player filters, Target FP analysis and sportsbook evidence.
 - **Defenses** — every NFL defense ranked by its opponent's implied team total, with league ownership shown.
 - **Lineup** — optimize your modeled starters for Floor, Mid, or Ceiling while respecting already-locked games.
@@ -35,8 +35,8 @@ The header quota readout is refreshed independently of the odds cache. It uses T
 
 ## Using the app
 
-1. On a fresh browser, enter your Sleeper username, choose a league, then choose your team. The selection is saved in browser cookies.
-2. Start on **Dashboard** for the current decision. Before any game starts it shows the ideal lineup. Once a submitted starter's game has begun, that player is fixed in the submitted slot at their current Sleeper fantasy points and Dashboard becomes **Best remaining lineup**. Players whose games already began on your bench are no longer eligible for recommendations.
+1. On a fresh browser, enter your Sleeper username. If Sleeper returns one league and identifies your owned roster, setup goes straight to the dashboard. If you have multiple leagues, choose the league; a manual team chooser appears only when roster ownership is ambiguous. The final selection is saved in browser cookies.
+2. Start on **Dashboard** for the current decision. The closest optimizer-paired start/sit calls appear first; select one to open the detailed weekly comparison. Before any game starts the supporting lineup section shows the ideal lineup. Once a submitted starter's game has begun, that player is fixed in the submitted slot at their current Sleeper fantasy points and Dashboard becomes **Best remaining lineup**. Players whose games already began on your bench are no longer eligible for recommendations.
 3. Use **Players**, **Defenses**, or **Lineup** when you want to drill down. Those destinations have their own **This week / Next week** context selector; Dashboard intentionally spans both defense weeks itself.
 4. In **Players**, use position filters and graph checkboxes to choose comparisons. Select a player to keep its projection/evidence in the inspector. Already-started players remain inspectable but are marked `LOCKED` and sorted behind players whose decisions are still actionable. The fantasy-points inspector breaks the player's mean into exact per-stat expected-point contributions; select any contribution to open that stat's distribution and betting-line evidence.
 5. Enter or drag **Target FP** to compare each visible player's chance of reaching a specific fantasy score. Use **Explain betting lines** when you want the consensus anchors and source sportsbook prices.

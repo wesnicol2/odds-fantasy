@@ -33,6 +33,10 @@ class BestLineupTest(unittest.TestCase):
         self.assertEqual(result["unmodeled_slots"], ["K"])
         self.assertIn("Buffalo Bills", {row["name"] for row in result["lineup"]})
         self.assertEqual(sum(row["points"] for row in result["lineup"]), result["total_points"])
+        self.assertEqual(
+            [row["slot_index"] for row in result["lineup"]],
+            [0, 1, 2, 3, 4, 5, 6, 7],
+        )
 
     def test_ceiling_can_choose_a_different_qb(self):
         floor = build_best_lineup(
@@ -63,7 +67,29 @@ class BestLineupTest(unittest.TestCase):
         self.assertEqual(pressure[0]["delta_to_lineup"], 1.0)
         self.assertEqual(pressure[0]["displaces"], "QB Safe")
         self.assertEqual(pressure[0]["slot"], "QB")
+        self.assertEqual(pressure[0]["slot_index"], 0)
         self.assertEqual(pressure[0]["displaces_slot"], "QB")
+        self.assertEqual(pressure[0]["displaces_slot_index"], 0)
+
+    def test_bench_pressure_tracks_destination_slot_through_reshuffle(self):
+        players = [
+            {"name": "Alpha RB", "pos": "RB", "floor": 10, "mid": 17, "ceiling": 22},
+            {"name": "Gamma RB", "pos": "RB", "floor": 9, "mid": 16, "ceiling": 21},
+            {"name": "Beta WR", "pos": "WR", "floor": 8, "mid": 15, "ceiling": 20},
+            {"name": "Delta WR", "pos": "WR", "floor": 11, "mid": 20, "ceiling": 25},
+        ]
+        result = build_best_lineup(
+            players,
+            target="mid",
+            roster_positions=["RB", "WR", "FLEX"],
+        )
+        beta = next(row for row in result["bench_pressure"] if row["name"] == "Beta WR")
+
+        self.assertEqual(beta["slot"], "WR")
+        self.assertEqual(beta["slot_index"], 1)
+        self.assertEqual(beta["displaces"], "Gamma RB")
+        self.assertEqual(beta["displaces_slot"], "FLEX")
+        self.assertEqual(beta["displaces_slot_index"], 2)
 
 
 if __name__ == "__main__":
