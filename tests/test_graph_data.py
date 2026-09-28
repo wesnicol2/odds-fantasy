@@ -36,6 +36,17 @@ def test_high_granularity_count_graph_uses_exact_probability_mass():
     ]
 
 
+def test_kicker_points_use_full_discrete_probability_mass():
+    graph = distribution_graph(
+        CountDistribution({0: 0.1, 3: 0.2, 6: 0.3, 9: 0.4}),
+        "player_kicking_points",
+    )
+
+    assert graph["kind"] == "discrete_pmf"
+    assert graph["points"][-1] == {"x": 9.0, "probability": 0.4}
+    assert len(graph["points"]) == 10
+
+
 def test_yardage_graph_is_probability_density_over_focused_range():
     graph = distribution_graph(UniformHundredDistribution(), "player_rush_yds")
 
