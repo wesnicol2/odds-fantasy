@@ -9,6 +9,7 @@ export const METRIC_ORDER = [
   'player_reception_yds',
   'player_reception_tds',
   'player_anytime_td',
+  'player_kicking_points',
 ] as const;
 
 const METRIC_LABELS: Record<string, string> = {
@@ -22,6 +23,7 @@ const METRIC_LABELS: Record<string, string> = {
   player_reception_yds: 'Receiving yards',
   player_reception_tds: 'Receiving TDs',
   player_anytime_td: 'Anytime TD',
+  player_kicking_points: 'Kicking points',
   rush_reception_yds: 'Rushing + receiving yards',
 };
 
@@ -32,6 +34,7 @@ const COUNT_METRICS = new Set([
   'player_receptions',
   'player_reception_tds',
   'player_anytime_td',
+  'player_kicking_points',
 ]);
 
 export function metricLabel(metric: string): string {

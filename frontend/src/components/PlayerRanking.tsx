@@ -26,6 +26,7 @@ const MARKET_LABELS: Record<string, string> = {
   player_reception_yds: 'rec yds',
   player_receptions: 'receptions',
   player_anytime_td: 'TD',
+  player_kicking_points: 'kicking points',
 };
 
 function formatPoints(value: number | null | undefined): string {
@@ -191,6 +192,8 @@ export function PlayerRanking({
                         </small>
                       ) : !player.has_projection ? (
                         <small>{coverageMessage(player)}</small>
+                      ) : player.projection_note ? (
+                        <small>{player.projection_note}</small>
                       ) : null}
                     </button>
                   </td>
