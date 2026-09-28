@@ -72,7 +72,10 @@ TEAM_CODE = {
     "Washington Commanders": "WAS",
 }
 
-_LABEL_RE = re.compile(r"^\s*(?P<name>.+?):\s*(?:Over\s+)?(?P<point>-?\d+(?:\.\d+)?)\+?\s*$", re.I)
+_LABEL_RE = re.compile(
+    r"^\s*(?P<name>.+?):\s*(?:Over\s+)?(?P<point>-?\d+(?:\.\d+)?)\+?\s*$",
+    re.I,
+)
 
 
 class CacheMiss(RuntimeError):
@@ -80,10 +83,14 @@ class CacheMiss(RuntimeError):
 
 
 def _norm_name(value: str) -> str:
-    value = (value or "").lower().replace("’", "'")
+    value = (value or "").lower().replace(chr(8217), "'")
     value = re.sub(r"[\.'`-]", " ", value)
     value = re.sub(r"[^a-z0-9 ]", "", value)
-    tokens = [token for token in value.split() if token not in {"jr", "sr", "ii", "iii", "iv", "v"}]
+    tokens = [
+        token
+        for token in value.split()
+        if token not in {"jr", "sr", "ii", "iii", "iv", "v"}
+    ]
     return " ".join(tokens)
 
 
@@ -141,7 +148,11 @@ def _ask(market: dict, side: str) -> float | None:
 class KalshiProvider:
     provider_id = PROVIDER_ID
 
-    def __init__(self, session: requests.Session | None = None, cache: JsonProviderCache | None = None):
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        cache: JsonProviderCache | None = None,
+    ):
         self.session = session or requests.Session()
         self.session.headers.update({"Accept": "application/json"})
         self.session.mount("https://", HTTPAdapter(pool_connections=8, pool_maxsize=16))
@@ -149,7 +160,8 @@ class KalshiProvider:
 
     def _get_json(self, path: str, params: dict[str, object], mode: str) -> dict:
         url = f"{BASE_URL}{path}"
-        key = f"GET {url}?{urlencode(sorted((str(k), str(v)) for k, v in params.items()))}"
+        query = urlencode(sorted((str(k), str(v)) for k, v in params.items()))
+        key = f"GET {url}?{query}"
         cached = self.cache.get(key, mode)
         if cached is not None:
             return cached
@@ -194,7 +206,7 @@ class KalshiProvider:
                 )
                 continue
 
-            players: dict[str, object] = {}
+            players = {}
             for player in game_request.players:
                 players[_norm_name(player.full_name)] = player
                 players[_norm_name(player.player_id)] = player
@@ -215,7 +227,11 @@ class KalshiProvider:
                 try:
                     payload = self._get_json(
                         "/markets",
-                        {"event_ticker": event_ticker, "status": "open", "limit": 1000},
+                        {
+                            "event_ticker": event_ticker,
+                            "status": "open",
+                            "limit": 1000,
+                        },
                         request.cache_mode,
                     )
                 except CacheMiss:
@@ -295,7 +311,9 @@ class KalshiProvider:
                             observed_at=_parse_time(market.get("updated_time")),
                             phase="pregame",
                             provenance=QuoteProvenance(
-                                provider_event_id=str(market.get("event_ticker") or event_ticker),
+                                provider_event_id=str(
+                                    market.get("event_ticker") or event_ticker
+                                ),
                                 provider_market_id=str(market.get("ticker") or ""),
                                 raw_title=str(
                                     market.get("yes_sub_title")
