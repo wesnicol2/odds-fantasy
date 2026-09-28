@@ -53,6 +53,22 @@ This prevents provider adapters from embedding subtly different threshold semant
 
 The current projection engine still accepts the historical `player -> source -> market -> over/under` map. `quotes_to_players_odds()` is the single compatibility adapter from canonical evidence into that map. It emits a derived decimal-equivalent price only so the existing de-vig implementation remains behaviorally identical while migration occurs; `SidePrice.implied_probability` remains the canonical value.
 
+`aggregate_by_week()` is the application integration seam. It delegates Odds API-only normalization to `aggregate_odds_api_by_week()`, asks `provider_service` for all enabled provider evidence, and returns the same mapping shape that the projection engine already consumes. The returned `ProviderOddsMap` also carries structured provider diagnostics, external benchmark quotes, and the provider IDs that participated as metadata; those fields do not enter projection math.
+
+## Runtime composition
+
+The default provider set is `odds_api,polymarket,kalshi`. Set `ODDS_PROVIDERS` to a comma-separated subset when an environment needs to disable a provider explicitly.
+
+The Odds API remains the schedule/planning source. `PlannedGame` retains the request's region and operational data mode so the same plan can be presented to every provider adapter without a second scheduling model. Direct providers are fetched concurrently and independently; a failure becomes a diagnostic result and does not suppress evidence from the other providers.
+
+Operational data modes retain their existing meaning across all providers:
+
+- `auto` may reuse provider-owned cached evidence until its TTL expires;
+- `cache` forbids network refreshes and reports cache misses diagnostically;
+- `fresh` bypasses reusable provider cache entries.
+
+Polymarket and Kalshi caches default to 15 minutes and may be configured with `POLYMARKET_ODDS_TTL` and `KALSHI_ODDS_TTL`. Each adapter owns its transport/cache implementation, but cache policy does not alter modeling weight.
+
 ## Provider responsibilities
 
 A provider adapter owns authentication/networking, provider-specific discovery, provider IDs, parsing settlement rules, converting native executable prices to raw implied probabilities, caching/rate-limit behavior, and diagnostics.
@@ -61,9 +77,13 @@ It must not own de-vigging, source weighting, cross-source consensus, distributi
 
 ## Diagnostics
 
-Provider results carry structured diagnostics with provider, code, severity, and optional game/player/market/provider-market identity. The ingestion layer should distinguish at least transport failure, cache miss, game not found, player not matched, market not found, ambiguous settlement, unusable price, live/closed market rejection, and successful contribution counts.
+Provider results carry structured diagnostics with provider, code, severity, and optional game/player/market/provider-market identity. The ingestion layer distinguishes transport failure, cache miss, game mapping failure, market not found, ambiguous settlement, unusable price, live/closed market rejection, and successful contribution counts.
 
 These diagnostics exist to make coverage empirically testable rather than inferred from a low final book count.
+
+## Fantasy-point benchmark boundary
+
+`BenchmarkQuote` is intentionally implemented as a separate channel so a provider can eventually expose explicit fantasy-point probabilities without contaminating the stat-derived model. An adapter may populate that channel only when the provider market's scoring definition is known. A benchmark can then be compared with the application's projection under a compatible scoring profile; it is never inserted into the stat-source consensus.
 
 ## Acceptance criteria
 
