@@ -94,14 +94,14 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
           {remainingMode ? (
             <div className="status-note">
               {formatValue(payload.actual_points)} FP already scored ·{' '}
-              {formatValue(payload.remaining_projected_points)} modeled points from remaining slots ·{' '}
+              {formatValue(payload.remaining_projected_points)} modeled points from remaining slots
               {payload.decisions_remaining ?? 0} decisions remain.
             </div>
           ) : null}
           {usesProxy ? (
             <div className="status-note">
-              Lineup totals include a kicker market proxy; use them to compare lineup choices, not as an
-              exact Sleeper team-score forecast.
+              Lineup totals include a kicker market proxy; use them to compare lineup choices, not
+              as an exact Sleeper team-score forecast.
             </div>
           ) : null}
           {notices.length ? <div className="status-note">{notices.join(' ')}</div> : null}
