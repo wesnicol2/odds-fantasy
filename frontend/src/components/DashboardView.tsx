@@ -165,7 +165,13 @@ export function DashboardView({
             <div className="dashboard-lineup-summary">
               <div className="dashboard-total">
                 <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
-                <span>{usesKickerProxy ? 'modeled score' : remainingMode ? 'modeled week FP' : 'total FP'}</span>
+                <span>
+                  {usesKickerProxy
+                    ? 'modeled score'
+                    : remainingMode
+                      ? 'modeled week FP'
+                      : 'total FP'}
+                </span>
               </div>
               <span className={`dashboard-decision-count${decisions.length ? ' active' : ''}`}>
                 {decisions.length
@@ -252,7 +258,9 @@ export function DashboardView({
                               </span>
                               <span className="dashboard-slot-decision-gap">
                                 <strong>{decision.delta_to_lineup.toFixed(1)}</strong>
-                                <small>{decision.projection_note ? 'modeled pts back' : 'FP back'}</small>
+                                <small>
+                                  {decision.projection_note ? 'modeled pts back' : 'FP back'}
+                                </small>
                               </span>
                               <span className="dashboard-slot-decision-cta">Compare →</span>
                             </button>
