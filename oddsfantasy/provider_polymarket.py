@@ -72,10 +72,14 @@ class CacheMiss(RuntimeError):
 
 
 def _norm_name(value: str) -> str:
-    value = (value or "").lower().replace("’", "'")
+    value = (value or "").lower().replace(chr(8217), "'")
     value = re.sub(r"[\.'`-]", " ", value)
     value = re.sub(r"[^a-z0-9 ]", "", value)
-    tokens = [token for token in value.split() if token not in {"jr", "sr", "ii", "iii", "iv", "v"}]
+    tokens = [
+        token
+        for token in value.split()
+        if token not in {"jr", "sr", "ii", "iii", "iv", "v"}
+    ]
     return " ".join(tokens)
 
 
@@ -152,7 +156,8 @@ def _predicate(text: str, market_key: str) -> ThresholdPredicate | None:
     plus = re.search(r"(-?\d+(?:\.\d+)?)\+", text)
     if plus:
         return ThresholdPredicate("gte", float(plus.group(1)))
-    if market_key == "player_anytime_td" and re.search(r"score(?:s|d)?\s+(?:at least\s+)?(?:a|one|1)\s+touchdown", text, re.I):
+    touchdown_pattern = r"score(?:s|d)?\s+(?:at least\s+)?(?:a|one|1)\s+touchdown"
+    if market_key == "player_anytime_td" and re.search(touchdown_pattern, text, re.I):
         return ThresholdPredicate("gte", 1.0)
     return None
 
@@ -196,13 +201,23 @@ def _probability(value: object) -> float | None:
 class PolymarketProvider:
     provider_id = PROVIDER_ID
 
-    def __init__(self, session: requests.Session | None = None, cache: JsonProviderCache | None = None):
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        cache: JsonProviderCache | None = None,
+    ):
         self.session = session or requests.Session()
         self.session.headers.update({"Accept": "application/json"})
         self.session.mount("https://", HTTPAdapter(pool_connections=8, pool_maxsize=16))
         self.cache = cache or JsonProviderCache(PROVIDER_ID, TTL)
 
-    def _get_json(self, base: str, path: str, params: dict[str, object], mode: str) -> object:
+    def _get_json(
+        self,
+        base: str,
+        path: str,
+        params: dict[str, object],
+        mode: str,
+    ) -> object:
         url = f"{base}{path}"
         query = urlencode(sorted((str(k), str(v)) for k, v in params.items()))
         key = f"GET {url}?{query}"
@@ -249,8 +264,12 @@ class PolymarketProvider:
                 mode,
             )
             if isinstance(related, dict):
-                events.extend(event for event in related.get("events") or [] if isinstance(event, dict))
-        unique: dict[str, dict] = {}
+                events.extend(
+                    event
+                    for event in related.get("events") or []
+                    if isinstance(event, dict)
+                )
+        unique = {}
         for event in events:
             key = str(event.get("id") or event.get("slug") or id(event))
             unique[key] = event
@@ -327,7 +346,7 @@ class PolymarketProvider:
                 )
                 continue
 
-            candidates: list[dict] = []
+            candidates = []
             token_ids: set[str] = set()
             found: set[tuple[str, str]] = set()
             requested = {
@@ -355,7 +374,10 @@ class PolymarketProvider:
                             ProviderDiagnostic(
                                 PROVIDER_ID,
                                 "ambiguous_settlement",
-                                "Matched Polymarket player market but could not parse its predicate/outcomes.",
+                                (
+                                    "Matched Polymarket player market but could not "
+                                    "parse its predicate/outcomes."
+                                ),
                                 game_id=game.game_id,
                                 player_id=player.player_id,
                                 market_key=market_key,
@@ -374,7 +396,6 @@ class PolymarketProvider:
                             "predicate": predicate,
                             "positive_token": positive_token,
                             "negative_token": negative_token,
-                            "text": text,
                         }
                     )
 
@@ -441,12 +462,22 @@ class PolymarketProvider:
                         predicate=candidate["predicate"],
                         yes=yes,
                         no=no,
-                        observed_at=_parse_time(market.get("updatedAt") or market.get("updated_at")),
+                        observed_at=_parse_time(
+                            market.get("updatedAt") or market.get("updated_at")
+                        ),
                         phase="pregame",
                         provenance=QuoteProvenance(
-                            provider_event_id=str(event.get("id") or event.get("gameId") or slug),
-                            provider_market_id=str(market.get("id") or market.get("conditionId") or ""),
-                            raw_title=str(market.get("question") or market.get("groupItemTitle") or ""),
+                            provider_event_id=str(
+                                event.get("id") or event.get("gameId") or slug
+                            ),
+                            provider_market_id=str(
+                                market.get("id") or market.get("conditionId") or ""
+                            ),
+                            raw_title=str(
+                                market.get("question")
+                                or market.get("groupItemTitle")
+                                or ""
+                            ),
                             raw_rules=str(market.get("description") or "") or None,
                         ),
                     )
