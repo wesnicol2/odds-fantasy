@@ -45,14 +45,14 @@ interface MatrixRow {
   actionLabel?: string;
 }
 
-function formatPoints(value: number | null | undefined): string {
-  return value === null || value === undefined ? '—' : `${value.toFixed(1)} FP`;
+function formatPoints(value: number | null | undefined, unit = 'FP'): string {
+  return value === null || value === undefined ? '—' : `${value.toFixed(1)} ${unit}`;
 }
 
-function formatContribution(value: number | null | undefined): string {
+function formatContribution(value: number | null | undefined, unit = 'FP'): string {
   if (value === null || value === undefined) return '—';
   const normalized = Math.abs(value) < 0.05 ? 0 : value;
-  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)} FP`;
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)} ${unit}`;
 }
 
 function formatValue(value: number | null | undefined): string {
@@ -241,6 +241,7 @@ function PlayerHeading({
       <strong>{player.name}</strong>
       <small>
         {label} · {player.pos}
+        {player.projection_note ? ' · MARKET PROXY' : ''}
       </small>
       {matchup ? (
         <small>
@@ -367,6 +368,18 @@ export function PlayerComparisonInspector({
   onMetricChange,
   onExit,
 }: PlayerComparisonInspectorProps) {
+  const projectionNotes = [
+    ...new Set(
+      [
+        challengerDetails?.projection_note,
+        starterDetails?.projection_note,
+        challenger.projection_note,
+        starter.projection_note,
+      ].filter((note): note is string => Boolean(note)),
+    ),
+  ];
+  const usesProxy = projectionNotes.length > 0;
+  const pointUnit = usesProxy ? 'modeled pts' : 'FP';
   const modeledKeys = [
     ...new Set([
       ...Object.keys(challengerDetails?.markets ?? {}),
@@ -400,32 +413,35 @@ export function PlayerComparisonInspector({
       label: 'Floor',
       challengerValue: challenger.floor,
       starterValue: starter.floor,
-      challengerDisplay: formatPoints(challenger.floor),
-      starterDisplay: formatPoints(starter.floor),
+      challengerDisplay: formatPoints(challenger.floor, pointUnit),
+      starterDisplay: formatPoints(starter.floor, pointUnit),
     },
     {
       key: 'mid',
       label: 'Median',
       challengerValue: challenger.mid,
       starterValue: starter.mid,
-      challengerDisplay: formatPoints(challenger.mid),
-      starterDisplay: formatPoints(starter.mid),
+      challengerDisplay: formatPoints(challenger.mid, pointUnit),
+      starterDisplay: formatPoints(starter.mid, pointUnit),
     },
     {
       key: 'ceiling',
       label: 'Ceiling',
       challengerValue: challenger.ceiling,
       starterValue: starter.ceiling,
-      challengerDisplay: formatPoints(challenger.ceiling),
-      starterDisplay: formatPoints(starter.ceiling),
+      challengerDisplay: formatPoints(challenger.ceiling, pointUnit),
+      starterDisplay: formatPoints(starter.ceiling, pointUnit),
     },
     {
       key: 'mean',
       label: 'Mean',
       challengerValue: challengerDetails?.projection?.mean ?? challenger.mean,
       starterValue: starterDetails?.projection?.mean ?? starter.mean,
-      challengerDisplay: formatPoints(challengerDetails?.projection?.mean ?? challenger.mean),
-      starterDisplay: formatPoints(starterDetails?.projection?.mean ?? starter.mean),
+      challengerDisplay: formatPoints(
+        challengerDetails?.projection?.mean ?? challenger.mean,
+        pointUnit,
+      ),
+      starterDisplay: formatPoints(starterDetails?.projection?.mean ?? starter.mean, pointUnit),
     },
   ];
 
@@ -434,7 +450,7 @@ export function PlayerComparisonInspector({
     const starterProbability = probabilityAtTarget(starter.curve, target);
     projectionRows.push({
       key: 'target',
-      label: `Chance of ≥ ${target.toFixed(1)} FP`,
+      label: `Chance of ≥ ${target.toFixed(1)} ${pointUnit}`,
       challengerValue: challengerProbability,
       starterValue: starterProbability,
       challengerDisplay: formatProbability(challengerProbability),
@@ -511,8 +527,8 @@ export function PlayerComparisonInspector({
       label: metricLabel(marketKey),
       challengerValue: challengerStat?.expectedPoints,
       starterValue: starterStat?.expectedPoints,
-      challengerDisplay: formatContribution(challengerStat?.expectedPoints),
-      starterDisplay: formatContribution(starterStat?.expectedPoints),
+      challengerDisplay: formatContribution(challengerStat?.expectedPoints, pointUnit),
+      starterDisplay: formatContribution(starterStat?.expectedPoints, pointUnit),
       negativeStat: punished,
       ...drillDown,
     };
@@ -548,7 +564,12 @@ export function PlayerComparisonInspector({
   });
 
   const pointRows = [...projectionRows, ...matchupRows, ...contributionRows];
-  const pointLead = leadSentence(pointRows, challenger.name, starter.name, 'fantasy-point');
+  const pointLead = leadSentence(
+    pointRows,
+    challenger.name,
+    starter.name,
+    usesProxy ? 'modeled-point' : 'fantasy-point',
+  );
   const statLead = leadSentence(statValueRows, challenger.name, starter.name, 'stat-value');
 
   return (
@@ -568,12 +589,18 @@ export function PlayerComparisonInspector({
       <div className="comparison-recommendation">
         <strong>Start {starter.name}</strong>
         <span className="comparison-recommendation-copy">
-          {challenger.name} is {lineupDelta.toFixed(1)} lineup FP back after re-optimizing every
-          eligible slot.
+          {challenger.name} is {lineupDelta.toFixed(1)}{' '}
+          {usesProxy ? 'modeled points' : 'lineup FP'} back after re-optimizing every eligible slot.
         </span>
         <span className="comparison-signal-score">{pointLead}</span>
         <span className="comparison-signal-score">{statLead}</span>
       </div>
+
+      {projectionNotes.map((note) => (
+        <div className="status-note" key={note}>
+          {note}
+        </div>
+      ))}
 
       {metric === 'fantasy_points' ? (
         <section
@@ -581,9 +608,11 @@ export function PlayerComparisonInspector({
           aria-label="Weekly tie-breaker matrix"
         >
           <p>
-            Every value is tied to this matchup week. Fantasy-point rows use league scoring; stat
-            rows compare the mean of the raw weekly stat instead. Shading marks the gap between the
-            two players in that row and fades as they converge: green highlights the leader on a
+            {usesProxy
+              ? 'Projection rows use the explicitly labeled kicker market proxy where applicable; other player rows use league scoring. '
+              : 'Fantasy-point rows use league scoring. '}
+            Stat rows compare the mean of the raw weekly stat instead. Shading marks the gap between
+            the two players in that row and fades as they converge: green highlights the leader on a
             stat the league rewards, red the player carrying more of one it punishes. Missing data
             and ties leave both sides unshaded.
           </p>
@@ -616,7 +645,7 @@ export function PlayerComparisonInspector({
               </thead>
               <tbody>
                 <tr className="matrix-group-row">
-                  <th colSpan={3}>Projection · fantasy points</th>
+                  <th colSpan={3}>{usesProxy ? 'Projection · modeled points' : 'Projection · fantasy points'}</th>
                 </tr>
                 <MatrixRows rows={projectionRows} onMetricChange={onMetricChange} />
                 <tr className="matrix-group-row">
@@ -626,7 +655,7 @@ export function PlayerComparisonInspector({
                 {contributionRows.length ? (
                   <>
                     <tr className="matrix-group-row">
-                      <th colSpan={3}>Fantasy-point sources</th>
+                      <th colSpan={3}>Point sources</th>
                     </tr>
                     <MatrixRows rows={contributionRows} onMetricChange={onMetricChange} />
                     <tr className="matrix-group-row">
@@ -648,9 +677,10 @@ export function PlayerComparisonInspector({
               ? `Rushing and receiving yards are summed because ${challenger.pos} and ${starter.pos} earn yardage in different markets, and means add exactly, so the combined figure is a plain sum. Open either market from the chart's metric strip. `
               : ''}
             Row wins are a transparent scan aid, not independent evidence or a confidence score.
-            Fantasy-point and stat-value signals are counted separately because a stat and the
-            points it produces are the same underlying market. The start recommendation remains the
-            optimizer’s league-scored lineup result.
+            Point and stat-value signals are counted separately because a stat and the points it
+            produces are the same underlying market. The start recommendation remains the
+            optimizer’s lineup result; when K is involved, the kicker portion is the disclosed
+            market proxy rather than exact distance-aware Sleeper scoring.
           </p>
         </section>
       ) : (
@@ -675,18 +705,18 @@ export function PlayerComparisonInspector({
               </thead>
               <tbody>
                 <tr>
-                  <th>Mean FP contribution</th>
+                  <th>Mean point contribution</th>
                   <td
                     className={
                       challengerMarket && challengerMarket.expected_points < 0 ? 'negative' : ''
                     }
                   >
-                    {formatContribution(challengerMarket?.expected_points)}
+                    {formatContribution(challengerMarket?.expected_points, pointUnit)}
                   </td>
                   <td
                     className={starterMarket && starterMarket.expected_points < 0 ? 'negative' : ''}
                   >
-                    {formatContribution(starterMarket?.expected_points)}
+                    {formatContribution(starterMarket?.expected_points, pointUnit)}
                   </td>
                 </tr>
                 <tr>
