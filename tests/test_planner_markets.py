@@ -31,6 +31,12 @@ class PlannerMarketMappingTest(unittest.TestCase):
         self.assertIn("player_pass_tds_alternate", markets)
         self.assertIn("player_pass_interceptions", markets)
 
+    def test_kicker_plan_only_requests_consumed_kicking_points_markets(self):
+        self.assertEqual(
+            set(_markets_for_positions(["K"])),
+            {"player_kicking_points", "player_kicking_points_alternate"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
