@@ -86,11 +86,7 @@ def _norm_name(value: str) -> str:
     value = (value or "").lower().replace(chr(8217), "'")
     value = re.sub(r"[\.'`-]", " ", value)
     value = re.sub(r"[^a-z0-9 ]", "", value)
-    tokens = [
-        token
-        for token in value.split()
-        if token not in {"jr", "sr", "ii", "iii", "iv", "v"}
-    ]
+    tokens = [token for token in value.split() if token not in {"jr", "sr", "ii", "iii", "iv", "v"}]
     return " ".join(tokens)
 
 
@@ -311,9 +307,7 @@ class KalshiProvider:
                             observed_at=_parse_time(market.get("updated_time")),
                             phase="pregame",
                             provenance=QuoteProvenance(
-                                provider_event_id=str(
-                                    market.get("event_ticker") or event_ticker
-                                ),
+                                provider_event_id=str(market.get("event_ticker") or event_ticker),
                                 provider_market_id=str(market.get("ticker") or ""),
                                 raw_title=str(
                                     market.get("yes_sub_title")
