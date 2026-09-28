@@ -151,9 +151,10 @@ class LiveStateTest(unittest.TestCase):
 
         self.assertEqual(
             [(row["slot_index"], row["name"]) for row in state["locked_starters"]],
-            [(0, "Started Back"), (1, "Started Flex")],
+            [(0, "Started Back"), (1, "Started Flex"), (2, "Kicker")],
         )
         self.assertEqual(state["locked_starters"][0]["actual_points"], 8.5)
+        self.assertEqual(state["locked_starters"][2]["actual_points"], 6.0)
         self.assertEqual([row["name"] for row in state["locked_bench"]], ["Started Bench"])
         self.assertIn("Kicker", state["unavailable_names"])
         self.assertNotIn("Sunday Player", state["unavailable_names"])

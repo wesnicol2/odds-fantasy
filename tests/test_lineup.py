@@ -14,6 +14,14 @@ class BestLineupTest(unittest.TestCase):
             {"name": "WR 1", "pos": "WR", "floor": 13, "mid": 19, "ceiling": 25},
             {"name": "WR 2", "pos": "WR", "floor": 10, "mid": 18, "ceiling": 27},
             {"name": "TE 1", "pos": "TE", "floor": 8, "mid": 12, "ceiling": 20},
+            {
+                "name": "K Market",
+                "pos": "K",
+                "floor": 6,
+                "mid": 8,
+                "ceiling": 12,
+                "projection_note": "kicker proxy",
+            },
         ]
         self.defenses = [
             {
@@ -25,18 +33,32 @@ class BestLineupTest(unittest.TestCase):
         ]
         self.slots = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN", "BN"]
 
-    def test_uses_actual_slots_and_flags_unmodeled_kicker(self):
+    def test_uses_actual_slots_including_kicker(self):
         result = build_best_lineup(
             self.players, target="mid", roster_positions=self.slots, defenses=self.defenses
         )
-        self.assertEqual(len(result["lineup"]), 8)
-        self.assertEqual(result["unmodeled_slots"], ["K"])
+        self.assertEqual(len(result["lineup"]), 9)
+        self.assertEqual(result["unmodeled_slots"], [])
+        self.assertEqual(result["unfilled_slots"], [])
         self.assertIn("Buffalo Bills", {row["name"] for row in result["lineup"]})
+        kicker = next(row for row in result["lineup"] if row["slot"] == "K")
+        self.assertEqual(kicker["name"], "K Market")
+        self.assertEqual(kicker["projection_note"], "kicker proxy")
         self.assertEqual(sum(row["points"] for row in result["lineup"]), result["total_points"])
         self.assertEqual(
             [row["slot_index"] for row in result["lineup"]],
-            [0, 1, 2, 3, 4, 5, 6, 7],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8],
         )
+
+    def test_missing_kicker_is_unfilled_not_unmodeled_or_zero(self):
+        players = [player for player in self.players if player["pos"] != "K"]
+        result = build_best_lineup(
+            players, target="mid", roster_positions=self.slots, defenses=self.defenses
+        )
+
+        self.assertEqual(result["unmodeled_slots"], [])
+        self.assertEqual(result["unfilled_slots"], ["K"])
+        self.assertFalse(any(row["slot"] == "K" for row in result["lineup"]))
 
     def test_ceiling_can_choose_a_different_qb(self):
         floor = build_best_lineup(

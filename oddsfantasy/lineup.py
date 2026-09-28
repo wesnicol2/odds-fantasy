@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import cache
 
-DEFAULT_STARTERS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "DEF"]
+DEFAULT_STARTERS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"]
 SLOT_ELIGIBILITY: dict[str, set[str]] = {
     "QB": {"QB"},
     "RB": {"RB"},
@@ -14,6 +14,7 @@ SLOT_ELIGIBILITY: dict[str, set[str]] = {
     "WRRB_FLEX": {"WR", "RB"},
     "REC_FLEX": {"WR", "TE"},
     "SUPER_FLEX": {"QB", "RB", "WR", "TE"},
+    "K": {"K"},
     "DEF": {"DEF"},
 }
 IGNORED_SLOTS = {"BN", "IR", "TAXI"}
@@ -191,6 +192,7 @@ def build_best_lineup(
                     "floor": candidate.get("floor"),
                     "mid": candidate.get("mid"),
                     "ceiling": candidate.get("ceiling"),
+                    "projection_note": candidate.get("projection_note"),
                     "locked": lock is not None,
                     "actual_points": round(selected_points, 2) if lock is not None else None,
                 }
@@ -255,6 +257,7 @@ def build_best_lineup(
                 "pos": candidate.get("pos"),
                 "team": candidate.get("team"),
                 "points": round(candidate_score, 2),
+                "projection_note": candidate.get("projection_note"),
                 "delta_to_lineup": round(max(0.0, baseline_total - forced_total), 2),
                 "slot": forced_slot,
                 "slot_index": forced_slot_index,
