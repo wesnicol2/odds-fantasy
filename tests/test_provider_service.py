@@ -14,19 +14,20 @@ from oddsfantasy.provider_service import collect_provider_evidence
 
 
 class PlannedGame:
-    game_id = "game-1"
-    home_team = "Miami Dolphins"
-    away_team = "Kansas City Chiefs"
-    commence_time = "2099-09-27T17:00:00Z"
-    players = [
-        {
-            "full_name": "De'Von Achane",
-            "alias": "De'Von Achane",
-            "primary_position": "RB",
-            "editorial_team_full_name": "Miami Dolphins",
-        }
-    ]
-    markets = ["player_rush_yds", "player_rush_yds_alternate"]
+    def __init__(self):
+        self.game_id = "game-1"
+        self.home_team = "Miami Dolphins"
+        self.away_team = "Kansas City Chiefs"
+        self.commence_time = "2099-09-27T17:00:00Z"
+        self.players = [
+            {
+                "full_name": "De'Von Achane",
+                "alias": "De'Von Achane",
+                "primary_position": "RB",
+                "editorial_team_full_name": "Miami Dolphins",
+            }
+        ]
+        self.markets = ["player_rush_yds", "player_rush_yds_alternate"]
 
 
 class FakeProvider:
