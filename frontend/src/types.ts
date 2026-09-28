@@ -19,6 +19,7 @@ export interface ProjectionPlayer {
   coverage_status?: 'complete' | 'partial' | 'missing';
   required_markets?: string[];
   missing_markets?: string[];
+  projection_note?: string | null;
   locked?: boolean;
   lineup_status?: 'starter' | 'bench' | null;
   actual_points?: number | null;
@@ -96,6 +97,7 @@ export interface PlayerOddsDetails {
     mean: number;
     curve: FantasyCurvePoint[];
   } | null;
+  projection_note?: string | null;
   matchup?: {
     opponent: string;
     venue: 'home' | 'away';
@@ -185,6 +187,7 @@ export interface LineupRow {
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
+  projection_note?: string | null;
   locked?: boolean;
   actual_points?: number | null;
 }
@@ -194,6 +197,7 @@ export interface BenchPressureRow {
   pos: string;
   team: string | null;
   points: number;
+  projection_note?: string | null;
   delta_to_lineup: number;
   slot: string | null;
   displaces: string | null;

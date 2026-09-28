@@ -4,6 +4,13 @@ Each sportsbook market is reconstructed in :mod:`oddsfantasy.market_math`, each
 sampled stat is scored with the league rules in :mod:`oddsfantasy.scoring`, and
 the stat point values are summed into one player-level distribution. Floor,
 mid and ceiling are the 10th, 50th and 90th percentiles of that same curve.
+
+Kickers are the one deliberate exception to league-rule scoring: the sportsbook
+``player_kicking_points`` market already measures scoreboard kicking points
+(three per made field goal, one per made extra point). Without field-goal
+distance/miss markets there is no honest way to translate that into every
+Sleeper kicker ruleset, so K projections keep the market's point unit as an
+explicitly labeled comparison proxy instead of inventing kick distances.
 """
 
 from __future__ import annotations
@@ -16,6 +23,7 @@ from .aggregator import PLAYER_POSITION_META_KEY
 from .market_math import (
     CountDistribution,
     build_distribution,
+    collect_anchors,
     is_continuous_market,
     is_count_market,
 )
@@ -30,6 +38,13 @@ COMBINED_SEED_OFFSET = 104729
 # them is the only apples-to-apples yardage comparison across those positions.
 COMBINED_YARDAGE_KEY = "rush_reception_yds"
 COMBINED_YARDAGE_MARKETS = ("player_rush_yds", "player_reception_yds")
+
+KICKER_MARKET_KEY = "player_kicking_points"
+KICKER_PROXY_NOTE = (
+    "Kicker ranges use sportsbook kicking points (3 per made field goal, 1 per made extra "
+    "point). Sleeper field-goal distance bonuses, per-yard scoring, and miss penalties are "
+    "not priced by this market."
+)
 
 FLOOR_PERCENTILE = 0.10
 MID_PERCENTILE = 0.50
@@ -54,6 +69,7 @@ REQUIRED_MARKETS_BY_POSITION: dict[str, tuple[str, ...]] = {
     ),
     "WR": ("player_reception_yds", "player_anytime_td"),
     "TE": ("player_reception_yds", "player_anytime_td"),
+    "K": (KICKER_MARKET_KEY,),
 }
 
 
@@ -82,6 +98,7 @@ class PlayerProjection:
     samples: list[float] = field(default_factory=list)
     required_markets: tuple[str, ...] = ()
     missing_markets: tuple[str, ...] = ()
+    projection_note: str | None = None
 
     @property
     def per_market_ranges(self) -> dict[str, tuple[float, float, float]]:
@@ -162,8 +179,10 @@ def required_projection_markets(
 
     Receptions become core only when the league actually scores them. The
     yards/TD coverage above remains core because it directly drives standard
-    fantasy scoring for the position. Unknown positions retain the historical
-    behavior so pure projection helpers without roster metadata stay generic.
+    fantasy scoring for the position. K is different: its one required market
+    is a labeled sportsbook-points proxy. Unknown positions retain the
+    historical behavior so pure projection helpers without roster metadata stay
+    generic.
     """
     pos = str(position or "").upper()
     required = list(REQUIRED_MARKETS_BY_POSITION.get(pos, ()))
@@ -188,8 +207,60 @@ def candidate_markets(
             if market_key == PLAYER_POSITION_META_KEY:
                 continue
             keys.add(_base_market_key(str(market_key)))
-    modeled = [k for k in sorted(keys) if is_count_market(k) or is_continuous_market(k)]
-    return [k for k in modeled if scoring.for_market(k, position=position) is not None]
+
+    resolved_position = str(position or "").upper()
+    modeled = [
+        key
+        for key in sorted(keys)
+        if is_count_market(key)
+        or is_continuous_market(key)
+        or (resolved_position == "K" and key == KICKER_MARKET_KEY)
+    ]
+    return [
+        key
+        for key in modeled
+        if (resolved_position == "K" and key == KICKER_MARKET_KEY)
+        or scoring.for_market(key, position=position) is not None
+    ]
+
+
+def _kicker_stat_projection(per_bookmaker_odds: dict) -> StatProjection | None:
+    """Build the explicitly labeled market-points proxy used only for kickers."""
+    anchors = collect_anchors(per_bookmaker_odds, KICKER_MARKET_KEY)
+    distribution = CountDistribution.from_anchors(anchors)
+    if distribution is None:
+        return None
+    values, weights = distribution.support()
+    if not values:
+        return None
+
+    # The sportsbook market already quotes points scored by made kicks. Keep
+    # those units 1:1 rather than pretending they are the league's fantasy
+    # points when distance/miss modifiers are unknowable from this market.
+    point_values = list(values)
+    expected_points = sum(value * weight for value, weight in zip(values, weights, strict=True))
+
+    cumulative: list[float] = []
+    running = 0.0
+    for weight in weights:
+        running += weight
+        cumulative.append(running)
+
+    stat_range = (
+        float(distribution.quantile(FLOOR_PERCENTILE)),
+        float(distribution.quantile(MID_PERCENTILE)),
+        float(distribution.quantile(CEILING_PERCENTILE)),
+    )
+    return StatProjection(
+        market_key=KICKER_MARKET_KEY,
+        distribution=distribution,
+        stat_range=stat_range,
+        expected_points=expected_points,
+        mean=expected_points,
+        values=list(values),
+        point_values=point_values,
+        cumulative_weights=cumulative,
+    )
 
 
 def build_stat_projection(
@@ -198,6 +269,9 @@ def build_stat_projection(
     scoring: ScoringConfig,
     position: str | None = None,
 ) -> StatProjection | None:
+    if str(position or "").upper() == "K" and market_key == KICKER_MARKET_KEY:
+        return _kicker_stat_projection(per_bookmaker_odds)
+
     stat_scoring = scoring.for_market(market_key, position=position)
     if stat_scoring is None:
         return None
@@ -285,7 +359,8 @@ def project_player(
 
     Position may be supplied explicitly by callers. Normal app data carries the
     same value as non-market metadata from the roster/game plan, so existing
-    service call sites automatically get position-aware anytime-TD scoring.
+    service call sites automatically get position-aware anytime-TD scoring and
+    the K-only kicking-points proxy.
     """
     scoring = (
         scoring_rules
@@ -296,6 +371,7 @@ def project_player(
         str(position or _position_from_odds(per_bookmaker_odds) or "").upper() or None
     )
     required_markets = required_projection_markets(scoring, resolved_position)
+    projection_note = KICKER_PROXY_NOTE if resolved_position == "K" else None
 
     stats: dict[str, StatProjection] = {}
     for market_key in candidate_markets(per_bookmaker_odds, scoring, position=resolved_position):
@@ -320,6 +396,7 @@ def project_player(
             mean=0.0,
             required_markets=required_markets,
             missing_markets=missing_markets,
+            projection_note=projection_note,
         )
 
     per_stat_draws: list[list[float]] = []
@@ -341,4 +418,5 @@ def project_player(
         samples=totals,
         required_markets=required_markets,
         missing_markets=missing_markets,
+        projection_note=projection_note,
     )

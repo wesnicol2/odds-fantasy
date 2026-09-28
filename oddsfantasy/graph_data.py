@@ -22,6 +22,7 @@ HIGH_GRANULARITY_COUNT_MARKETS = {
     "player_receptions",
     "player_rush_attempts",
     "player_touches",
+    "player_kicking_points",
 }
 
 

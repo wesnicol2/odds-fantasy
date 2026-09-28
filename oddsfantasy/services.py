@@ -23,7 +23,7 @@ from .planner import plan_relevant_games_and_markets
 from .projection import project_player, survival_curve
 from .weekly_windows import resolve_week_windows
 
-SUPPORTED_POSITIONS = {"QB", "RB", "WR", "TE"}
+SUPPORTED_POSITIONS = {"QB", "RB", "WR", "TE", "K"}
 NO_GAMES_SCHEDULED_MESSAGE = (
     "No scheduled games found yet for this week. Check back once the season's "
     "schedule/odds are posted."
@@ -303,6 +303,7 @@ def compute_projections(
                 "coverage_status": coverage_status,
                 "required_markets": list(projection.required_markets),
                 "missing_markets": list(projection.missing_markets),
+                "projection_note": projection.projection_note,
             }
         )
 

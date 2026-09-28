@@ -23,6 +23,14 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
   const notices: string[] = [];
   const lockedCount = payload?.locked_count ?? 0;
   const remainingMode = lockedCount > 0;
+  const projectionNotes = [
+    ...new Set(
+      [...(payload?.lineup ?? []), ...(payload?.bench_pressure ?? [])]
+        .map((row) => row.projection_note)
+        .filter((note): note is string => Boolean(note)),
+    ),
+  ];
+  const usesProxy = projectionNotes.length > 0;
   if (payload?.unmodeled_slots.length) {
     notices.push(`Not modeled: ${payload.unmodeled_slots.join(', ')}.`);
   }
@@ -42,6 +50,15 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
     );
   }
   if (payload?.defense_note) notices.push(payload.defense_note);
+  notices.push(...projectionNotes);
+
+  const totalLabel = usesProxy
+    ? remainingMode
+      ? `Actual + modeled ${label(payload?.target ?? target)}`
+      : `Modeled ${label(payload?.target ?? target)}`
+    : remainingMode
+      ? `Actual + projected ${label(payload?.target ?? target)}`
+      : `Projected ${label(payload?.target ?? target)}`;
 
   return (
     <main className="decision-view" aria-label="Best lineup">
@@ -75,18 +92,20 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
       {!loading && !error && payload ? (
         <>
           <div className="lineup-total">
-            <span>
-              {remainingMode
-                ? `Actual + projected ${label(payload.target)}`
-                : `Projected ${label(payload.target)}`}
-            </span>
+            <span>{totalLabel}</span>
             <strong>{payload.total_points.toFixed(1)}</strong>
           </div>
           {remainingMode ? (
             <div className="status-note">
               {formatValue(payload.actual_points)} FP already scored ·{' '}
-              {formatValue(payload.remaining_projected_points)} FP projected from remaining slots ·{' '}
+              {formatValue(payload.remaining_projected_points)} modeled points from remaining slots
               {payload.decisions_remaining ?? 0} decisions remain.
+            </div>
+          ) : null}
+          {usesProxy ? (
+            <div className="status-note">
+              Lineup totals include a kicker market proxy; use them to compare lineup choices, not
+              as an exact Sleeper team-score forecast.
             </div>
           ) : null}
           {notices.length ? <div className="status-note">{notices.join(' ')}</div> : null}
@@ -113,6 +132,9 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
                     <td>
                       {row.name}
                       {row.locked ? <span className="row-secondary">LOCKED · actual</span> : null}
+                      {!row.locked && row.projection_note ? (
+                        <span className="row-secondary">KICKER MARKET PROXY</span>
+                      ) : null}
                     </td>
                     <td>{row.pos}</td>
                     <td>{row.team || '—'}</td>

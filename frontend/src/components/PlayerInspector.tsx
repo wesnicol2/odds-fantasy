@@ -22,9 +22,9 @@ function formatValue(value: number | null | undefined): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function formatContribution(value: number): string {
+function formatContribution(value: number, unit = 'FP'): string {
   const normalized = Math.abs(value) < 0.05 ? 0 : value;
-  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)} FP`;
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)} ${unit}`;
 }
 
 export function PlayerInspector({
@@ -41,6 +41,9 @@ export function PlayerInspector({
     return <div className="empty-state">Select a player to inspect their projection.</div>;
   }
 
+  const projectionNote = details?.projection_note ?? player.projection_note ?? null;
+  const pointUnit = projectionNote ? 'modeled pts' : 'FP';
+  const targetUnit = projectionNote ? 'kicking pts' : 'FP';
   const targetProbability = probabilityAtTarget(player.curve, target);
   const market = metric === 'fantasy_points' ? null : (details?.markets[metric] ?? null);
   const sportsbookCount = market
@@ -65,6 +68,8 @@ export function PlayerInspector({
         </div>
       </div>
 
+      {projectionNote ? <div className="status-note">{projectionNote}</div> : null}
+
       {player.has_projection ? (
         <>
           <dl className="projection-summary">
@@ -84,7 +89,9 @@ export function PlayerInspector({
 
           {metric === 'fantasy_points' && target !== null ? (
             <div className="target-summary">
-              <span>Chance of ≥ {target.toFixed(1)} FP</span>
+              <span>
+                Chance of ≥ {target.toFixed(1)} {targetUnit}
+              </span>
               <strong>{formatProbability(targetProbability)}</strong>
             </div>
           ) : null}
@@ -101,22 +108,22 @@ export function PlayerInspector({
               {contributions.length ? (
                 <>
                   <div className="contribution-total">
-                    <span>Mean fantasy points</span>
+                    <span>{projectionNote ? 'Mean modeled points' : 'Mean fantasy points'}</span>
                     <strong>{formatPoints(details?.projection?.mean ?? player.mean)}</strong>
                   </div>
-                  <ul className="contribution-list" aria-label="Fantasy point contributions">
+                  <ul className="contribution-list" aria-label="Point contributions">
                     {contributions.map(({ marketKey, label, points }) => (
                       <li key={marketKey}>
                         <button
                           type="button"
                           className="contribution-row"
                           onClick={() => onMetricChange(marketKey)}
-                          aria-label={`Analyze ${label}, ${formatContribution(points)}`}
+                          aria-label={`Analyze ${label}, ${formatContribution(points, pointUnit)}`}
                         >
                           <span className="contribution-row-heading">
                             <span>{label}</span>
                             <strong className={points < 0 ? 'negative' : ''}>
-                              {formatContribution(points)}
+                              {formatContribution(points, pointUnit)}
                             </strong>
                           </span>
                           <span className="contribution-track" aria-hidden="true">
@@ -156,7 +163,7 @@ export function PlayerInspector({
                   <div className="stat-contribution-summary">
                     <span>Mean point contribution</span>
                     <strong className={market.expected_points < 0 ? 'negative' : ''}>
-                      {formatContribution(market.expected_points)}
+                      {formatContribution(market.expected_points, pointUnit)}
                     </strong>
                     <button type="button" onClick={() => onMetricChange('fantasy_points')}>
                       All point sources

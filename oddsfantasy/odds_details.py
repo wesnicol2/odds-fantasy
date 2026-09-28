@@ -209,6 +209,7 @@ def get_player_odds_details(
         return {
             "player": {"name": name},
             "projection": None,
+            "projection_note": None,
             "markets": {},
             "combined_markets": {},
             "message": NO_GAMES_SCHEDULED_MESSAGE,
@@ -229,6 +230,7 @@ def get_player_odds_details(
         return {
             "player": {"name": name},
             "projection": None,
+            "projection_note": None,
             "markets": {},
             "combined_markets": {},
             "ratelimit": ratelimit.format_status(),
@@ -237,7 +239,11 @@ def get_player_odds_details(
 
     info = info_by_alias[target_alias]
     by_book = (context.get("players_odds") or {}).get(target_alias, {})
-    projection = project_player(by_book, context.get("scoring_rules") or {})
+    projection = project_player(
+        by_book,
+        context.get("scoring_rules") or {},
+        position=info.get("primary_position"),
+    )
     matchup = _player_matchup(
         context,
         target_alias,
@@ -299,6 +305,7 @@ def get_player_odds_details(
             if has_projection
             else None
         ),
+        "projection_note": projection.projection_note,
         "matchup": matchup,
         "markets": markets,
         "combined_markets": combined_markets,

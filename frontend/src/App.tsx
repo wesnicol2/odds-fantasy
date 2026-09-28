@@ -581,10 +581,12 @@ export function App() {
 
   const fantasyPointsMetric = metric === 'fantasy_points';
   const activeMetricLabel = metricLabel(metric);
-  const lowGranularityMetric =
-    !fantasyPointsMetric && isCountMetric(metric) && metric !== 'player_receptions';
   const highGranularityMetric =
-    !fantasyPointsMetric && isCountMetric(metric) && metric === 'player_receptions';
+    !fantasyPointsMetric &&
+    isCountMetric(metric) &&
+    ['player_receptions', 'player_kicking_points'].includes(metric);
+  const lowGranularityMetric =
+    !fantasyPointsMetric && isCountMetric(metric) && !highGranularityMetric;
   const activeLoading =
     view === 'dashboard'
       ? dashboardLoading
