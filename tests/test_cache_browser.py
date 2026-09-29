@@ -21,7 +21,7 @@ def test_cache_index_lists_cache_files_and_redacts_request_keys(monkeypatch, tmp
         ),
         encoding="utf-8",
     )
-    (tmp_path / "not_cache_data.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "other_data.json").write_text("{}", encoding="utf-8")
 
     files = cache_browser.list_cache_files()["files"]
     assert [item["name"] for item in files] == ["odds_api_cache.json"]
