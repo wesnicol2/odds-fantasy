@@ -85,6 +85,32 @@
   font-size: 10px;
 }
 
+.settings-actions {
+  display: flex;
+  gap: 7px;
+  align-items: stretch;
+}
+
+.settings-actions button {
+  flex: 1;
+}
+
+.settings-cache-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  border: 1px solid #303844;
+  color: #7d8895;
+  font-size: 9px;
+  text-decoration: none;
+}
+
+.settings-cache-link:hover {
+  border-color: #465261;
+  color: #d8dee6;
+}
+
 .setup-backdrop {
   position: fixed;
   inset: 0;
@@ -218,111 +244,3 @@
 .setup-actions button {
   padding: 10px 14px;
   border-radius: 7px;
-  font-size: 11px;
-}
-
-.setup-username-row .primary-action,
-.setup-actions .primary-action {
-  border-color: #3f6c9f;
-  background: linear-gradient(180deg, #1d4f83, #183b63);
-  color: #f2f8ff;
-  box-shadow: 0 8px 24px rgb(22 79 136 / 24%);
-}
-
-.setup-username-row .primary-action:hover,
-.setup-actions .primary-action:hover {
-  border-color: #6196d1;
-  background: linear-gradient(180deg, #245d97, #1a4777);
-}
-
-.setup-username-row button:disabled,
-.setup-actions button:disabled {
-  opacity: 0.48;
-  cursor: default;
-}
-
-.setup-footnote,
-.setup-step-copy {
-  margin: 0;
-  color: #718090;
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.setup-step-copy strong {
-  color: #d9e2ec;
-}
-
-.setup-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.split-actions {
-  justify-content: space-between;
-}
-
-.setup-error {
-  margin: 0 20px 20px;
-  padding: 9px 11px;
-  border: 1px solid #65383b;
-  border-radius: 7px;
-  background: #1d1215;
-  color: #e5a4a6;
-  font-size: 10px;
-}
-
-@media (max-width: 780px) {
-  .header-status {
-    flex-wrap: wrap;
-  }
-
-  .settings-popover {
-    position: fixed;
-    top: 104px;
-    right: 10px;
-    left: 10px;
-    width: auto;
-  }
-
-  .setup-backdrop {
-    align-items: end;
-    padding: 0;
-  }
-
-  .setup-dialog,
-  .setup-dialog--welcome {
-    width: 100%;
-    max-height: 92vh;
-    overflow-y: auto;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 16px 16px 0 0;
-  }
-
-  .setup-intro {
-    padding: 24px 20px 22px;
-  }
-}
-
-@media (max-width: 520px) {
-  .setup-pitch {
-    grid-template-columns: 1fr;
-  }
-
-  .setup-pitch-mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-  }
-
-  .setup-username-row {
-    grid-template-columns: 1fr;
-  }
-
-  .setup-username-row button {
-    min-height: 42px;
-  }
-}
