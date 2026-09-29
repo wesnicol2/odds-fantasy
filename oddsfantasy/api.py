@@ -14,7 +14,7 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
-from . import live_lineup, odds_client, odds_details, ratelimit
+from . import cache_browser, live_lineup, odds_client, odds_details, ratelimit
 from .build_info import build_info
 from .config import DEFAULT_SEASON
 from .services import list_defenses, resolve_league, resolve_user_leagues
@@ -133,10 +133,36 @@ def application(environ, start_response):
     try:
         if path == "/":
             return _serve_static(start_response, "")
+        if path == "/settings/cache":
+            return _serve_static(start_response, "")
         if path.startswith("/ui/"):
             return _serve_static(start_response, path[len("/ui/") :])
         if path.startswith("/assets/"):
             return _serve_static(start_response, path.lstrip("/"))
+
+        if path == "/debug/cache":
+            filename = q("file")
+            entry_id = q("entry")
+            try:
+                if not filename:
+                    data = cache_browser.list_cache_files()
+                elif entry_id:
+                    data = cache_browser.get_cache_entry(filename, entry_id)
+                else:
+                    data = cache_browser.list_cache_entries(filename)
+            except FileNotFoundError:
+                return _json_response(
+                    start_response,
+                    "404 Not Found",
+                    {"error": "cache_file_not_found", "file": filename},
+                )
+            except KeyError:
+                return _json_response(
+                    start_response,
+                    "404 Not Found",
+                    {"error": "cache_entry_not_found", "file": filename, "entry": entry_id},
+                )
+            return _json_response(start_response, "200 OK", data)
 
         if path == "/health":
             return _json_response(
