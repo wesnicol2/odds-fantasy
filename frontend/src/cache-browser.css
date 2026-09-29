@@ -115,6 +115,10 @@
   background: rgb(255 255 255 / 2.5%);
 }
 
+.cache-odds-cell strong {
+  font-size: 14px;
+}
+
 .cache-odds-table td strong,
 .cache-odds-table td span,
 .cache-odds-table td small {
@@ -137,10 +141,6 @@
 .cache-odds-cell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.cache-odds-cell strong {
-  font-size: 14px;
 }
 
 .cache-empty {
