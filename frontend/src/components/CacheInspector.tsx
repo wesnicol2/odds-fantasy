@@ -108,7 +108,9 @@ export function CacheInspector() {
             {visibleEntries.map((entry) => (
               <div className="cache-entry-row" key={entry.id}>
                 <code>{entry.key}</code>
-                <span>{entry.summary} · {ageLabel(entry.age_seconds)}</span>
+                <span>
+                  {entry.summary} · {ageLabel(entry.age_seconds)}
+                </span>
               </div>
             ))}
           </div>
