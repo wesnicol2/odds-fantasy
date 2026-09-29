@@ -157,9 +157,7 @@ def test_cached_odds_rows_normalize_all_three_provider_caches(monkeypatch, tmp_p
     assert {row["source"] for row in result["rows"]} == {"DraftKings", "Polymarket", "Kalshi"}
 
     polymarket_over = next(
-        row
-        for row in result["rows"]
-        if row["source"] == "Polymarket" and row["side"] == "Over"
+        row for row in result["rows"] if row["source"] == "Polymarket" and row["side"] == "Over"
     )
     assert polymarket_over["line"] == 59.5
     assert polymarket_over["probability"] == 0.52
@@ -173,9 +171,7 @@ def test_cached_odds_rows_normalize_all_three_provider_caches(monkeypatch, tmp_p
     assert kalshi_yes["probability"] == 0.53
 
     draftkings_over = next(
-        row
-        for row in result["rows"]
-        if row["source"] == "DraftKings" and row["side"] == "Over"
+        row for row in result["rows"] if row["source"] == "DraftKings" and row["side"] == "Over"
     )
     assert draftkings_over["american_odds"] == -110
 
