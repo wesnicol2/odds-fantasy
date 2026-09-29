@@ -46,7 +46,9 @@ def test_cache_inspector_rejects_path_traversal(monkeypatch, tmp_path):
 def test_cache_entry_lookup_returns_metadata_only(monkeypatch, tmp_path):
     monkeypatch.setattr(cache_browser, "DATA_DIR", str(tmp_path))
     (tmp_path / "polymarket_provider_cache.json").write_text(
-        json.dumps({"GET https://example.test/markets": {"fetched_at": time.time(), "data": {"x": 1}}}),
+        json.dumps(
+            {"GET https://example.test/markets": {"fetched_at": time.time(), "data": {"x": 1}}}
+        ),
         encoding="utf-8",
     )
 
