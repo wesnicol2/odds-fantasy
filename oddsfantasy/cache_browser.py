@@ -1,4 +1,4 @@
-"""Read-only inspection helpers for Odds Fantasy JSON caches."""
+"""Read-only cache metadata inspection for Odds Fantasy JSON caches."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ _SECRET_QUERY_KEYS = {
     "password",
     "secret",
 }
-_SECRET_FIELD_KEYS = _SECRET_QUERY_KEYS | {"x-api-key"}
 
 
 def _cache_paths() -> list[Path]:
@@ -69,18 +68,6 @@ def _redact_url(value: str) -> str:
     if not changed:
         return value
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
-
-
-def _redact(value: Any, field_name: str | None = None) -> Any:
-    if field_name and field_name.lower() in _SECRET_FIELD_KEYS:
-        return "[redacted]"
-    if isinstance(value, dict):
-        return {str(key): _redact(item, str(key)) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_redact(item) for item in value]
-    if isinstance(value, str):
-        return _redact_url(value)
-    return value
 
 
 def _entry_metadata(value: Any, now: float) -> tuple[float | None, float | None, str]:
@@ -155,25 +142,3 @@ def list_cache_entries(filename: str) -> dict[str, Any]:
         )
     entries.sort(key=lambda item: item["key"])
     return {"file": filename, "entries": entries}
-
-
-def get_cache_entry(filename: str, entry_id: str) -> dict[str, Any]:
-    path = _safe_cache_path(filename)
-    if path is None:
-        raise FileNotFoundError(filename)
-    payload = _load(path)
-    if isinstance(payload, dict):
-        iterator = ((str(key), value) for key, value in payload.items())
-    elif isinstance(payload, list):
-        iterator = ((f"[{index}]", value) for index, value in enumerate(payload))
-    else:
-        iterator = (("value", payload),)
-    for key, value in iterator:
-        if _entry_id(key) == entry_id:
-            return {
-                "file": filename,
-                "id": entry_id,
-                "key": _redact_url(key),
-                "value": _redact(value),
-            }
-    raise KeyError(entry_id)
