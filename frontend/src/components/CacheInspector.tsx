@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import '../cache-browser.css';
 
-type CacheFile = {
-  name: string;
-  bytes: number;
-  modified_at: number;
-  entry_count: number;
-  parse_error: string | null;
-};
-
-type CacheEntry = {
+type OddsRow = {
   id: string;
-  key: string;
-  fetched_at: number | null;
+  provider: string;
+  source: string;
+  player: string;
+  market: string;
+  market_key: string;
+  side: string;
+  line: number | string | null;
+  american_odds: number | null;
+  decimal_odds: number | null;
+  probability: number | null;
+  price_source: string;
+  raw_title: string;
+  cache_file: string;
   age_seconds: number | null;
-  summary: string;
 };
 
 async function getJson<T>(url: string): Promise<T> {
@@ -31,91 +33,138 @@ function ageLabel(seconds: number | null): string {
   return `${(seconds / 86400).toFixed(1)}d old`;
 }
 
+function americanLabel(value: number | null): string {
+  if (value === null) return '—';
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+function decimalLabel(value: number | null): string {
+  return value === null ? '—' : value.toFixed(2);
+}
+
+function probabilityLabel(value: number | null): string {
+  return value === null ? '—' : `${(value * 100).toFixed(1)}%`;
+}
+
+function lineLabel(row: OddsRow): string {
+  if (row.line === null || row.line === '') return row.side || '—';
+  return `${row.side} ${row.line}`.trim();
+}
+
 export function CacheInspector() {
-  const [files, setFiles] = useState<CacheFile[]>([]);
-  const [file, setFile] = useState<string | null>(null);
-  const [entries, setEntries] = useState<CacheEntry[]>([]);
+  const [rows, setRows] = useState<OddsRow[]>([]);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getJson<{ files: CacheFile[] }>('/debug/cache')
+    getJson<{ rows: OddsRow[]; count: number }>('/debug/odds-cache')
       .then((payload) => {
-        setFiles(payload.files);
-        setFile((current) => current ?? payload.files[0]?.name ?? null);
-      })
-      .catch((reason: unknown) =>
-        setError(reason instanceof Error ? reason.message : 'Could not load cache index.'),
-      );
-  }, []);
-
-  useEffect(() => {
-    if (!file) return;
-    getJson<{ entries: CacheEntry[] }>(`/debug/cache?file=${encodeURIComponent(file)}`)
-      .then((payload) => {
-        setEntries(payload.entries);
+        setRows(payload.rows);
         setError(null);
       })
       .catch((reason: unknown) =>
-        setError(reason instanceof Error ? reason.message : 'Could not load cache entries.'),
+        setError(reason instanceof Error ? reason.message : 'Could not load cached odds.'),
       );
-  }, [file]);
+  }, []);
 
-  const visibleEntries = useMemo(() => {
+  const visibleRows = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    return needle
-      ? entries.filter((entry) => `${entry.key} ${entry.summary}`.toLowerCase().includes(needle))
-      : entries;
-  }, [entries, filter]);
+    if (!needle) return rows;
+    return rows.filter((row) =>
+      [
+        row.player,
+        row.market,
+        row.market_key,
+        row.provider,
+        row.source,
+        row.side,
+        row.raw_title,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [filter, rows]);
 
   return (
     <main className="cache-browser">
       <header className="cache-browser-header">
         <div>
           <div className="eyebrow">Settings</div>
-          <h1>Cache inspector</h1>
-          <p>Read-only cache inventory with request credentials removed from displayed keys.</p>
+          <h1>Cached odds</h1>
+          <p>Search the odds currently stored locally and verify exactly what each source reported.</p>
         </div>
         <a href="/">Back to app</a>
       </header>
+
+      <section className="cache-search-panel">
+        <input
+          autoFocus
+          type="search"
+          value={filter}
+          placeholder="Search player or market — e.g. Justin Jefferson or anytime touchdown"
+          aria-label="Search cached odds by player or market"
+          onChange={(event) => setFilter(event.target.value)}
+        />
+        <div className="cache-search-count">
+          {visibleRows.length.toLocaleString()} of {rows.length.toLocaleString()} cached odds
+        </div>
+      </section>
+
       {error ? <div className="cache-browser-error">{error}</div> : null}
-      <div className="cache-browser-grid safe-grid">
-        <aside className="cache-files">
-          {files.map((item) => (
-            <button
-              key={item.name}
-              type="button"
-              className={item.name === file ? 'active' : ''}
-              onClick={() => setFile(item.name)}
-            >
-              <span>{item.name}</span>
-              <small>{item.entry_count} entries</small>
-            </button>
-          ))}
-        </aside>
-        <section className="cache-entries">
-          <div className="cache-pane-heading cache-entry-heading">
-            <span>{file ?? 'Entries'}</span>
-            <input
-              type="search"
-              value={filter}
-              placeholder="Filter keys"
-              aria-label="Filter cache entries"
-              onChange={(event) => setFilter(event.target.value)}
-            />
-          </div>
-          <div className="cache-entry-list">
-            {visibleEntries.map((entry) => (
-              <div className="cache-entry-row" key={entry.id}>
-                <code>{entry.key}</code>
-                <span>
-                  {entry.summary} · {ageLabel(entry.age_seconds)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+
+      <section className="cache-odds-shell">
+        <div className="cache-odds-table-wrap">
+          <table className="cache-odds-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Market</th>
+                <th>Side / line</th>
+                <th>Source</th>
+                <th>Odds</th>
+                <th>Implied</th>
+                <th>Cached</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <strong>{row.player || '—'}</strong>
+                    {row.raw_title && row.raw_title !== row.player ? (
+                      <small>{row.raw_title}</small>
+                    ) : null}
+                  </td>
+                  <td>
+                    <span>{row.market}</span>
+                    {row.market_key ? <small>{row.market_key}</small> : null}
+                  </td>
+                  <td className="cache-line-cell">{lineLabel(row)}</td>
+                  <td>
+                    <strong>{row.source}</strong>
+                    <small>
+                      {row.provider} · {row.price_source}
+                    </small>
+                  </td>
+                  <td className="cache-odds-cell">
+                    <strong>{americanLabel(row.american_odds)}</strong>
+                    <small>{decimalLabel(row.decimal_odds)} decimal</small>
+                  </td>
+                  <td className="cache-number-cell">{probabilityLabel(row.probability)}</td>
+                  <td>
+                    <span>{ageLabel(row.age_seconds)}</span>
+                    <small>{row.cache_file}</small>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {visibleRows.length === 0 ? (
+          <div className="cache-empty">No cached odds match that player or market.</div>
+        ) : null}
+      </section>
     </main>
   );
 }
