@@ -12,3 +12,8 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+# Existing tests mock the historical Odds API boundary and must stay fully
+# deterministic. Multi-provider behavior is exercised explicitly by provider
+# contract/orchestration tests instead of making the general suite hit networks.
+os.environ.setdefault("ODDS_PROVIDERS", "odds_api")

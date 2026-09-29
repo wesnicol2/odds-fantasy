@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Iterable
 
-from .aggregator import PLAYER_POSITION_META_KEY, aggregate_by_week
+from .aggregator import PLAYER_POSITION_META_KEY, aggregate_odds_api_by_week
 from .provider_contract import (
     ProviderDiagnostic,
     ProviderResult,
@@ -100,7 +100,7 @@ def normalize_fetched_odds(
 ) -> ProviderResult:
     """Preserve current Odds API matching while emitting the provider contract."""
 
-    legacy = aggregate_by_week(event_odds_by_game, planned_games)
+    legacy = aggregate_odds_api_by_week(event_odds_by_game, planned_games)
     quotes: list[StatContractQuote] = []
     diagnostics: list[ProviderDiagnostic] = []
     game_by_player: dict[str, str] = {}
