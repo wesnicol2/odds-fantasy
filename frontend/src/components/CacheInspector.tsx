@@ -71,15 +71,7 @@ export function CacheInspector() {
     const needle = filter.trim().toLowerCase();
     if (!needle) return rows;
     return rows.filter((row) =>
-      [
-        row.player,
-        row.market,
-        row.market_key,
-        row.provider,
-        row.source,
-        row.side,
-        row.raw_title,
-      ]
+      [row.player, row.market, row.market_key, row.provider, row.source, row.side, row.raw_title]
         .join(' ')
         .toLowerCase()
         .includes(needle),
@@ -92,14 +84,15 @@ export function CacheInspector() {
         <div>
           <div className="eyebrow">Settings</div>
           <h1>Cached odds</h1>
-          <p>Search the odds currently stored locally and verify exactly what each source reported.</p>
+          <p>
+            Search the odds currently stored locally and verify exactly what each source reported.
+          </p>
         </div>
         <a href="/">Back to app</a>
       </header>
 
       <section className="cache-search-panel">
         <input
-          autoFocus
           type="search"
           value={filter}
           placeholder="Search player or market — e.g. Justin Jefferson or anytime touchdown"
