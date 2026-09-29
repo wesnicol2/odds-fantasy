@@ -93,6 +93,14 @@ def _entry_metadata(value: Any, now: float) -> tuple[float | None, float | None,
     return fetched_at, age, summary
 
 
+def _iter_entries(payload: Any):
+    if isinstance(payload, dict):
+        return ((str(key), value) for key, value in payload.items())
+    if isinstance(payload, list):
+        return ((f"[{index}]", value) for index, value in enumerate(payload))
+    return iter((("value", payload),))
+
+
 def list_cache_files() -> dict[str, Any]:
     files: list[dict[str, Any]] = []
     for path in _cache_paths():
@@ -123,13 +131,7 @@ def list_cache_entries(filename: str) -> dict[str, Any]:
     payload = _load(path)
     now = time.time()
     entries: list[dict[str, Any]] = []
-    if isinstance(payload, dict):
-        iterator = ((str(key), value) for key, value in payload.items())
-    elif isinstance(payload, list):
-        iterator = ((f"[{index}]", value) for index, value in enumerate(payload))
-    else:
-        iterator = (("value", payload),)
-    for key, value in iterator:
+    for key, value in _iter_entries(payload):
         fetched_at, age_seconds, summary = _entry_metadata(value, now)
         entries.append(
             {
@@ -142,3 +144,25 @@ def list_cache_entries(filename: str) -> dict[str, Any]:
         )
     entries.sort(key=lambda item: item["key"])
     return {"file": filename, "entries": entries}
+
+
+def get_cache_entry(filename: str, entry_id: str) -> dict[str, Any]:
+    """Return metadata for one cache entry without exposing its stored payload."""
+    path = _safe_cache_path(filename)
+    if path is None:
+        raise FileNotFoundError(filename)
+    payload = _load(path)
+    now = time.time()
+    for key, value in _iter_entries(payload):
+        if _entry_id(key) != entry_id:
+            continue
+        fetched_at, age_seconds, summary = _entry_metadata(value, now)
+        return {
+            "file": filename,
+            "id": entry_id,
+            "key": _redact_url(key),
+            "fetched_at": fetched_at,
+            "age_seconds": age_seconds,
+            "summary": summary,
+        }
+    raise KeyError(entry_id)
