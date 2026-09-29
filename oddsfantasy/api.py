@@ -140,6 +140,13 @@ def application(environ, start_response):
         if path.startswith("/assets/"):
             return _serve_static(start_response, path.lstrip("/"))
 
+        if path == "/debug/odds-cache":
+            return _json_response(
+                start_response,
+                "200 OK",
+                cache_browser.cached_odds_rows(q("q")),
+            )
+
         if path == "/debug/cache":
             filename = q("file")
             entry_id = q("entry")
