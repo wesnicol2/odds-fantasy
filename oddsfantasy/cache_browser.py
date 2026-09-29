@@ -227,7 +227,11 @@ def _odds_api_rows(path: Path, now: float) -> list[dict[str, Any]]:
     for cache_key, cached_value in _iter_entries(payload):
         fetched_at = None
         try:
-            fetched_at = float(meta.get(cache_key)) if isinstance(meta, dict) and meta.get(cache_key) else None
+            fetched_at = (
+                float(meta.get(cache_key))
+                if isinstance(meta, dict) and meta.get(cache_key)
+                else None
+            )
         except (TypeError, ValueError):
             fetched_at = None
         _, data = _entry_payload(cached_value)
@@ -260,7 +264,15 @@ def _odds_api_rows(path: Path, now: float) -> list[dict[str, Any]]:
                     )
                     rows.append(
                         {
-                            "id": _row_id("odds_api", source, market_key, player, side, line),
+                            "id": _row_id(
+                                "odds_api",
+                                cache_key,
+                                source,
+                                market_key,
+                                player,
+                                side,
+                                line,
+                            ),
                             "provider": "Odds API",
                             "source": source,
                             "player": player,
@@ -313,7 +325,9 @@ def _polymarket_rows(path: Path, now: float) -> list[dict[str, Any]]:
             description = str(market.get("description") or "").strip()
             combined_text = f"{raw_title} {description}".strip()
             market_key = provider_polymarket._market_key(combined_text)
-            predicate = provider_polymarket._predicate(combined_text, market_key) if market_key else None
+            predicate = (
+                provider_polymarket._predicate(combined_text, market_key) if market_key else None
+            )
             line = predicate.value if predicate is not None else None
             player = _infer_player(raw_title)
             display_prices = _json_list(market.get("outcomePrices"))
