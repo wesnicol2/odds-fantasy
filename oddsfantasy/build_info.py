@@ -66,6 +66,7 @@ def _from_git() -> dict | None:
         "dirty": dirty,
         "source": "git",
         "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        "commit_at": _git("show", "-s", "--format=%cI", "HEAD"),
     }
 
 
@@ -78,6 +79,7 @@ def _from_env() -> dict | None:
         "dirty": False,
         "source": "image",
         "branch": (os.getenv("APP_BRANCH") or "").strip() or None,
+        "commit_at": (os.getenv("APP_COMMIT_AT") or "").strip() or None,
     }
 
 
@@ -92,6 +94,7 @@ def build_info() -> dict:
             "dirty": False,
             "source": UNKNOWN,
             "branch": None,
+            "commit_at": None,
         }
     )
     commit = info["commit"]
