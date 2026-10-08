@@ -102,8 +102,8 @@ export function PlayerRanking({
       {incompleteCount > 0 ? (
         <div className="status-note">
           {incompleteCount} {incompleteCount === 1 ? 'player has' : 'players have'} incomplete
-          betting-line coverage. Partial projections still participate; players with no usable
-          lines remain unknown rather than 0 FP.
+          betting-line coverage. Partial projections still participate; players with no usable lines
+          remain unknown rather than 0 FP.
         </div>
       ) : null}
       <div className="ranking-tools">
