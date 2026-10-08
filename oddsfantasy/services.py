@@ -30,6 +30,12 @@ NO_GAMES_SCHEDULED_MESSAGE = (
 )
 
 
+class OddsFetchMap(dict):
+    """Fetched event payloads plus non-fatal per-game transport diagnostics."""
+
+    fetch_diagnostics: tuple[dict, ...] = ()
+
+
 def _resolve_identity(
     username: str,
     season: str,
@@ -104,10 +110,11 @@ def _resolve_roster_positions(username: str, season: str, league_id: str | None)
 
 def _fetch_odds(
     planned_games: dict[str, object], cache_mode: str, regions: str = "us"
-) -> dict[str, object]:
-    """Fetch each planned player-prop game once, concurrently."""
+) -> OddsFetchMap:
+    """Fetch each planned player-prop game once without hiding failed games."""
+    output = OddsFetchMap()
     if not planned_games:
-        return {}
+        return output
 
     def task(item):
         game_id, game = item
@@ -120,7 +127,7 @@ def _fetch_odds(
         )
         return game_id, data
 
-    output: dict[str, object] = {}
+    diagnostics: list[dict] = []
     workers = min(8, len(planned_games))
     with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
         futures = {executor.submit(task, item): item[0] for item in planned_games.items()}
@@ -130,7 +137,23 @@ def _fetch_odds(
                 _, data = future.result()
                 output[game_id] = data
             except Exception as exc:
-                print(f"[services] odds fetch failed for {game_id}: {exc}")
+                response = getattr(exc, "response", None)
+                status = getattr(response, "status_code", None)
+                failure = f"HTTP {status}" if status is not None else type(exc).__name__
+                print(f"[services] odds fetch failed for {game_id}: {failure}")
+                diagnostics.append(
+                    {
+                        "provider_id": "odds_api",
+                        "code": "odds_api_fetch_failed",
+                        "message": f"Sportsbook player-prop fetch failed ({failure}).",
+                        "severity": "error",
+                        "game_id": game_id,
+                        "player_id": None,
+                        "market_key": None,
+                        "provider_market_id": None,
+                    }
+                )
+    output.fetch_diagnostics = tuple(diagnostics)
     return output
 
 
@@ -203,6 +226,10 @@ def _load_week_context(
     planned = planned_all.get(week, {})
     event_odds = _fetch_odds(planned, cache_mode=effective_mode, regions=region)
     players_odds = aggregate_by_week(event_odds, planned)
+    provider_diagnostics = (
+        tuple(getattr(event_odds, "fetch_diagnostics", ()) or ())
+        + tuple(getattr(players_odds, "provider_diagnostics", ()) or ())
+    )
 
     info_by_alias: dict[str, dict] = {}
     for game in planned.values():
@@ -216,6 +243,7 @@ def _load_week_context(
         "players_odds": players_odds,
         "planned": planned,
         "info_by_alias": info_by_alias,
+        "provider_diagnostics": provider_diagnostics,
     }
     cache[key] = (now, context)
     return context
@@ -237,6 +265,35 @@ def _roster_skill_players(roster: dict) -> list[dict]:
             }
         )
     return rows
+
+
+def _player_data_issues(context: dict, alias: str) -> list[dict]:
+    """Return warning/error diagnostics that can affect one player's evidence."""
+    game_ids = {
+        game_id
+        for game_id, game in (context.get("planned") or {}).items()
+        if any(player.get("alias") == alias for player in game.players)
+    }
+    issues: list[dict] = []
+    for diagnostic in context.get("provider_diagnostics") or ():
+        if not isinstance(diagnostic, dict):
+            continue
+        if diagnostic.get("severity", "info") not in {"warning", "error"}:
+            continue
+        player_id = diagnostic.get("player_id")
+        game_id = diagnostic.get("game_id")
+        if player_id and player_id != alias:
+            continue
+        if game_id and game_id not in game_ids:
+            continue
+        issues.append(dict(diagnostic))
+    return issues
+
+
+def _player_data_status(issues: list[dict]) -> str:
+    if any(issue.get("code") == "odds_api_fetch_failed" for issue in issues):
+        return "fetch_failed"
+    return "degraded" if issues else "ok"
 
 
 def compute_projections(
@@ -276,6 +333,8 @@ def compute_projections(
 
     for player in _roster_skill_players(roster):
         by_book = players_odds.get(player["alias"], {})
+        data_issues = _player_data_issues(context, player["alias"])
+        data_status = _player_data_status(data_issues)
         # Always project with explicit roster position, even with zero matched
         # lines, so the report can say exactly which core markets are missing.
         projection = project_player(by_book, scoring_rules, position=player["pos"])
@@ -304,6 +363,8 @@ def compute_projections(
                 "required_markets": list(projection.required_markets),
                 "missing_markets": list(projection.missing_markets),
                 "projection_note": projection.projection_note,
+                "data_status": data_status,
+                "data_issues": data_issues,
             }
         )
 
