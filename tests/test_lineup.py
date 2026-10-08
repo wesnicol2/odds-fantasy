@@ -93,6 +93,73 @@ class BestLineupTest(unittest.TestCase):
         self.assertEqual(pressure[0]["displaces_slot"], "QB")
         self.assertEqual(pressure[0]["displaces_slot_index"], 0)
 
+    def test_partial_coverage_player_still_competes_for_lineup(self):
+        players = [
+            {
+                "name": "Full RB",
+                "pos": "RB",
+                "floor": 10,
+                "mid": 15,
+                "ceiling": 20,
+                "coverage_status": "complete",
+                "missing_markets": [],
+            },
+            {
+                "name": "Partial RB",
+                "pos": "RB",
+                "floor": 12,
+                "mid": 18,
+                "ceiling": 24,
+                "coverage_status": "partial",
+                "missing_markets": ["player_receptions"],
+            },
+        ]
+
+        result = build_best_lineup(players, target="mid", roster_positions=["RB"])
+
+        self.assertEqual(result["lineup"][0]["name"], "Partial RB")
+        self.assertEqual(result["lineup"][0]["coverage_status"], "partial")
+        self.assertEqual(result["lineup"][0]["missing_markets"], ["player_receptions"])
+
+    def test_incomplete_non_starters_remain_on_coverage_watch(self):
+        players = [
+            {
+                "name": "Starter RB",
+                "pos": "RB",
+                "floor": 10,
+                "mid": 20,
+                "ceiling": 25,
+                "coverage_status": "complete",
+                "missing_markets": [],
+            },
+            {
+                "name": "Partial Bench",
+                "pos": "RB",
+                "floor": 8,
+                "mid": 16,
+                "ceiling": 22,
+                "coverage_status": "partial",
+                "missing_markets": ["player_receptions"],
+            },
+            {
+                "name": "Unknown Bench",
+                "pos": "RB",
+                "floor": None,
+                "mid": None,
+                "ceiling": None,
+                "coverage_status": "missing",
+                "missing_markets": ["player_rush_yds", "player_reception_yds"],
+            },
+        ]
+
+        result = build_best_lineup(players, target="mid", roster_positions=["RB"])
+        watch = {row["name"]: row for row in result["coverage_watch"]}
+
+        self.assertEqual(set(watch), {"Partial Bench", "Unknown Bench"})
+        self.assertTrue(watch["Partial Bench"]["has_projection"])
+        self.assertFalse(watch["Unknown Bench"]["has_projection"])
+        self.assertEqual(watch["Partial Bench"]["missing_markets"], ["player_receptions"])
+
     def test_bench_pressure_tracks_destination_slot_through_reshuffle(self):
         players = [
             {"name": "Alpha RB", "pos": "RB", "floor": 10, "mid": 17, "ceiling": 22},
