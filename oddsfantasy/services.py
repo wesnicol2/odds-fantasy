@@ -226,9 +226,8 @@ def _load_week_context(
     planned = planned_all.get(week, {})
     event_odds = _fetch_odds(planned, cache_mode=effective_mode, regions=region)
     players_odds = aggregate_by_week(event_odds, planned)
-    provider_diagnostics = (
-        tuple(getattr(event_odds, "fetch_diagnostics", ()) or ())
-        + tuple(getattr(players_odds, "provider_diagnostics", ()) or ())
+    provider_diagnostics = tuple(getattr(event_odds, "fetch_diagnostics", ()) or ()) + tuple(
+        getattr(players_odds, "provider_diagnostics", ()) or ()
     )
 
     info_by_alias: dict[str, dict] = {}
