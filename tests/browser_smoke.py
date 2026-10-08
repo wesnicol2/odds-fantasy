@@ -689,8 +689,9 @@ def main() -> None:
         inspector.get_by_text("Explain betting lines", exact=True).click()
         inspector.get_by_text("Consensus anchors", exact=True).wait_for()
         inspector.get_by_text("Exact sportsbook lines", exact=True).wait_for()
-        inspector.get_by_text("draftkings", exact=True).wait_for()
-        inspector.get_by_text("fanduel", exact=True).wait_for()
+        stat_evidence = inspector.locator("details.evidence-details")
+        stat_evidence.get_by_text("draftkings", exact=True).wait_for()
+        stat_evidence.get_by_text("fanduel", exact=True).wait_for()
         inspector.get_by_role("button", name="All point sources").click()
         inspector.get_by_role("button", name="Analyze Receptions, 0.0 FP").click()
 
