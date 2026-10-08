@@ -469,11 +469,31 @@ def api_fixture(route: Route) -> None:
                         "pos": "WR",
                         "team": "Miami Dolphins",
                         "points": 15,
+                        "coverage_status": "partial",
+                        "missing_markets": ["player_receptions"],
                         "delta_to_lineup": 2,
                         "slot": "WR",
                         "displaces": "Alpha Runner",
                         "displaces_slot": "RB",
                     }
+                ],
+                "coverage_watch": [
+                    {
+                        "name": "Beta Receiver",
+                        "pos": "WR",
+                        "team": "Miami Dolphins",
+                        "coverage_status": "partial",
+                        "missing_markets": ["player_receptions"],
+                        "has_projection": True,
+                    },
+                    {
+                        "name": "Gamma Unknown",
+                        "pos": "RB",
+                        "team": "Seattle Seahawks",
+                        "coverage_status": "missing",
+                        "missing_markets": ["player_rush_yds"],
+                        "has_projection": False,
+                    },
                 ],
                 "unmodeled_slots": ["K"],
                 "unfilled_slots": [],
@@ -526,6 +546,10 @@ def main() -> None:
         dashboard.get_by_text("Alpha Runner", exact=True).wait_for()
         dashboard.get_by_text("Beta Receiver", exact=True).wait_for()
         dashboard.get_by_text("2.0", exact=True).wait_for()
+        dashboard.get_by_text("limited lines · missing receptions", exact=True).wait_for()
+        coverage_watch = dashboard.get_by_label("Bench line coverage")
+        coverage_watch.get_by_text("Gamma Unknown", exact=True).wait_for()
+        coverage_watch.get_by_text("no usable lines · missing rush yds", exact=True).wait_for()
         assert dashboard.get_by_text("LAC", exact=True).count() == 2
 
         # A close bench call opens the optimizer-paired, side-by-side start/sit explanation.
