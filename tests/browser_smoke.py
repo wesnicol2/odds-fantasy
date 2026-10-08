@@ -167,6 +167,24 @@ def api_fixture(route: Route) -> None:
     parsed = urlparse(route.request.url)
     query = parse_qs(parsed.query)
 
+    if parsed.path == "/health":
+        fulfill_json(
+            route,
+            {
+                "status": "ok",
+                "build": {
+                    "commit": "1234567890abcdef1234567890abcdef12345678",
+                    "commit_short": "1234567",
+                    "source": "image",
+                    "dirty": False,
+                    "image_tag": "test",
+                    "branch": "feature/multi-provider-odds",
+                    "built_at": "2026-10-08T02:40:00Z",
+                },
+            },
+        )
+        return
+
     if parsed.path == "/user/leagues":
         fulfill_json(
             route,
@@ -536,6 +554,10 @@ def main() -> None:
         setup.wait_for(state="hidden")
 
         page.get_by_text("Smoke League · Smoke Team", exact=True).wait_for()
+        build_stamp = page.get_by_label("Test build")
+        build_stamp.get_by_text("TEST", exact=True).wait_for()
+        build_stamp.get_by_text("1234567", exact=True).wait_for()
+        build_stamp.get_by_text("Updated 2026-10-08 02:40:00 UTC", exact=True).wait_for()
         cookies = {row["name"]: row["value"] for row in context.cookies()}
         assert cookies["league_id"] == "L1"
         assert cookies["roster_id"] == "7"
