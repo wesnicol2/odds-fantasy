@@ -80,7 +80,9 @@ function routeUrl(view: WorkspaceView, week: WeekWindow): string {
 
 function buildTimestamp(value: string | null): string {
   if (!value) return 'unknown';
-  return value.replace('T', ' ').replace(/Z$/, ' UTC');
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
 }
 
 export function App() {
@@ -882,11 +884,11 @@ export function App() {
         <aside
           className="test-build-stamp"
           aria-label="Test build"
-          title={`Commit ${build.commit} · Built ${build.built_at ?? 'unknown'}`}
+          title={`Commit ${build.commit} · Commit updated ${build.commit_at ?? 'unknown'} · Image built ${build.built_at ?? 'unknown'}`}
         >
           <strong>TEST</strong>
           <code>{build.commit_short}</code>
-          <span>Updated {buildTimestamp(build.built_at)}</span>
+          <span>Updated {buildTimestamp(build.commit_at)}</span>
         </aside>
       ) : null}
 
