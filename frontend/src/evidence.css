@@ -479,7 +479,6 @@
   }
 }
 
-
 .book-evidence-list {
   display: grid;
   gap: 6px;
@@ -517,7 +516,7 @@
   overflow-wrap: anywhere;
 }
 
-.book-evidence-name small,
+.book-evidence-provider,
 .book-evidence-count {
   color: #687382;
   font-size: 9px;
