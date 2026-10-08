@@ -125,6 +125,44 @@ def market_lines(point_a: float, point_b: float) -> list[dict]:
     ]
 
 
+def book_evidence() -> list[dict]:
+    return [
+        {
+            "book": "draftkings",
+            "provider": "odds_api",
+            "lines": [
+                {
+                    "market_key": "player_rush_yds",
+                    "source": "main",
+                    "point": 64.5,
+                    "over_odds": 1.91,
+                    "under_odds": 1.91,
+                },
+                {
+                    "market_key": "player_reception_yds",
+                    "source": "main",
+                    "point": 44.5,
+                    "over_odds": 1.91,
+                    "under_odds": 1.91,
+                },
+            ],
+        },
+        {
+            "book": "fanduel",
+            "provider": "odds_api",
+            "lines": [
+                {
+                    "market_key": "player_rush_yds",
+                    "source": "alternate",
+                    "point": 84.5,
+                    "over_odds": 2.10,
+                    "under_odds": 1.72,
+                }
+            ],
+        },
+    ]
+
+
 def api_fixture(route: Route) -> None:
     parsed = urlparse(route.request.url)
     query = parse_qs(parsed.query)
@@ -200,6 +238,9 @@ def api_fixture(route: Route) -> None:
                     "team_implied_total": 21 if is_receiver else 25.5,
                     "books_used": 6,
                 },
+                "books": book_evidence(),
+                "data_status": "ok",
+                "data_issues": [],
                 "markets": {
                     # The back is priced for rushing, the receiver is not: the
                     # exact mismatch the combined yardage row exists to fix.
@@ -606,6 +647,18 @@ def main() -> None:
         assert "17.0" in alpha_row.inner_text()
         assert "25.0" in alpha_row.inner_text()
         alpha_row.locator(".player-name-button").click()
+        inspector.get_by_text("Books & sources", exact=True).wait_for()
+        draftkings_book = inspector.locator("details.book-evidence-card").filter(
+            has_text="draftkings"
+        )
+        draftkings_book.locator("summary").click()
+        draftkings_lines = draftkings_book.get_by_role(
+            "table", name="draftkings lines for Alpha Runner"
+        )
+        assert draftkings_lines.locator("tbody tr").count() == 2
+        assert "Rushing yards" in draftkings_lines.inner_text()
+        assert "64.5" in draftkings_lines.inner_text()
+
         chart = page.locator(".probability-chart")
         chart.wait_for()
         assert chart.get_attribute("role") == "img"
