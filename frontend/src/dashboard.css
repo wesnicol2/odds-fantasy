@@ -265,6 +265,53 @@
   font-size: 12px;
 }
 
+.dashboard-slot-decision-player .dashboard-coverage-inline {
+  color: #8e8779;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dashboard-coverage-watch {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-top: 1px solid #1f252d;
+  color: #707985;
+}
+
+.dashboard-coverage-watch-label {
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-coverage-watch-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+
+.dashboard-coverage-watch-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  font-size: 8px;
+}
+
+.dashboard-coverage-watch-row strong {
+  color: #9aa3ad;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.dashboard-coverage-watch-row span {
+  color: #706f6a;
+}
+
 .dashboard-slot-decision-projection,
 .dashboard-slot-decision-gap {
   display: grid;
