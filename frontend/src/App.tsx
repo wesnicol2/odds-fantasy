@@ -80,7 +80,9 @@ function routeUrl(view: WorkspaceView, week: WeekWindow): string {
 
 function buildTimestamp(value: string | null): string {
   if (!value) return 'unknown';
-  return value.replace('T', ' ').replace(/Z$/, ' UTC');
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
 }
 
 export function App() {
