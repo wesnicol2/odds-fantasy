@@ -12,11 +12,7 @@ class OddsFetchDiagnosticsTest(unittest.TestCase):
     )
     def test_failed_game_fetch_is_preserved_as_diagnostic(self, _mock_fetch):
         result = services._fetch_odds(
-            {
-                "game-1": SimpleNamespace(
-                    markets=["player_rush_yds", "player_anytime_td"]
-                )
-            },
+            {"game-1": SimpleNamespace(markets=["player_rush_yds", "player_anytime_td"])},
             cache_mode="fresh",
         )
 
