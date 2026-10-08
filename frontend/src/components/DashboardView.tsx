@@ -316,7 +316,7 @@ export function DashboardView({
           ) : null}
 
           {coverageOnly.length ? (
-            <div className="dashboard-coverage-watch" aria-label="Bench line coverage">
+            <section className="dashboard-coverage-watch" aria-label="Bench line coverage">
               <span className="dashboard-coverage-watch-label">Coverage watch</span>
               <div className="dashboard-coverage-watch-list">
                 {coverageOnly.map((row) => (
@@ -326,7 +326,7 @@ export function DashboardView({
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           ) : null}
 
           <button type="button" className="dashboard-detail-action" onClick={onOpenLineup}>
