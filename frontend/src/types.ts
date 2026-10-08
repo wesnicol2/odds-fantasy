@@ -5,6 +5,7 @@ export interface BuildInfo {
   dirty: boolean;
   image_tag: string | null;
   branch: string | null;
+  commit_at: string | null;
   built_at: string | null;
 }
 
