@@ -35,8 +35,8 @@ export function PlayerBookEvidence({ details, detailsLoading }: PlayerBookEviden
         <div className="source-status source-status-error">
           <strong>Odds fetch failed.</strong>
           <span>
-            The sportsbook request for this player&apos;s game failed. Any sources below are
-            partial evidence; an empty list is not proof that no betting lines exist.
+            The sportsbook request for this player&apos;s game failed. Any sources below are partial
+            evidence; an empty list is not proof that no betting lines exist.
           </span>
         </div>
       ) : status === 'degraded' ? (
@@ -67,7 +67,7 @@ export function PlayerBookEvidence({ details, detailsLoading }: PlayerBookEviden
                 <summary>
                   <span className="book-evidence-name">
                     <strong>{book.book}</strong>
-                    {provider ? <small>{provider}</small> : null}
+                    {provider ? <small className="book-evidence-provider">{provider}</small> : null}
                   </span>
                   <span className="book-evidence-count">
                     {book.lines.length} {book.lines.length === 1 ? 'line' : 'lines'}
@@ -76,9 +76,7 @@ export function PlayerBookEvidence({ details, detailsLoading }: PlayerBookEviden
                 <div className="evidence-table-scroll book-lines">
                   <table
                     className="evidence-table"
-                    aria-label={
-                      book.book + ' lines for ' + (details?.player.name ?? 'selected player')
-                    }
+                    aria-label={`${book.book} lines for ${details?.player.name ?? 'selected player'}`}
                   >
                     <thead>
                       <tr>
@@ -124,14 +122,7 @@ export function PlayerBookEvidence({ details, detailsLoading }: PlayerBookEviden
           </summary>
           <ul>
             {issues.map((issue, index) => (
-              <li
-                key={[
-                  issue.provider_id,
-                  issue.code,
-                  issue.game_id ?? '',
-                  index,
-                ].join(':')}
-              >
+              <li key={[issue.provider_id, issue.code, issue.game_id ?? '', index].join(':')}>
                 <strong>{providerLabel(issue.provider_id) ?? issue.provider_id}</strong>
                 <span>{issue.message}</span>
               </li>
