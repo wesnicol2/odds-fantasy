@@ -2,6 +2,7 @@ import { currentNflSeason, savedLeagueIdentity } from '../identity';
 import type { DataMode, LineupTarget, WeekWindow } from '../state/workspace';
 import type {
   DefenseResponse,
+  HealthResponse,
   LeagueResolution,
   LineupResponse,
   PlayerOddsDetails,
@@ -51,6 +52,10 @@ function commonParams(week: WeekWindow, mode: DataMode): URLSearchParams {
   params.set('week', week);
   params.set('mode', mode);
   return params;
+}
+
+export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
+  return fetchJson<HealthResponse>('/health', new URLSearchParams(), signal);
 }
 
 export class MissingIdentityError extends Error {
