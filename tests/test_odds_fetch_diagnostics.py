@@ -30,6 +30,42 @@ class OddsFetchDiagnosticsTest(unittest.TestCase):
         self.assertIn("RuntimeError", issue["message"])
         self.assertNotIn("secret", issue["message"])
 
+    @patch("oddsfantasy.services._load_week_context")
+    def test_projection_row_labels_fetch_failure_instead_of_no_lines(self, mock_context):
+        game = SimpleNamespace(players=[{"alias": "Derrick Henry"}])
+        mock_context.return_value = {
+            "roster": {
+                "players": {
+                    "1": {
+                        "name": {"full": "Derrick Henry"},
+                        "primary_position": "RB",
+                        "editorial_team_full_name": "Baltimore Ravens",
+                    }
+                }
+            },
+            "scoring_rules": {"rush_yd": 0.1, "rush_td": 6},
+            "players_odds": {},
+            "planned": {"game-1": game},
+            "provider_diagnostics": (
+                {
+                    "provider_id": "odds_api",
+                    "code": "odds_api_fetch_failed",
+                    "message": "Sportsbook player-prop fetch failed (HTTP 500).",
+                    "severity": "error",
+                    "game_id": "game-1",
+                },
+            ),
+        }
+
+        report = services.compute_projections(username="u", season="2026")
+
+        player = report["players"][0]
+        self.assertEqual(player["name"], "Derrick Henry")
+        self.assertEqual(player["data_status"], "fetch_failed")
+        self.assertEqual(player["coverage_status"], "missing")
+        self.assertFalse(player["has_projection"])
+        self.assertEqual(len(player["data_issues"]), 1)
+
     def test_game_diagnostic_maps_to_only_that_games_player(self):
         game = SimpleNamespace(players=[{"alias": "Derrick Henry"}])
         context = {
