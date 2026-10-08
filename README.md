@@ -101,7 +101,7 @@ npm run typecheck
 npm run build
 ```
 
-Feature/main CI additionally builds the exact Docker image and runs Chromium against the production-served React application with deterministic mocked application-data APIs. The deployed home-server Test container is optional and is reserved for deployment-specific verification.
+Feature/main CI additionally builds the exact Docker image and runs Chromium against the production-served React application with deterministic mocked application-data APIs. The deployed home-server Test container is optional and is reserved for deployment-specific verification. When the running image is tagged `test`, the UI always shows a fixed build stamp with the deployed commit ID and the UTC image build/update timestamp reported by `GET /health`.
 
 ## Endpoints
 
