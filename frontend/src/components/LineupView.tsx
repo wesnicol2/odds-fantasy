@@ -135,6 +135,9 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
                       {!row.locked && row.projection_note ? (
                         <span className="row-secondary">KICKER MARKET PROXY</span>
                       ) : null}
+                      {!row.locked && row.coverage_status === 'partial' ? (
+                        <span className="row-secondary">LIMITED LINES</span>
+                      ) : null}
                     </td>
                     <td>{row.pos}</td>
                     <td>{row.team || '—'}</td>
