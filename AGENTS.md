@@ -56,7 +56,7 @@ The Dockerfile is the production frontend build contract:
 
 The repository intentionally does **not** keep a second hand-written `ui/` implementation. Treat `/app/ui/` as generated runtime output. Do not add source files under repository `ui/` as a fallback or bypass the Vite build.
 
-Published images carry `APP_COMMIT`, `APP_IMAGE_TAG`, and `APP_BUILT_AT`; `GET /health` is the runtime source of truth for that metadata. When `image_tag` is `test`, React must keep a visible, fixed build stamp on every screen showing the short commit ID and UTC update/build timestamp. Do not derive either value from browser build-time constants or hide this stamp in Settings.
+Published images carry `APP_COMMIT`, `APP_IMAGE_TAG`, `APP_COMMIT_AT`, and `APP_BUILT_AT`; `GET /health` is the runtime source of truth for that metadata. `commit_at` is the Git committer timestamp for the deployed commit, while `built_at` is when CI built the container image. When `image_tag` is `test`, React must keep a visible, fixed build stamp on every screen showing the short commit ID and `commit_at` as the UTC **Updated** time. Never label the image build time as the app update time. Do not derive either value from browser build-time constants or hide this stamp in Settings.
 
 For local UI development, run the Python API on port 8000 and Vite on port 5173; `frontend/vite.config.ts` proxies application API routes to the Python service.
 
