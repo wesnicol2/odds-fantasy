@@ -558,7 +558,7 @@ def main() -> None:
         build_stamp = page.get_by_label("Test build")
         build_stamp.get_by_text("TEST", exact=True).wait_for()
         build_stamp.get_by_text("1234567", exact=True).wait_for()
-        build_stamp.get_by_text("Updated 2026-10-08 02:35:00+00:00", exact=True).wait_for()
+        build_stamp.get_by_text("Updated 2026-10-08 02:35:00 UTC", exact=True).wait_for()
         cookies = {row["name"]: row["value"] for row in context.cookies()}
         assert cookies["league_id"] == "L1"
         assert cookies["roster_id"] == "7"
