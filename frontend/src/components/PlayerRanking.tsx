@@ -41,10 +41,12 @@ function coverageMessage(player: ProjectionPlayer): string {
   const missing = (player.missing_markets ?? []).map(
     (market) => MARKET_LABELS[market] ?? market.replace(/^player_/, '').replaceAll('_', ' '),
   );
-  const prefix = player.coverage_status === 'partial' ? 'INCOMPLETE' : 'NO CORE LINES';
+  if (player.coverage_status === 'partial') {
+    return missing.length ? `LIMITED LINES · missing ${missing.join(', ')}` : 'LIMITED LINES';
+  }
   return missing.length
-    ? `${prefix} · missing ${missing.join(', ')} · excluded`
-    : `${prefix} · excluded from comparisons`;
+    ? `NO USABLE LINES · missing ${missing.join(', ')}`
+    : 'NO USABLE LINES · projection unknown';
 }
 
 export function PlayerRanking({
@@ -70,7 +72,7 @@ export function PlayerRanking({
   const projected = players.filter(
     (player) => player.floor !== null && player.mid !== null && player.ceiling !== null,
   );
-  const incompleteCount = players.filter((player) => !player.has_projection).length;
+  const incompleteCount = players.filter((player) => player.coverage_status !== 'complete').length;
   const glyphMinimum = Math.min(0, ...projected.map((player) => player.floor ?? 0));
   const glyphMaximum = Math.max(1, ...projected.map((player) => player.ceiling ?? 0));
 
@@ -99,8 +101,9 @@ export function PlayerRanking({
     <div className="ranking-content">
       {incompleteCount > 0 ? (
         <div className="status-note">
-          {incompleteCount} {incompleteCount === 1 ? 'player is' : 'players are'} missing core
-          betting lines and excluded from comparisons. Missing means unknown, not 0 FP.
+          {incompleteCount} {incompleteCount === 1 ? 'player has' : 'players have'} incomplete
+          betting-line coverage. Partial projections still participate; players with no usable
+          lines remain unknown rather than 0 FP.
         </div>
       ) : null}
       <div className="ranking-tools">
@@ -194,7 +197,7 @@ export function PlayerRanking({
                           LOCKED {player.lineup_status === 'bench' ? 'ON BENCH' : 'STARTER'} ·{' '}
                           {formatPoints(player.actual_points)} actual FP
                         </small>
-                      ) : !player.has_projection ? (
+                      ) : player.coverage_status !== 'complete' ? (
                         <small>{coverageMessage(player)}</small>
                       ) : player.projection_note ? (
                         <small>{player.projection_note}</small>
