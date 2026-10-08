@@ -882,11 +882,11 @@ export function App() {
         <aside
           className="test-build-stamp"
           aria-label="Test build"
-          title={`Commit ${build.commit} · Built ${build.built_at ?? 'unknown'}`}
+          title={`Commit ${build.commit} · Commit updated ${build.commit_at ?? 'unknown'} · Image built ${build.built_at ?? 'unknown'}`}
         >
           <strong>TEST</strong>
           <code>{build.commit_short}</code>
-          <span>Updated {buildTimestamp(build.built_at)}</span>
+          <span>Updated {buildTimestamp(build.commit_at)}</span>
         </aside>
       ) : null}
 
