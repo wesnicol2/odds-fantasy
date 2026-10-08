@@ -3,6 +3,7 @@ import { formatOdds } from '../analysis/odds';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
 import { useWorkspaceStore } from '../state/workspace';
 import type { PlayerOddsDetails, ProjectionPlayer } from '../types';
+import { PlayerBookEvidence } from './PlayerBookEvidence';
 
 interface PlayerInspectorProps {
   player: ProjectionPlayer | null;
@@ -69,6 +70,8 @@ export function PlayerInspector({
       </div>
 
       {projectionNote ? <div className="status-note">{projectionNote}</div> : null}
+
+      <PlayerBookEvidence details={details} detailsLoading={detailsLoading} />
 
       {player.has_projection ? (
         <>
@@ -291,9 +294,11 @@ export function PlayerInspector({
         </>
       ) : (
         <div className="empty-state">
-          {player.coverage_status === 'partial'
-            ? 'Projection withheld because core betting-line coverage is incomplete.'
-            : 'No complete core betting-line coverage is available for this player.'}
+          {player.data_status === 'fetch_failed'
+            ? 'Projection unavailable because the sportsbook fetch failed for this game.'
+            : player.coverage_status === 'partial'
+              ? 'Projection withheld because core betting-line coverage is incomplete.'
+              : 'No complete core betting-line coverage is available for this player.'}
           {player.missing_markets?.length ? (
             <span> Missing: {player.missing_markets.map(metricLabel).join(', ')}.</span>
           ) : null}

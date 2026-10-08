@@ -20,6 +20,8 @@ export interface ProjectionPlayer {
   required_markets?: string[];
   missing_markets?: string[];
   projection_note?: string | null;
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
+  data_issues?: ProviderDiagnostic[];
   locked?: boolean;
   lineup_status?: 'starter' | 'bench' | null;
   actual_points?: number | null;
@@ -59,12 +61,36 @@ export interface ConsensusAnchor {
   survival: number;
 }
 
+export interface ProviderDiagnostic {
+  provider_id: string;
+  code: string;
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+  game_id?: string | null;
+  player_id?: string | null;
+  market_key?: string | null;
+}
+
 export interface SportsbookLine {
   book: string;
   source: 'main' | 'alternate';
   point: number | null;
   over_odds: number | null;
   under_odds: number | null;
+}
+
+export interface PlayerBookLine {
+  market_key: string;
+  source: 'main' | 'alternate';
+  point: number | null;
+  over_odds: number | null;
+  under_odds: number | null;
+}
+
+export interface PlayerBookEvidence {
+  book: string;
+  provider?: string | null;
+  lines: PlayerBookLine[];
 }
 
 export interface MarketDetail {
@@ -109,6 +135,9 @@ export interface PlayerOddsDetails {
   } | null;
   markets: Record<string, MarketDetail>;
   combined_markets?: Record<string, CombinedMarketDetail>;
+  books?: PlayerBookEvidence[];
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
+  data_issues?: ProviderDiagnostic[];
   message?: string;
   error?: string;
   ratelimit?: string;

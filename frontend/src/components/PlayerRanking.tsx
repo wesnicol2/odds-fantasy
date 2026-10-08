@@ -34,6 +34,10 @@ function formatPoints(value: number | null | undefined): string {
 }
 
 function coverageMessage(player: ProjectionPlayer): string {
+  if (player.data_status === 'fetch_failed') {
+    return 'ODDS FETCH FAILED · not treated as no lines';
+  }
+
   const missing = (player.missing_markets ?? []).map(
     (market) => MARKET_LABELS[market] ?? market.replace(/^player_/, '').replaceAll('_', ' '),
   );
