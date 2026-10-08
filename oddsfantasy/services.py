@@ -339,11 +339,11 @@ def compute_projections(
         projection = project_player(by_book, scoring_rules, position=player["pos"])
         has_projection = projection.has_projection
         coverage_status = (
-            "complete"
-            if has_projection
+            "missing"
+            if not has_projection
             else "partial"
-            if projection.has_partial_projection
-            else "missing"
+            if projection.missing_markets
+            else "complete"
         )
         rows.append(
             {
@@ -354,8 +354,9 @@ def compute_projections(
                 "mean": round(projection.mean, 2) if has_projection else None,
                 "curve": survival_curve(projection.samples) if has_projection else [],
                 "books_used": len(by_book),
-                # Keep diagnostic coverage visible even when the player is not
-                # comparison-eligible. Unknown is not a zero-point projection.
+                # Coverage is diagnostic metadata, not an eligibility gate.
+                # A player with any usable markets keeps a partial projection;
+                # zero usable markets remain unknown rather than becoming 0 FP.
                 "markets_used": len(projection.stats),
                 "has_projection": has_projection,
                 "coverage_status": coverage_status,

@@ -193,6 +193,9 @@ def build_best_lineup(
                     "mid": candidate.get("mid"),
                     "ceiling": candidate.get("ceiling"),
                     "projection_note": candidate.get("projection_note"),
+                    "coverage_status": candidate.get("coverage_status"),
+                    "missing_markets": list(candidate.get("missing_markets") or []),
+                    "data_status": candidate.get("data_status"),
                     "locked": lock is not None,
                     "actual_points": round(selected_points, 2) if lock is not None else None,
                 }
@@ -258,6 +261,9 @@ def build_best_lineup(
                 "team": candidate.get("team"),
                 "points": round(candidate_score, 2),
                 "projection_note": candidate.get("projection_note"),
+                "coverage_status": candidate.get("coverage_status"),
+                "missing_markets": list(candidate.get("missing_markets") or []),
+                "data_status": candidate.get("data_status"),
                 "delta_to_lineup": round(max(0.0, baseline_total - forced_total), 2),
                 "slot": forced_slot,
                 "slot_index": forced_slot_index,
@@ -283,6 +289,39 @@ def build_best_lineup(
         )
     )
 
+    # Coverage is never an optimizer eligibility gate. Keep a lightweight watch
+    # for every still-actionable non-starter whose market evidence is incomplete,
+    # including players with zero usable lines who cannot receive a numeric score.
+    coverage_watch: list[dict] = []
+    for candidate_index, candidate in enumerate(candidates[:player_count]):
+        if candidate_index in baseline_indices:
+            continue
+        if candidate.get("name") in unavailable:
+            continue
+        if candidate.get("pos") not in modeled_player_positions:
+            continue
+        coverage_status = candidate.get("coverage_status")
+        if coverage_status not in {"partial", "missing"}:
+            continue
+        coverage_watch.append(
+            {
+                "name": candidate.get("name"),
+                "pos": candidate.get("pos"),
+                "team": candidate.get("team"),
+                "coverage_status": coverage_status,
+                "missing_markets": list(candidate.get("missing_markets") or []),
+                "has_projection": _score(candidate, target) is not None,
+                "data_status": candidate.get("data_status"),
+            }
+        )
+
+    coverage_watch.sort(
+        key=lambda row: (
+            row["coverage_status"] == "missing",
+            str(row.get("name") or ""),
+        )
+    )
+
     actual_points = sum(
         float(lock.get("actual_points") or 0.0) for _, lock in locked_by_slot.values()
     )
@@ -295,6 +334,7 @@ def build_best_lineup(
         "locked_count": len(locked_by_slot),
         "decisions_remaining": len(modeled_slots) - len(locked_by_slot),
         "bench_pressure": bench_pressure,
+        "coverage_watch": coverage_watch,
         "unmodeled_slots": unmodeled_slots,
         "unfilled_slots": unfilled_slots,
     }

@@ -217,6 +217,9 @@ export interface LineupRow {
   mid: number | null;
   ceiling: number | null;
   projection_note?: string | null;
+  coverage_status?: 'complete' | 'partial' | 'missing';
+  missing_markets?: string[];
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
   locked?: boolean;
   actual_points?: number | null;
 }
@@ -227,10 +230,23 @@ export interface BenchPressureRow {
   team: string | null;
   points: number;
   projection_note?: string | null;
+  coverage_status?: 'complete' | 'partial' | 'missing';
+  missing_markets?: string[];
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
   delta_to_lineup: number;
   slot: string | null;
   displaces: string | null;
   displaces_slot: string | null;
+}
+
+export interface CoverageWatchRow {
+  name: string;
+  pos: string;
+  team: string | null;
+  coverage_status: 'partial' | 'missing';
+  missing_markets: string[];
+  has_projection: boolean;
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
 }
 
 export interface LockedBenchRow {
@@ -252,6 +268,7 @@ export interface LineupResponse {
   decisions_remaining?: number;
   locked_bench?: LockedBenchRow[];
   bench_pressure: BenchPressureRow[];
+  coverage_watch?: CoverageWatchRow[];
   unmodeled_slots: string[];
   unfilled_slots: string[];
   defense_note?: string;
