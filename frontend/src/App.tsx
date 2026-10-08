@@ -3,6 +3,7 @@ import { isCountMetric, metricLabel, sortMetrics } from './analysis/metrics';
 import {
   fetchBestLineup,
   fetchDefenses,
+  fetchHealth,
   fetchLeagueResolution,
   fetchPlayerDetails,
   fetchProjections,
@@ -23,6 +24,7 @@ import './navigation.css';
 import { useWorkspaceStore, type WeekWindow, type WorkspaceView } from './state/workspace';
 import type {
   BenchPressureRow,
+  BuildInfo,
   ChartEvidence,
   DefenseResponse,
   LineupResponse,
@@ -76,6 +78,11 @@ function routeUrl(view: WorkspaceView, week: WeekWindow): string {
   return `${url.pathname}${url.search}`;
 }
 
+function buildTimestamp(value: string | null): string {
+  if (!value) return 'unknown';
+  return value.replace('T', ' ').replace(/Z$/, ' UTC');
+}
+
 export function App() {
   const view = useWorkspaceStore((state) => state.view);
   const week = useWorkspaceStore((state) => state.week);
@@ -97,6 +104,7 @@ export function App() {
   const setSelectedPositions = useWorkspaceStore((state) => state.setSelectedPositions);
 
   const [identity, setIdentity] = useState(savedLeagueIdentity);
+  const [build, setBuild] = useState<BuildInfo | null>(null);
   const [setupOpen, setSetupOpen] = useState(() => !(identity.leagueId && identity.rosterId));
   const [leagueContext, setLeagueContext] = useState<string | null>(null);
   const [report, setReport] = useState<ProjectionResponse | null>(null);
@@ -161,6 +169,16 @@ export function App() {
     },
     [dataMode, identityKey, identityReady, week],
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchHealth(controller.signal)
+      .then((payload) => setBuild(payload.build))
+      .catch(() => {
+        if (!controller.signal.aborted) setBuild(null);
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const syncRoute = () => {
@@ -858,6 +876,18 @@ export function App() {
           error={lineupError}
           onTargetChange={setLineupTarget}
         />
+      ) : null}
+
+      {build?.image_tag === 'test' ? (
+        <aside
+          className="test-build-stamp"
+          aria-label="Test build"
+          title={`Commit ${build.commit} · Built ${build.built_at ?? 'unknown'}`}
+        >
+          <strong>TEST</strong>
+          <code>{build.commit_short}</code>
+          <span>Updated {buildTimestamp(build.built_at)}</span>
+        </aside>
       ) : null}
 
       <LeagueSetup

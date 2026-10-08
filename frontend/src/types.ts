@@ -1,3 +1,19 @@
+export interface BuildInfo {
+  commit: string;
+  commit_short: string;
+  source: string;
+  dirty: boolean;
+  image_tag: string | null;
+  branch: string | null;
+  built_at: string | null;
+}
+
+export interface HealthResponse {
+  status: string;
+  build: BuildInfo;
+  error?: string;
+}
+
 export interface FantasyCurvePoint {
   x: number;
   survival: number;
