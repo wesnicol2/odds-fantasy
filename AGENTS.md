@@ -125,16 +125,21 @@ The report, lineup and player-evidence requests consume that same context, so ev
 
 ## Missing coverage semantics
 
-A player is comparison-eligible only when every core market for that position successfully produces a usable `StatProjection`. The core set is deliberately narrower than every market we may request: it covers the normal scoring path without making uncommon peripheral props a prerequisite.
+Line coverage is diagnostic context, not an eligibility gate. The normal core-market set remains useful for measuring completeness:
 
 - QB: passing yards, passing TDs, interceptions, rushing yards.
 - RB: rushing yards, receiving yards, anytime TD.
 - WR/TE: receiving yards, anytime TD.
-- RB/WR/TE also require receptions when the league's reception scoring is non-zero.
+- RB/WR/TE also expect receptions when the league awards reception points.
+- K expects kicking points.
 
 Peripheral markets such as WR/TE rushing yards remain optional. Alternate lines improve a market's reconstruction but are not independently required when the base market can already be modeled.
 
-The projection engine still builds any successfully priced stats so the backend can diagnose partial coverage, but `PlayerProjection.has_projection` is false whenever a core market is missing. `/projections` then returns null Floor/Mid/Ceiling/mean, an empty comparison curve, `coverage_status=partial|missing`, explicit `required_markets`/`missing_markets`, plus player-scoped `data_status`/`data_issues` when an upstream source failed. A failed fetch must never be rendered as `NO CORE LINES`; it is an operational error with missing evidence, not evidence that the market does not exist. The ranking keeps that player visible and disables comparison selection. `/player/odds` remains available for incomplete players and groups every normalized source under `books`, with each source carrying all of its main/alternate market lines for progressive disclosure in the inspector. Because Lineup and bench pressure only accept numeric projection values, incomplete players are excluded from optimizer-driven start/sit comparisons automatically. Unknown is never represented as 0 FP.
+If at least one supported market produces a usable `StatProjection`, `PlayerProjection.has_projection` is true and the player receives Floor/Mid/Ceiling/mean plus a fantasy-point curve from the evidence that actually exists. Missing core markets set `coverage_status=partial` and remain explicit in `missing_markets`, but they do not remove the player from graphs, lineup optimization, bench pressure, or start/sit comparisons. Do not impute a missing market as an observed zero; the returned projection is explicitly a partial-evidence projection and may understate or otherwise distort the full fantasy distribution.
+
+If zero supported markets can be modeled, `has_projection` remains false, Floor/Mid/Ceiling/mean stay null at the service boundary, and the player is still carried into Lineup's `coverage_watch` when they are a still-actionable non-starter. This keeps the player visible without fabricating 0 FP. Dashboard renders incomplete non-starter coverage as a visually secondary warning beneath/inside the stronger FP-back close-call treatment.
+
+A failed fetch must never be rendered as proof that no market exists. It remains an operational `data_status`/`data_issues` warning, and `/player/odds` keeps all surviving source evidence grouped under `books`.
 
 ## Defense comparison
 
