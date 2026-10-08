@@ -879,7 +879,7 @@ export function App() {
       ) : null}
 
       {build?.image_tag === 'test' ? (
-        <div
+        <aside
           className="test-build-stamp"
           aria-label="Test build"
           title={`Commit ${build.commit} · Built ${build.built_at ?? 'unknown'}`}
@@ -887,7 +887,7 @@ export function App() {
           <strong>TEST</strong>
           <code>{build.commit_short}</code>
           <span>Updated {buildTimestamp(build.built_at)}</span>
-        </div>
+        </aside>
       ) : null}
 
       <LeagueSetup
