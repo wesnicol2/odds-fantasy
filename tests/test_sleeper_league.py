@@ -198,6 +198,5 @@ class NflScheduleCacheTest(unittest.TestCase):
             sleeper_api._SCHEDULE_CACHE.clear()
 
 
-
 if __name__ == "__main__":
     unittest.main()
