@@ -26,6 +26,7 @@ class BuildInfoTest(unittest.TestCase):
             "APP_COMMIT": "",
             "APP_BRANCH": "",
             "APP_IMAGE_TAG": "",
+            "APP_COMMIT_AT": "",
             "APP_BUILT_AT": "",
         }
         base.update(overrides)
@@ -38,6 +39,7 @@ class BuildInfoTest(unittest.TestCase):
             APP_COMMIT="a" * 40,
             APP_BRANCH="main",
             APP_IMAGE_TAG="latest",
+            APP_COMMIT_AT="2026-08-22T04:55:00+00:00",
             APP_BUILT_AT="2026-08-22T04:58:00Z",
         ):
             info = build_info()
@@ -46,6 +48,7 @@ class BuildInfoTest(unittest.TestCase):
         self.assertEqual(info["source"], "image")
         self.assertEqual(info["image_tag"], "latest")
         self.assertEqual(info["branch"], "main")
+        self.assertEqual(info["commit_at"], "2026-08-22T04:55:00+00:00")
         self.assertEqual(info["built_at"], "2026-08-22T04:58:00Z")
         self.assertFalse(info["dirty"])
 
@@ -79,12 +82,14 @@ class BuildInfoTest(unittest.TestCase):
                     "dirty": True,
                     "source": "git",
                     "branch": "dev/thing",
+                    "commit_at": "2026-08-22T04:50:00+00:00",
                 },
             ),
         ):
             info = build_info()
         self.assertEqual(info["source"], "git")
         self.assertEqual(info["commit_short"], "ccccccc")
+        self.assertEqual(info["commit_at"], "2026-08-22T04:50:00+00:00")
         self.assertTrue(info["dirty"])
 
     def test_unknown_rather_than_a_wrong_answer(self):
@@ -94,6 +99,7 @@ class BuildInfoTest(unittest.TestCase):
         self.assertEqual(info["commit_short"], UNKNOWN)
         self.assertIsNone(info["image_tag"])
         self.assertIsNone(info["branch"])
+        self.assertIsNone(info["commit_at"])
 
     def test_git_failure_never_raises(self):
         with self._env(), patch.object(build_info_module, "_git", return_value=None):
@@ -114,7 +120,16 @@ class HealthExposesBuildTest(unittest.TestCase):
         self.assertTrue(status.startswith("200"))
         build = payload.get("build")
         self.assertIsInstance(build, dict)
-        for key in ("commit", "commit_short", "source", "dirty", "image_tag", "branch", "built_at"):
+        for key in (
+            "commit",
+            "commit_short",
+            "source",
+            "dirty",
+            "image_tag",
+            "branch",
+            "commit_at",
+            "built_at",
+        ):
             self.assertIn(key, build)
 
 

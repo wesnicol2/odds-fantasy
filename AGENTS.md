@@ -13,6 +13,8 @@ The application has four primary destinations:
 3. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
 4. **Lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots while respecting decisions already locked by kickoff.
 
+Live scoring uses Sleeper's current-week matchups and per-game schedule status. The schedule is cached briefly (60s), not for a full season, since date-only records transition from `pre_game` to `in_game` to `complete`. Explicit started statuses take precedence over any stale scheduled kickoff. Missing matchup points are not fabricated as 0: the optimizer freezes the slot, but its total remains unknown until Sleeper provides scoring. Already-started players show actuals rather than pregame distributions in the Players workspace; the lineup optimizer still uses the selected target for unstarted slots.
+
 Dashboard is synthesis, not a second analytical engine. It consumes the same backend optimizer and defense ranking used by the detailed Lineup and Defenses destinations. Player evidence remains progressive disclosure inside the Players workstation. There is no separate Graphs product surface and no alternate browser-side projection engine.
 
 The product-level simplicity rule is **decision first, detail on demand**. Default surfaces should contain only information needed for the next decision; raw evidence, additional metrics and configuration belong one level deeper. Prefer selection/reveal over adding permanent cards or controls.
@@ -55,6 +57,8 @@ The Dockerfile is the production frontend build contract:
 3. `oddsfantasy.api` serves `/app/ui/index.html` at `/` and compiled assets from the same directory.
 
 The repository intentionally does **not** keep a second hand-written `ui/` implementation. Treat `/app/ui/` as generated runtime output. Do not add source files under repository `ui/` as a fallback or bypass the Vite build.
+
+Published images carry `APP_COMMIT`, `APP_IMAGE_TAG`, `APP_COMMIT_AT`, and `APP_BUILT_AT`; `GET /health` is the runtime source of truth for that metadata. `commit_at` is the Git committer timestamp for the deployed commit, while `built_at` is when CI built the container image. When `image_tag` is `test`, React must keep a visible, fixed build stamp on every screen showing the short commit ID and `commit_at` as the UTC **Updated** time. Never label the image build time as the app update time. Do not derive either value from browser build-time constants or hide this stamp in Settings.
 
 For local UI development, run the Python API on port 8000 and Vite on port 5173; `frontend/vite.config.ts` proxies application API routes to the Python service.
 
@@ -121,20 +125,25 @@ The selected player's fantasy-point inspector presents `StatProjection.expected_
 
 Data mode is part of the key so a cache-only partial/miss cannot satisfy a later Auto request during the short service TTL. The provider-level caches have different freshness horizons: the stable NFL event list uses `ODDS_TTL` (12 hours by default), while event player-prop payloads use `PLAYER_ODDS_TTL` (15 minutes by default). The latter prevents an early-week incomplete prop response from remaining authoritative through a much later market state.
 
-The report, lineup and player-evidence requests consume that same context, so evidence loading normally adds no fresh Odds API calls and cannot silently use different lines from the ranking row. Stat metric comparison may request details for multiple selected players, but those HTTP requests reuse the shared backend week context.
+The report, lineup and player-evidence requests consume that same context, so evidence loading normally adds no fresh Odds API calls and cannot silently use different lines from the ranking row. Failed per-game sportsbook fetches are retained in the same context as structured diagnostics instead of being dropped as empty evidence. Player rows/details map warning/error diagnostics back to the affected game/player so the UI can distinguish a transport/source failure from a successful fetch that simply contained no matching lines. Stat metric comparison may request details for multiple selected players, but those HTTP requests reuse the shared backend week context.
 
 ## Missing coverage semantics
 
-A player is comparison-eligible only when every core market for that position successfully produces a usable `StatProjection`. The core set is deliberately narrower than every market we may request: it covers the normal scoring path without making uncommon peripheral props a prerequisite.
+Line coverage is diagnostic context, not an eligibility gate. The normal core-market set remains useful for measuring completeness:
 
 - QB: passing yards, passing TDs, interceptions, rushing yards.
 - RB: rushing yards, receiving yards, anytime TD.
 - WR/TE: receiving yards, anytime TD.
-- RB/WR/TE also require receptions when the league's reception scoring is non-zero.
+- RB/WR/TE also expect receptions when the league awards reception points.
+- K expects kicking points.
 
 Peripheral markets such as WR/TE rushing yards remain optional. Alternate lines improve a market's reconstruction but are not independently required when the base market can already be modeled.
 
-The projection engine still builds any successfully priced stats so the backend can diagnose partial coverage, but `PlayerProjection.has_projection` is false whenever a core market is missing. `/projections` then returns null Floor/Mid/Ceiling/mean, an empty comparison curve, `coverage_status=partial|missing`, and explicit `required_markets`/`missing_markets`. The ranking keeps that player visible, names the missing markets, and disables comparison selection. Because Lineup and bench pressure only accept numeric projection values, incomplete players are excluded from optimizer-driven start/sit comparisons automatically. Unknown is never represented as 0 FP.
+If at least one supported market produces a usable `StatProjection`, `PlayerProjection.has_projection` is true and the player receives Floor/Mid/Ceiling/mean plus a fantasy-point curve from the evidence that actually exists. Missing core markets set `coverage_status=partial` and remain explicit in `missing_markets`, but they do not remove the player from graphs, lineup optimization, bench pressure, or start/sit comparisons. Do not impute a missing market as an observed zero; the returned projection is explicitly a partial-evidence projection and may understate or otherwise distort the full fantasy distribution.
+
+If zero supported markets can be modeled, `has_projection` remains false, Floor/Mid/Ceiling/mean stay null at the service boundary, and the player is still carried into Lineup's `coverage_watch` when they are a still-actionable non-starter. This keeps the player visible without fabricating 0 FP. Dashboard renders incomplete non-starter coverage as a visually secondary warning beneath/inside the stronger FP-back close-call treatment.
+
+A failed fetch must never be rendered as proof that no market exists. It remains an operational `data_status`/`data_issues` warning, and `/player/odds` keeps all surviving source evidence grouped under `books`.
 
 ## Defense comparison
 

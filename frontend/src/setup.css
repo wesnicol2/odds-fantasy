@@ -85,6 +85,32 @@
   font-size: 10px;
 }
 
+.settings-actions {
+  display: flex;
+  gap: 7px;
+  align-items: stretch;
+}
+
+.settings-actions button {
+  flex: 1;
+}
+
+.settings-cache-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  border: 1px solid #303844;
+  color: #7d8895;
+  font-size: 9px;
+  text-decoration: none;
+}
+
+.settings-cache-link:hover {
+  border-color: #465261;
+  color: #d8dee6;
+}
+
 .setup-backdrop {
   position: fixed;
   inset: 0;

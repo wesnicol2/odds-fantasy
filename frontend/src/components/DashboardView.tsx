@@ -1,6 +1,12 @@
 import '../dashboard.css';
 import type { WeekWindow } from '../state/workspace';
-import type { BenchPressureRow, DefenseResponse, DefenseRow, LineupResponse } from '../types';
+import type {
+  BenchPressureRow,
+  CoverageWatchRow,
+  DefenseResponse,
+  DefenseRow,
+  LineupResponse,
+} from '../types';
 
 interface DashboardViewProps {
   lineup: LineupResponse | null;
@@ -24,6 +30,31 @@ type IndexedBenchPressureRow = BenchPressureRow & {
 
 function formatPoints(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : value.toFixed(1);
+}
+
+const MARKET_LABELS: Record<string, string> = {
+  player_pass_yds: 'pass yds',
+  player_pass_tds: 'pass TDs',
+  player_pass_interceptions: 'INTs',
+  player_rush_yds: 'rush yds',
+  player_reception_yds: 'rec yds',
+  player_receptions: 'receptions',
+  player_anytime_td: 'TD',
+  player_kicking_points: 'kicking points',
+};
+
+function coverageCopy(row: {
+  coverage_status?: 'complete' | 'partial' | 'missing';
+  missing_markets?: string[];
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
+}): string | null {
+  if (row.data_status === 'fetch_failed') return 'odds fetch failed';
+  if (row.coverage_status === 'complete' || !row.coverage_status) return null;
+  const missing = (row.missing_markets ?? []).map(
+    (market) => MARKET_LABELS[market] ?? market.replace(/^player_/, '').replaceAll('_', ' '),
+  );
+  const prefix = row.coverage_status === 'partial' ? 'limited lines' : 'no usable lines';
+  return missing.length ? `${prefix} · missing ${missing.join(', ')}` : prefix;
 }
 
 function actionableDefenses(payload: DefenseResponse | null): DefenseRow[] {
@@ -125,6 +156,9 @@ export function DashboardView({
     .filter((row) => Boolean(row.displaces))
     .slice(0, 3) as IndexedBenchPressureRow[];
   const decisionRanks = new Map(decisions.map((row, index) => [row.name, index + 1]));
+  const coverageOnly = (lineup?.coverage_watch ?? []).filter(
+    (row) => !decisionRanks.has(row.name),
+  ) as CoverageWatchRow[];
   const decisionsBySlot = new Map<number, IndexedBenchPressureRow[]>();
 
   for (const decision of decisions) {
@@ -164,7 +198,7 @@ export function DashboardView({
             </div>
             <div className="dashboard-lineup-summary">
               <div className="dashboard-total">
-                <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
+                <strong>{formatPoints(lineup?.total_points)}</strong>
                 <span>
                   {usesKickerProxy
                     ? 'modeled score'
@@ -184,8 +218,11 @@ export function DashboardView({
           {remainingMode ? (
             <div className="dashboard-lock-summary">
               <strong>{lockedCount} locked</strong>
-              <span>{formatPoints(lineup?.actual_points)} FP scored</span>
+              <span>{formatPoints(lineup?.actual_points)} known FP scored</span>
               <span>{lineup?.decisions_remaining ?? 0} decisions left</span>
+              {lineup?.pending_actual_count ? (
+                <span>{lineup.pending_actual_count} score(s) pending from Sleeper</span>
+              ) : null}
             </div>
           ) : null}
 
@@ -224,7 +261,7 @@ export function DashboardView({
                               : ''}
                         </small>
                       </span>
-                      <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
+                      <strong className="dashboard-points">{formatPoints(row.points)}</strong>
                     </div>
 
                     {slotDecisions.length ? (
@@ -251,6 +288,11 @@ export function DashboardView({
                                   {decision.team ? ` · ${decision.team}` : ''}
                                   {reshufflesLineup ? ` · moves out ${decision.displaces}` : ''}
                                 </span>
+                                {coverageCopy(decision) ? (
+                                  <small className="dashboard-coverage-inline">
+                                    {coverageCopy(decision)}
+                                  </small>
+                                ) : null}
                               </span>
                               <span className="dashboard-slot-decision-projection">
                                 <strong>{decision.points.toFixed(1)}</strong>
@@ -274,6 +316,20 @@ export function DashboardView({
             </div>
           ) : !loading ? (
             <p className="dashboard-empty-copy">No modeled lineup is available.</p>
+          ) : null}
+
+          {coverageOnly.length ? (
+            <section className="dashboard-coverage-watch" aria-label="Bench line coverage">
+              <span className="dashboard-coverage-watch-label">Coverage watch</span>
+              <div className="dashboard-coverage-watch-list">
+                {coverageOnly.map((row) => (
+                  <div className="dashboard-coverage-watch-row" key={row.name}>
+                    <strong>{row.name}</strong>
+                    <span>{coverageCopy(row)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
           ) : null}
 
           <button type="button" className="dashboard-detail-action" onClick={onOpenLineup}>

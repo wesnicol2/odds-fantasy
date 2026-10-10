@@ -106,12 +106,17 @@ class PlayerProjection:
 
     @property
     def has_projection(self) -> bool:
-        """Whether the player is safe to use in comparisons/optimization."""
-        return bool(self.stats and self.samples and not self.missing_markets)
+        """Whether any usable market evidence produced a fantasy-point projection."""
+        return bool(self.stats and self.samples)
+
+    @property
+    def has_complete_coverage(self) -> bool:
+        """Whether every expected core market is present."""
+        return self.has_projection and not self.missing_markets
 
     @property
     def has_partial_projection(self) -> bool:
-        return bool(self.stats and self.samples and self.missing_markets)
+        return self.has_projection and bool(self.missing_markets)
 
 
 def percentile(sorted_values: list[float], q: float) -> float:

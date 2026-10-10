@@ -1,3 +1,20 @@
+export interface BuildInfo {
+  commit: string;
+  commit_short: string;
+  source: string;
+  dirty: boolean;
+  image_tag: string | null;
+  branch: string | null;
+  commit_at: string | null;
+  built_at: string | null;
+}
+
+export interface HealthResponse {
+  status: string;
+  build: BuildInfo;
+  error?: string;
+}
+
 export interface FantasyCurvePoint {
   x: number;
   survival: number;
@@ -20,6 +37,8 @@ export interface ProjectionPlayer {
   required_markets?: string[];
   missing_markets?: string[];
   projection_note?: string | null;
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
+  data_issues?: ProviderDiagnostic[];
   locked?: boolean;
   lineup_status?: 'starter' | 'bench' | null;
   actual_points?: number | null;
@@ -59,12 +78,36 @@ export interface ConsensusAnchor {
   survival: number;
 }
 
+export interface ProviderDiagnostic {
+  provider_id: string;
+  code: string;
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+  game_id?: string | null;
+  player_id?: string | null;
+  market_key?: string | null;
+}
+
 export interface SportsbookLine {
   book: string;
   source: 'main' | 'alternate';
   point: number | null;
   over_odds: number | null;
   under_odds: number | null;
+}
+
+export interface PlayerBookLine {
+  market_key: string;
+  source: 'main' | 'alternate';
+  point: number | null;
+  over_odds: number | null;
+  under_odds: number | null;
+}
+
+export interface PlayerBookEvidence {
+  book: string;
+  provider?: string | null;
+  lines: PlayerBookLine[];
 }
 
 export interface MarketDetail {
@@ -109,6 +152,9 @@ export interface PlayerOddsDetails {
   } | null;
   markets: Record<string, MarketDetail>;
   combined_markets?: Record<string, CombinedMarketDetail>;
+  books?: PlayerBookEvidence[];
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
+  data_issues?: ProviderDiagnostic[];
   message?: string;
   error?: string;
   ratelimit?: string;
@@ -183,11 +229,14 @@ export interface LineupRow {
   name: string;
   pos: string;
   team: string | null;
-  points: number;
+  points: number | null;
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
   projection_note?: string | null;
+  coverage_status?: 'complete' | 'partial' | 'missing';
+  missing_markets?: string[];
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
   locked?: boolean;
   actual_points?: number | null;
 }
@@ -198,17 +247,30 @@ export interface BenchPressureRow {
   team: string | null;
   points: number;
   projection_note?: string | null;
+  coverage_status?: 'complete' | 'partial' | 'missing';
+  missing_markets?: string[];
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
   delta_to_lineup: number;
   slot: string | null;
   displaces: string | null;
   displaces_slot: string | null;
 }
 
+export interface CoverageWatchRow {
+  name: string;
+  pos: string;
+  team: string | null;
+  coverage_status: 'partial' | 'missing';
+  missing_markets: string[];
+  has_projection: boolean;
+  data_status?: 'ok' | 'degraded' | 'fetch_failed';
+}
+
 export interface LockedBenchRow {
   name: string;
   pos: string | null;
   team: string | null;
-  actual_points: number;
+  actual_points: number | null;
   lineup_status: 'bench';
 }
 
@@ -216,13 +278,15 @@ export interface LineupResponse {
   week: string;
   target: 'floor' | 'mid' | 'ceiling';
   lineup: LineupRow[];
-  total_points: number;
+  total_points: number | null;
   actual_points?: number;
   remaining_projected_points?: number;
   locked_count?: number;
+  pending_actual_count?: number;
   decisions_remaining?: number;
   locked_bench?: LockedBenchRow[];
   bench_pressure: BenchPressureRow[];
+  coverage_watch?: CoverageWatchRow[];
   unmodeled_slots: string[];
   unfilled_slots: string[];
   defense_note?: string;

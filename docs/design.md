@@ -104,9 +104,9 @@ Floor / Mid / Ceiling, target probabilities, and probability distributions are c
 
 Users should be able to move naturally from:
 
-**projection → distribution → consensus market evidence → individual sportsbook lines**
+**projection → source/book coverage → distribution → consensus market evidence → individual sportsbook lines**
 
-The evidence should be available without permanently consuming the primary comparison area.
+Selecting a player reveals book/source coverage immediately in the inspector. Each source is one collapsed row by default and expands into every available market/line for that player; source failures are shown as semantic warnings and are never presented as proof that no lines exist. The evidence should be available without permanently consuming the primary comparison area.
 
 Visualizations are presentations of canonical backend model data. The frontend must not invent a second probability or lineup model.
 

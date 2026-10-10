@@ -125,9 +125,66 @@ def market_lines(point_a: float, point_b: float) -> list[dict]:
     ]
 
 
+def book_evidence() -> list[dict]:
+    return [
+        {
+            "book": "draftkings",
+            "provider": "odds_api",
+            "lines": [
+                {
+                    "market_key": "player_rush_yds",
+                    "source": "main",
+                    "point": 64.5,
+                    "over_odds": 1.91,
+                    "under_odds": 1.91,
+                },
+                {
+                    "market_key": "player_reception_yds",
+                    "source": "main",
+                    "point": 44.5,
+                    "over_odds": 1.91,
+                    "under_odds": 1.91,
+                },
+            ],
+        },
+        {
+            "book": "fanduel",
+            "provider": "odds_api",
+            "lines": [
+                {
+                    "market_key": "player_rush_yds",
+                    "source": "alternate",
+                    "point": 84.5,
+                    "over_odds": 2.10,
+                    "under_odds": 1.72,
+                }
+            ],
+        },
+    ]
+
+
 def api_fixture(route: Route) -> None:
     parsed = urlparse(route.request.url)
     query = parse_qs(parsed.query)
+
+    if parsed.path == "/health":
+        fulfill_json(
+            route,
+            {
+                "status": "ok",
+                "build": {
+                    "commit": "1234567890abcdef1234567890abcdef12345678",
+                    "commit_short": "1234567",
+                    "source": "image",
+                    "dirty": False,
+                    "image_tag": "test",
+                    "branch": "feature/multi-provider-odds",
+                    "commit_at": "2026-10-08T02:35:00+00:00",
+                    "built_at": "2026-10-08T02:40:00Z",
+                },
+            },
+        )
+        return
 
     if parsed.path == "/user/leagues":
         fulfill_json(
@@ -200,6 +257,9 @@ def api_fixture(route: Route) -> None:
                     "team_implied_total": 21 if is_receiver else 25.5,
                     "books_used": 6,
                 },
+                "books": book_evidence(),
+                "data_status": "ok",
+                "data_issues": [],
                 "markets": {
                     # The back is priced for rushing, the receiver is not: the
                     # exact mismatch the combined yardage row exists to fix.
@@ -428,11 +488,31 @@ def api_fixture(route: Route) -> None:
                         "pos": "WR",
                         "team": "Miami Dolphins",
                         "points": 15,
+                        "coverage_status": "partial",
+                        "missing_markets": ["player_receptions"],
                         "delta_to_lineup": 2,
                         "slot": "WR",
                         "displaces": "Alpha Runner",
                         "displaces_slot": "RB",
                     }
+                ],
+                "coverage_watch": [
+                    {
+                        "name": "Beta Receiver",
+                        "pos": "WR",
+                        "team": "Miami Dolphins",
+                        "coverage_status": "partial",
+                        "missing_markets": ["player_receptions"],
+                        "has_projection": True,
+                    },
+                    {
+                        "name": "Gamma Unknown",
+                        "pos": "RB",
+                        "team": "Seattle Seahawks",
+                        "coverage_status": "missing",
+                        "missing_markets": ["player_rush_yds"],
+                        "has_projection": False,
+                    },
                 ],
                 "unmodeled_slots": ["K"],
                 "unfilled_slots": [],
@@ -475,6 +555,10 @@ def main() -> None:
         setup.wait_for(state="hidden")
 
         page.get_by_text("Smoke League · Smoke Team", exact=True).wait_for()
+        build_stamp = page.get_by_label("Test build")
+        build_stamp.get_by_text("TEST", exact=True).wait_for()
+        build_stamp.get_by_text("1234567", exact=True).wait_for()
+        build_stamp.get_by_text("Updated 2026-10-08 02:35:00 UTC", exact=True).wait_for()
         cookies = {row["name"]: row["value"] for row in context.cookies()}
         assert cookies["league_id"] == "L1"
         assert cookies["roster_id"] == "7"
@@ -485,6 +569,10 @@ def main() -> None:
         dashboard.get_by_text("Alpha Runner", exact=True).wait_for()
         dashboard.get_by_text("Beta Receiver", exact=True).wait_for()
         dashboard.get_by_text("2.0", exact=True).wait_for()
+        dashboard.get_by_text("limited lines · missing receptions", exact=True).wait_for()
+        coverage_watch = dashboard.get_by_label("Bench line coverage")
+        coverage_watch.get_by_text("Gamma Unknown", exact=True).wait_for()
+        coverage_watch.get_by_text("no usable lines · missing rush yds", exact=True).wait_for()
         assert dashboard.get_by_text("LAC", exact=True).count() == 2
 
         # A close bench call opens the optimizer-paired, side-by-side start/sit explanation.
@@ -606,6 +694,18 @@ def main() -> None:
         assert "17.0" in alpha_row.inner_text()
         assert "25.0" in alpha_row.inner_text()
         alpha_row.locator(".player-name-button").click()
+        inspector.get_by_text("Books & sources", exact=True).wait_for()
+        draftkings_book = inspector.locator("details.book-evidence-card").filter(
+            has_text="draftkings"
+        )
+        draftkings_book.locator("summary").click()
+        draftkings_lines = draftkings_book.get_by_role(
+            "table", name="draftkings lines for Alpha Runner"
+        )
+        assert draftkings_lines.locator("tbody tr").count() == 2
+        assert "Rushing yards" in draftkings_lines.inner_text()
+        assert "64.5" in draftkings_lines.inner_text()
+
         chart = page.locator(".probability-chart")
         chart.wait_for()
         assert chart.get_attribute("role") == "img"
@@ -636,8 +736,9 @@ def main() -> None:
         inspector.get_by_text("Explain betting lines", exact=True).click()
         inspector.get_by_text("Consensus anchors", exact=True).wait_for()
         inspector.get_by_text("Exact sportsbook lines", exact=True).wait_for()
-        inspector.get_by_text("draftkings", exact=True).wait_for()
-        inspector.get_by_text("fanduel", exact=True).wait_for()
+        stat_evidence = inspector.locator("details.evidence-details")
+        stat_evidence.get_by_text("draftkings", exact=True).wait_for()
+        stat_evidence.get_by_text("fanduel", exact=True).wait_for()
         inspector.get_by_role("button", name="All point sources").click()
         inspector.get_by_role("button", name="Analyze Receptions, 0.0 FP").click()
 

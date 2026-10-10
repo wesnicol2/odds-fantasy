@@ -179,16 +179,16 @@ class ProjectionPipelineTest(unittest.TestCase):
         self.assertIn("player_reception_yds", player["missing_markets"])
         self.assertIn("player_anytime_td", player["missing_markets"])
 
-    def test_partial_core_markets_are_unknown_and_excluded(self):
+    def test_partial_core_markets_keep_projection_and_coverage_warning(self):
         player = next(row for row in self._run()["players"] if row["name"] == "Partial Receiver")
-        self.assertFalse(player["has_projection"])
+        self.assertTrue(player["has_projection"])
         self.assertEqual(player["coverage_status"], "partial")
         self.assertGreater(player["markets_used"], 0)
         self.assertEqual(player["missing_markets"], ["player_reception_yds", "player_receptions"])
-        self.assertIsNone(player["floor"])
-        self.assertIsNone(player["mid"])
-        self.assertIsNone(player["ceiling"])
-        self.assertEqual(player["curve"], [])
+        self.assertIsNotNone(player["floor"])
+        self.assertIsNotNone(player["mid"])
+        self.assertIsNotNone(player["ceiling"])
+        self.assertGreater(len(player["curve"]), 20)
 
 
 if __name__ == "__main__":
