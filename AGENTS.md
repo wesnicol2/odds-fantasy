@@ -13,6 +13,8 @@ The application has four primary destinations:
 3. **Defenses** — all NFL defenses sorted by opponent implied team total, with Sleeper league ownership.
 4. **Lineup** — maximize Floor, Mid, or Ceiling across the league's actual modeled starter slots while respecting decisions already locked by kickoff.
 
+Live scoring uses Sleeper's current-week matchups and per-game schedule status. The schedule is cached briefly (60s), not for a full season, since date-only records transition from `pre_game` to `in_game` to `complete`. Explicit started statuses take precedence over any stale scheduled kickoff. Missing matchup points are not fabricated as 0: the optimizer freezes the slot, but its total remains unknown until Sleeper provides scoring. Already-started players show actuals rather than pregame distributions in the Players workspace; the lineup optimizer still uses the selected target for unstarted slots.
+
 Dashboard is synthesis, not a second analytical engine. It consumes the same backend optimizer and defense ranking used by the detailed Lineup and Defenses destinations. Player evidence remains progressive disclosure inside the Players workstation. There is no separate Graphs product surface and no alternate browser-side projection engine.
 
 The product-level simplicity rule is **decision first, detail on demand**. Default surfaces should contain only information needed for the next decision; raw evidence, additional metrics and configuration belong one level deeper. Prefer selection/reveal over adding permanent cards or controls.
