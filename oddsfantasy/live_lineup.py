@@ -30,20 +30,20 @@ def _player_name(player_id: str, info: dict) -> str:
     return str(full_name or player_id)
 
 
-def _actual_points(points: dict, player_id: str) -> float:
+def _actual_points(points: dict, player_id: str) -> float | None:
     value = points.get(player_id)
     if not isinstance(value, (int, float)):
         value = points.get(str(player_id))
-    return float(value) if isinstance(value, (int, float)) else 0.0
+    return float(value) if isinstance(value, (int, float)) else None
 
 
 def _schedule_start_by_team(schedule: list[dict], nfl_week: int | None) -> dict[str, dt.datetime]:
     """Durable kickoff map from Sleeper's season schedule.
 
-    The schedule keeps completed games after they disappear from live/upcoming
-    sportsbook event feeds. Some schedule payloads may expose a date without a
-    clock time; those rows are intentionally ignored rather than treating
-    midnight as kickoff and locking a lineup too early.
+    The schedule retains games after sportsbooks drop them. Sleeper commonly
+    returns date-only values; use explicit in_game/complete status to lock
+    those games, never midnight on the date. Timed rows are a fallback for
+    feeds that expose actual kickoff timestamps.
     """
     if nfl_week is None:
         return {}
@@ -55,12 +55,18 @@ def _schedule_start_by_team(schedule: list[dict], nfl_week: int | None) -> dict[
             continue
         if game_week != nfl_week:
             continue
-        raw_date = str(game.get("date") or "")
-        if not raw_date or ("T" not in raw_date and ":" not in raw_date):
-            continue
-        commence = _parse_utc(raw_date)
-        if commence is None:
-            continue
+        status = str(game.get("status") or "").lower()
+        if status in {"in_game", "complete"}:
+            # A dated game may have no kickoff clock at all. The status still
+            # proves it has started, including after event odds roll off.
+            commence = dt.datetime.min.replace(tzinfo=dt.UTC)
+        else:
+            raw_date = str(game.get("date") or "")
+            if "T" not in raw_date and ":" not in raw_date:
+                continue
+            commence = _parse_utc(raw_date)
+            if commence is None:
+                continue
         for abbreviation in (game.get("home"), game.get("away")):
             team = SLEEPER_TO_ODDSAPI_TEAM.get(str(abbreviation or "").upper())
             if team:
@@ -73,9 +79,8 @@ def _game_start_by_team(
     schedule: list[dict] | None = None,
     nfl_week: int | None = None,
 ) -> dict[str, dt.datetime]:
-    # Sleeper schedule is durable across completed games. The already-loaded
-    # Odds API week plan may carry a more precise/current commence time for
-    # games still in its feed, so let it override the same team's schedule row.
+    # The odds plan adds timestamps for upcoming games. It must never undo
+    # a Sleeper in_game/complete lock, even if its event timestamp is stale.
     starts = _schedule_start_by_team(schedule or [], nfl_week)
     for game in (planned or {}).values():
         commence = _parse_utc(getattr(game, "commence_time", None))
@@ -83,7 +88,7 @@ def _game_start_by_team(
             continue
         for team in (getattr(game, "home_team", None), getattr(game, "away_team", None)):
             if team:
-                starts[str(team)] = commence
+                starts[str(team)] = min(starts.get(str(team), commence), commence)
     return starts
 
 
@@ -282,14 +287,34 @@ def compute_projections(**params) -> dict:
     players = []
     for player in payload.get("players", []):
         state = by_name.get(player.get("name"))
-        players.append(
-            {
-                **player,
-                "locked": state is not None,
-                "lineup_status": state.get("lineup_status") if state else None,
-                "actual_points": state.get("actual_points") if state else None,
-            }
-        )
+        if state is None:
+            players.append(
+                {
+                    **player,
+                    "locked": False,
+                    "lineup_status": None,
+                    "actual_points": None,
+                }
+            )
+        else:
+            # A submitted decision is over once the game begins. Never show a
+            # stale sportsbook distribution as a remaining FP projection.
+            # A missing Sleeper score stays unknown, not an invented zero.
+            actual = state["actual_points"]
+            players.append(
+                {
+                    **player,
+                    "locked": True,
+                    "lineup_status": state["lineup_status"],
+                    "actual_points": actual,
+                    "floor": None,
+                    "mid": actual,
+                    "ceiling": None,
+                    "mean": actual,
+                    "curve": [],
+                    "has_projection": False,
+                }
+            )
     result = dict(payload)
     result["players"] = players
     result["started_count"] = len(live["started_players"])
