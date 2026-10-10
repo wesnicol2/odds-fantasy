@@ -72,7 +72,9 @@ export function PlayerRanking({
   const projected = players.filter(
     (player) => player.floor !== null && player.mid !== null && player.ceiling !== null,
   );
-  const incompleteCount = players.filter((player) => player.coverage_status !== 'complete').length;
+  const incompleteCount = players.filter(
+    (player) => !player.locked && player.coverage_status !== 'complete',
+  ).length;
   const glyphMinimum = Math.min(0, ...projected.map((player) => player.floor ?? 0));
   const glyphMaximum = Math.max(1, ...projected.map((player) => player.ceiling ?? 0));
 
