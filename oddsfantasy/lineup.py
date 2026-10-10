@@ -178,7 +178,7 @@ def build_best_lineup(
             lock = locked[1] if locked is not None else None
             if lock is not None:
                 actual = lock.get("actual_points")
-                selected_points = float(actual) if isinstance(actual, (int, float)) else 0.0
+                selected_points = float(actual) if isinstance(actual, (int, float)) else None
             else:
                 selected_points = float(_score(candidate, target) or 0.0)
             rows.append(
@@ -188,7 +188,7 @@ def build_best_lineup(
                     "name": candidate.get("name"),
                     "pos": candidate.get("pos"),
                     "team": candidate.get("team"),
-                    "points": round(selected_points, 2),
+                    "points": round(selected_points, 2) if selected_points is not None else None,
                     "floor": candidate.get("floor"),
                     "mid": candidate.get("mid"),
                     "ceiling": candidate.get("ceiling"),
@@ -197,7 +197,11 @@ def build_best_lineup(
                     "missing_markets": list(candidate.get("missing_markets") or []),
                     "data_status": candidate.get("data_status"),
                     "locked": lock is not None,
-                    "actual_points": round(selected_points, 2) if lock is not None else None,
+                    "actual_points": (
+                        round(selected_points, 2)
+                        if lock is not None and selected_points is not None
+                        else None
+                    ),
                 }
             )
         return rows, unfilled_slots
@@ -323,15 +327,22 @@ def build_best_lineup(
     )
 
     actual_points = sum(
-        float(lock.get("actual_points") or 0.0) for _, lock in locked_by_slot.values()
+        float(lock["actual_points"])
+        for _, lock in locked_by_slot.values()
+        if isinstance(lock.get("actual_points"), (int, float))
+    )
+    pending_actual_count = sum(
+        not isinstance(lock.get("actual_points"), (int, float))
+        for _, lock in locked_by_slot.values()
     )
     return {
         "target": target,
         "lineup": rows,
-        "total_points": round(baseline_total, 2),
+        "total_points": round(baseline_total, 2) if not pending_actual_count else None,
         "actual_points": round(actual_points, 2),
         "remaining_projected_points": round(baseline_total - actual_points, 2),
         "locked_count": len(locked_by_slot),
+        "pending_actual_count": pending_actual_count,
         "decisions_remaining": len(modeled_slots) - len(locked_by_slot),
         "bench_pressure": bench_pressure,
         "coverage_watch": coverage_watch,
