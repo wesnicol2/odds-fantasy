@@ -362,7 +362,5 @@ class ProjectionsWithActualsTest(unittest.TestCase):
         self.assertFalse(sunday["locked"])
 
 
-
-
 if __name__ == "__main__":
     unittest.main()
