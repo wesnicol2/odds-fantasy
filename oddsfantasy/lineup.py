@@ -189,13 +189,15 @@ def build_best_lineup(
                     "pos": candidate.get("pos"),
                     "team": candidate.get("team"),
                     "points": round(selected_points, 2) if selected_points is not None else None,
-                    "floor": candidate.get("floor"),
-                    "mid": candidate.get("mid"),
-                    "ceiling": candidate.get("ceiling"),
-                    "projection_note": candidate.get("projection_note"),
-                    "coverage_status": candidate.get("coverage_status"),
-                    "missing_markets": list(candidate.get("missing_markets") or []),
-                    "data_status": candidate.get("data_status"),
+                    "floor": candidate.get("floor") if lock is None else None,
+                    "mid": candidate.get("mid") if lock is None else None,
+                    "ceiling": candidate.get("ceiling") if lock is None else None,
+                    "projection_note": candidate.get("projection_note") if lock is None else None,
+                    "coverage_status": candidate.get("coverage_status") if lock is None else None,
+                    "missing_markets": (
+                        list(candidate.get("missing_markets") or []) if lock is None else []
+                    ),
+                    "data_status": candidate.get("data_status") if lock is None else None,
                     "locked": lock is not None,
                     "actual_points": (
                         round(selected_points, 2)
