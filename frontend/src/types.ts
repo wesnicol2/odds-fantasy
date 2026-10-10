@@ -229,7 +229,7 @@ export interface LineupRow {
   name: string;
   pos: string;
   team: string | null;
-  points: number;
+  points: number | null;
   floor: number | null;
   mid: number | null;
   ceiling: number | null;
@@ -270,7 +270,7 @@ export interface LockedBenchRow {
   name: string;
   pos: string | null;
   team: string | null;
-  actual_points: number;
+  actual_points: number | null;
   lineup_status: 'bench';
 }
 
@@ -278,10 +278,11 @@ export interface LineupResponse {
   week: string;
   target: 'floor' | 'mid' | 'ceiling';
   lineup: LineupRow[];
-  total_points: number;
+  total_points: number | null;
   actual_points?: number;
   remaining_projected_points?: number;
   locked_count?: number;
+  pending_actual_count?: number;
   decisions_remaining?: number;
   locked_bench?: LockedBenchRow[];
   bench_pressure: BenchPressureRow[];

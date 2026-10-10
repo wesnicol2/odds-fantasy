@@ -73,7 +73,15 @@ export function PlayerInspector({
 
       <PlayerBookEvidence details={details} detailsLoading={detailsLoading} />
 
-      {player.has_projection ? (
+      {player.locked ? (
+        <div className="status-note">
+          <strong>{formatPoints(player.actual_points ?? null)} actual FP</strong> ·{' '}
+          {player.lineup_status === 'bench' ? 'On bench' : 'Starter'} · Locked after kickoff.
+          {player.actual_points === null || player.actual_points === undefined
+            ? ' Sleeper score unavailable; not treated as zero.'
+            : ' No remaining projection.'}
+        </div>
+      ) : player.has_projection ? (
         <>
           <dl className="projection-summary">
             <div>

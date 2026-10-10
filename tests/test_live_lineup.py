@@ -1,9 +1,10 @@
 import datetime as dt
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from oddsfantasy.lineup import build_best_lineup
-from oddsfantasy.live_lineup import build_live_state
+from oddsfantasy.live_lineup import build_live_state, compute_projections
 
 
 class LockedLineupOptimizerTest(unittest.TestCase):
@@ -60,6 +61,26 @@ class LockedLineupOptimizerTest(unittest.TestCase):
         self.assertEqual(result["remaining_projected_points"], 20.0)
         self.assertEqual(result["total_points"], 23.0)
         self.assertEqual(result["decisions_remaining"], 1)
+
+    def test_locked_player_without_sleeper_score_does_not_create_fake_zero(self):
+        result = build_best_lineup(
+            [{"name": "Monday QB", "pos": "QB", "team": "A", "floor": 8, "mid": 12, "ceiling": 22}],
+            roster_positions=["RB", "QB"],
+            locked_starters=[
+                {
+                    "slot_index": 0,
+                    "name": "Thursday RB",
+                    "pos": "RB",
+                    "team": "B",
+                    "actual_points": None,
+                }
+            ],
+        )
+        self.assertEqual(result["pending_actual_count"], 1)
+        self.assertIsNone(result["total_points"])
+        self.assertIsNone(result["lineup"][0]["points"])
+        self.assertIsNone(result["lineup"][0]["actual_points"])
+        self.assertEqual(result["remaining_projected_points"], 12.0)
 
     def test_started_bench_player_cannot_be_recommended_after_kickoff(self):
         players = [
@@ -215,6 +236,130 @@ class LiveStateTest(unittest.TestCase):
         )
         self.assertEqual(state["locked_starters"], [])
         self.assertNotIn("Not Yet Locked", state["unavailable_names"])
+
+    def test_status_locks_date_only_games_even_after_odds_feed_rolloff(self):
+        roster = {
+            "players": {
+                "a": {
+                    "name": {"full": "Completed Back"},
+                    "primary_position": "RB",
+                    "editorial_team_full_name": "Buffalo Bills",
+                }
+            }
+        }
+        # The event feed should not override an explicit started-game status.
+        stale_plan = {
+            "stale": SimpleNamespace(
+                home_team="Buffalo Bills",
+                away_team="Miami Dolphins",
+                commence_time="2026-09-13T20:00:00Z",
+            )
+        }
+        for status in ("in_game", "complete"):
+            with self.subTest(status=status):
+                state = build_live_state(
+                    roster,
+                    ["RB"],
+                    {"starters": ["a"], "players_points": {"a": 0.0}},
+                    planned=stale_plan,
+                    schedule=[
+                        {
+                            "week": 1,
+                            "home": "BUF",
+                            "away": "MIA",
+                            "date": "2026-09-10",
+                            "status": status,
+                        }
+                    ],
+                    nfl_week=1,
+                    now=dt.datetime(2026, 9, 11, 12, 0, tzinfo=dt.UTC),
+                )
+                self.assertEqual(len(state["locked_starters"]), 1)
+                self.assertEqual(state["locked_starters"][0]["actual_points"], 0.0)
+
+    def test_missing_actual_score_is_not_a_zero(self):
+        state = build_live_state(
+            {
+                "players": {
+                    "a": {
+                        "name": {"full": "Played Back"},
+                        "primary_position": "RB",
+                        "editorial_team_full_name": "Buffalo Bills",
+                    }
+                }
+            },
+            ["RB"],
+            {"starters": ["a"], "players_points": {}},
+            planned={},
+            schedule=[
+                {
+                    "week": 1,
+                    "home": "BUF",
+                    "away": "MIA",
+                    "date": "2026-09-10",
+                    "status": "complete",
+                }
+            ],
+            nfl_week=1,
+            now=dt.datetime(2026, 9, 11, 12, 0, tzinfo=dt.UTC),
+        )
+        self.assertIsNone(state["locked_starters"][0]["actual_points"])
+        self.assertIsNone(state["started_players"][0]["actual_points"])
+
+
+class ProjectionsWithActualsTest(unittest.TestCase):
+    @patch("oddsfantasy.live_lineup.load_live_state")
+    @patch("oddsfantasy.live_lineup.services._resolve_roster_positions")
+    @patch("oddsfantasy.live_lineup.services._load_week_context")
+    @patch("oddsfantasy.live_lineup.services.compute_projections")
+    def test_locked_player_uses_sleeper_score_not_old_projection(
+        self, mock_projections, mock_context, mock_positions, mock_live
+    ):
+        mock_projections.return_value = {
+            "players": [
+                {
+                    "name": "Thursday Back",
+                    "floor": 3.0,
+                    "mid": 9.0,
+                    "ceiling": 17.0,
+                    "mean": 9.5,
+                    "curve": [{"x": 9.0, "survival": 0.5}],
+                    "has_projection": True,
+                },
+                {
+                    "name": "Sunday Back",
+                    "floor": 4.0,
+                    "mid": 12.0,
+                    "ceiling": 20.0,
+                    "mean": 12.5,
+                    "curve": [{"x": 12.0, "survival": 0.5}],
+                    "has_projection": True,
+                },
+            ],
+            "roster_positions": ["RB"],
+        }
+        mock_context.return_value = {}
+        mock_positions.return_value = ["RB"]
+        mock_live.return_value = {
+            "started_players": [
+                {
+                    "name": "Thursday Back",
+                    "lineup_status": "starter",
+                    "actual_points": 5.5,
+                }
+            ]
+        }
+        report = compute_projections(username="demo", season="2026", week="this")
+        thursday, sunday = report["players"]
+        self.assertTrue(thursday["locked"])
+        self.assertEqual(thursday["mid"], 5.5)
+        self.assertEqual(thursday["actual_points"], 5.5)
+        self.assertIsNone(thursday["floor"])
+        self.assertIsNone(thursday["ceiling"])
+        self.assertFalse(thursday["has_projection"])
+        self.assertEqual(thursday["curve"], [])
+        self.assertEqual(sunday["mid"], 12.0)
+        self.assertFalse(sunday["locked"])
 
 
 if __name__ == "__main__":
