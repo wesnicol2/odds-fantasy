@@ -40,7 +40,6 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
   if (remainingMode) {
     notices.unshift(
       `${lockedCount} ${lockedCount === 1 ? 'slot is' : 'slots are'} locked at actual Sleeper points; only unstarted slots are optimized.`,
-
     );
   }
   if (payload?.locked_bench?.length) {
@@ -48,7 +47,6 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
       `Already played on bench: ${payload.locked_bench
         .map((row) => `${row.name} (${formatValue(row.actual_points)} FP)`)
         .join(', ')}.`,
-
     );
   }
   if (payload?.pending_actual_count) {
