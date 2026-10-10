@@ -64,9 +64,7 @@ class LockedLineupOptimizerTest(unittest.TestCase):
 
     def test_locked_player_without_sleeper_score_does_not_create_fake_zero(self):
         result = build_best_lineup(
-            [
-                {"name": "Monday QB", "pos": "QB", "team": "A", "floor": 8, "mid": 12, "ceiling": 22}
-            ],
+            [{"name": "Monday QB", "pos": "QB", "team": "A", "floor": 8, "mid": 12, "ceiling": 22}],
             roster_positions=["RB", "QB"],
             locked_starters=[
                 {
