@@ -198,7 +198,7 @@ export function DashboardView({
             </div>
             <div className="dashboard-lineup-summary">
               <div className="dashboard-total">
-                <strong>{lineup ? lineup.total_points.toFixed(1) : '—'}</strong>
+                <strong>{formatPoints(lineup?.total_points)}</strong>
                 <span>
                   {usesKickerProxy
                     ? 'modeled score'
@@ -218,8 +218,11 @@ export function DashboardView({
           {remainingMode ? (
             <div className="dashboard-lock-summary">
               <strong>{lockedCount} locked</strong>
-              <span>{formatPoints(lineup?.actual_points)} FP scored</span>
+              <span>{formatPoints(lineup?.actual_points)} known FP scored</span>
               <span>{lineup?.decisions_remaining ?? 0} decisions left</span>
+              {lineup?.pending_actual_count ? (
+                <span>{lineup.pending_actual_count} score(s) pending from Sleeper</span>
+              ) : null}
             </div>
           ) : null}
 
@@ -258,7 +261,7 @@ export function DashboardView({
                               : ''}
                         </small>
                       </span>
-                      <strong className="dashboard-points">{row.points.toFixed(1)}</strong>
+                      <strong className="dashboard-points">{formatPoints(row.points)}</strong>
                     </div>
 
                     {slotDecisions.length ? (
