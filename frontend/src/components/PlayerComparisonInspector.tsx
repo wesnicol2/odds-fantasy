@@ -589,8 +589,8 @@ export function PlayerComparisonInspector({
       <div className="comparison-recommendation">
         <strong>Start {starter.name}</strong>
         <span className="comparison-recommendation-copy">
-          {challenger.name} is {starterGap.toFixed(1)} {usesProxy ? 'modeled points' : 'FP'}{' '}
-          behind {starter.name} on their median projections.
+          {challenger.name} is {starterGap.toFixed(1)} {usesProxy ? 'modeled points' : 'FP'} behind{' '}
+          {starter.name} on their median projections.
         </span>
         <span className="comparison-signal-score">{pointLead}</span>
         <span className="comparison-signal-score">{statLead}</span>

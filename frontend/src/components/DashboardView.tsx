@@ -305,9 +305,13 @@ export function DashboardView({
                                 <small>{decision.projection_note ? 'proxy' : 'proj.'}</small>
                               </span>
                               <span className="dashboard-slot-decision-gap">
-                                <strong>{(decision.direct_fp_gap ?? decision.delta_to_lineup).toFixed(1)}</strong>
+                                <strong>
+                                  {(decision.direct_fp_gap ?? decision.delta_to_lineup).toFixed(1)}
+                                </strong>
                                 <small>
-                                  {decision.projection_note ? 'modeled pts behind' : 'FP behind starter'}
+                                  {decision.projection_note
+                                    ? 'modeled pts behind'
+                                    : 'FP behind starter'}
                                 </small>
                               </span>
                               <span className="dashboard-slot-decision-cta">Compare →</span>
