@@ -45,8 +45,13 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
   if (payload?.locked_bench?.length) {
     notices.push(
       `Already played on bench: ${payload.locked_bench
-        .map((row) => `${row.name} (${row.actual_points.toFixed(1)} FP)`)
+        .map((row) => `${row.name} (${formatValue(row.actual_points)} FP)`)
         .join(', ')}.`,
+    );
+  }
+  if (payload?.pending_actual_count) {
+    notices.push(
+      `${payload.pending_actual_count} locked scores are unavailable from Sleeper; totals will appear when scoring is returned.`,
     );
   }
   if (payload?.defense_note) notices.push(payload.defense_note);
@@ -93,11 +98,11 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
         <>
           <div className="lineup-total">
             <span>{totalLabel}</span>
-            <strong>{payload.total_points.toFixed(1)}</strong>
+            <strong>{formatValue(payload.total_points)}</strong>
           </div>
           {remainingMode ? (
             <div className="status-note">
-              {formatValue(payload.actual_points)} FP already scored ·{' '}
+              {formatValue(payload.actual_points)} known FP scored ·{' '}
               {formatValue(payload.remaining_projected_points)} modeled points from remaining slots
               {payload.decisions_remaining ?? 0} decisions remain.
             </div>
@@ -135,10 +140,13 @@ export function LineupView({ payload, target, loading, error, onTargetChange }: 
                       {!row.locked && row.projection_note ? (
                         <span className="row-secondary">KICKER MARKET PROXY</span>
                       ) : null}
+                      {!row.locked && row.coverage_status === 'partial' ? (
+                        <span className="row-secondary">LIMITED LINES</span>
+                      ) : null}
                     </td>
                     <td>{row.pos}</td>
                     <td>{row.team || '—'}</td>
-                    <td className="number primary-decision-value">{row.points.toFixed(1)}</td>
+                    <td className="number primary-decision-value">{formatValue(row.points)}</td>
                     <td className="number">{row.locked ? '—' : formatValue(row.floor)}</td>
                     <td className="number">{row.locked ? '—' : formatValue(row.mid)}</td>
                     <td className="number">{row.locked ? '—' : formatValue(row.ceiling)}</td>

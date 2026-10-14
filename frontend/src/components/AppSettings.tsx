@@ -48,9 +48,14 @@ export function AppSettings({ dataMode, onDataModeChange, onChangeLeague }: AppS
           Auto reuses valid provider caches. Cache only makes no provider refresh. Force fresh
           bypasses reusable odds caches for newly loaded data.
         </p>
-        <button type="button" onClick={handleChangeLeague}>
-          Change league
-        </button>
+        <div className="settings-actions">
+          <button type="button" onClick={handleChangeLeague}>
+            Change league
+          </button>
+          <a className="settings-cache-link" href="/settings/cache">
+            Cache
+          </a>
+        </div>
       </div>
     </details>
   );

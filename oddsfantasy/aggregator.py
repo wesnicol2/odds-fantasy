@@ -1,9 +1,10 @@
-"""Normalize Odds API event payloads into per-player, per-book market lines.
+"""Normalize provider evidence into per-player, per-source market lines.
 
-No projection math lives here. The methodology engine consumes the raw book
-lines directly, de-vigs each book, and builds consensus anchors itself. Player
-position is carried as non-market metadata so position-dependent league scoring
-can interpret an anytime touchdown without changing the sportsbook evidence.
+The Odds API-specific normalizer remains available as
+:func:`aggregate_odds_api_by_week`. The public :func:`aggregate_by_week` is the
+multi-provider seam: it keeps the historical mapping shape consumed by the
+projection engine while allowing independent providers to contribute peer
+sources with no downstream special treatment.
 """
 
 from __future__ import annotations
@@ -11,6 +12,14 @@ from __future__ import annotations
 import re
 
 PLAYER_POSITION_META_KEY = "__player_position__"
+
+
+class ProviderOddsMap(dict):
+    """Historical odds mapping plus first-class provider evidence metadata."""
+
+    provider_diagnostics: tuple[dict, ...] = ()
+    provider_benchmarks: tuple[dict, ...] = ()
+    providers_used: tuple[str, ...] = ()
 
 
 def _norm_name(value: str) -> str:
@@ -34,7 +43,7 @@ def _classify_side(name: str) -> str | None:
 def aggregate_players_from_event(
     event_odds: object, target_player_aliases: set[str]
 ) -> dict[str, dict]:
-    """Return ``alias -> bookmaker -> market -> raw sides`` for one event."""
+    """Return ``alias -> bookmaker -> market -> raw sides`` for one Odds API event."""
     aliases = target_player_aliases or set()
     norm_alias_map = {_norm_name(alias): alias for alias in aliases}
     events = (
@@ -92,16 +101,10 @@ def aggregate_players_from_event(
     return output
 
 
-def aggregate_by_week(
+def aggregate_odds_api_by_week(
     event_odds_by_game: dict[str, object], planned_games: dict[str, object]
 ) -> dict[str, dict]:
-    """Merge normalized player odds across all planned games in a week.
-
-    Position is copied from the already-resolved game plan into each book's
-    market dictionary under :data:`PLAYER_POSITION_META_KEY`. It is metadata,
-    not a market: the odds math ignores unknown keys, while the scoring layer
-    can use it to distinguish receiving from rushing touchdown scoring.
-    """
+    """Merge only Odds API sportsbook evidence across planned games."""
     output: dict[str, dict] = {}
     for game_id, event_odds in (event_odds_by_game or {}).items():
         game_plan = planned_games.get(game_id)
@@ -121,4 +124,38 @@ def aggregate_by_week(
                 position = position_by_alias.get(alias)
                 if position:
                     book_out[PLAYER_POSITION_META_KEY] = {"value": position}
+    return output
+
+
+def aggregate_by_week(
+    event_odds_by_game: dict[str, object], planned_games: dict[str, object]
+) -> dict[str, dict]:
+    """Merge all enabled providers into the projection engine's source map.
+
+    Provider adapters return canonical evidence. This compatibility seam then
+    presents every unique source as a peer ``book`` to the existing market math,
+    so de-vigging, median consensus, distribution fitting, and fantasy scoring
+    remain provider-agnostic.
+    """
+    if not planned_games:
+        return ProviderOddsMap()
+
+    first_plan = next(iter(planned_games.values()))
+    cache_mode = str(getattr(first_plan, "cache_mode", "auto") or "auto")
+    region = str(getattr(first_plan, "regions", "us") or "us")
+
+    # Lazy import avoids a module cycle: the Odds API provider adapter reuses
+    # aggregate_odds_api_by_week above to preserve existing matching behavior.
+    from .provider_service import collect_provider_evidence
+
+    bundle = collect_provider_evidence(
+        event_odds_by_game,
+        planned_games,
+        cache_mode=cache_mode,
+        region=region,
+    )
+    output = ProviderOddsMap(bundle.players_odds)
+    output.provider_diagnostics = bundle.diagnostics
+    output.provider_benchmarks = bundle.benchmarks
+    output.providers_used = bundle.providers_used
     return output

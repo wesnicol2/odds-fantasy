@@ -176,5 +176,27 @@ class ResolveIdentityPriorityTest(unittest.TestCase):
         self.assertEqual(result["scoring_rules"], {"pass_td": 4.0})
 
 
+class NflScheduleCacheTest(unittest.TestCase):
+    @patch("oddsfantasy.sleeper_api.time.monotonic")
+    @patch("oddsfantasy.sleeper_api.requests.get")
+    def test_status_refreshes_after_ttl(self, mock_get, mock_now):
+        sleeper_api._SCHEDULE_CACHE.clear()
+        try:
+            mock_now.side_effect = [0.0, 20.0, 61.0]
+            mock_get.side_effect = [
+                _fake_response([{"week": 1, "date": "2026-09-10", "status": "pre_game"}]),
+                _fake_response([{"week": 1, "date": "2026-09-10", "status": "complete"}]),
+            ]
+            first = sleeper_api.get_nfl_schedule("2026")
+            still_first = sleeper_api.get_nfl_schedule("2026")
+            updated = sleeper_api.get_nfl_schedule("2026")
+            self.assertEqual(first[0]["status"], "pre_game")
+            self.assertIs(first, still_first)
+            self.assertEqual(updated[0]["status"], "complete")
+            self.assertEqual(mock_get.call_count, 2)
+        finally:
+            sleeper_api._SCHEDULE_CACHE.clear()
+
+
 if __name__ == "__main__":
     unittest.main()

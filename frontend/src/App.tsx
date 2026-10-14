@@ -3,6 +3,7 @@ import { isCountMetric, metricLabel, sortMetrics } from './analysis/metrics';
 import {
   fetchBestLineup,
   fetchDefenses,
+  fetchHealth,
   fetchLeagueResolution,
   fetchPlayerDetails,
   fetchProjections,
@@ -23,6 +24,7 @@ import './navigation.css';
 import { useWorkspaceStore, type WeekWindow, type WorkspaceView } from './state/workspace';
 import type {
   BenchPressureRow,
+  BuildInfo,
   ChartEvidence,
   DefenseResponse,
   LineupResponse,
@@ -40,7 +42,7 @@ const views: ReadonlyArray<readonly [WorkspaceView, string]> = [
 interface StartSitComparison {
   challenger: string;
   starter: string;
-  lineupDelta: number;
+  starterGap: number;
   week: WeekWindow;
 }
 
@@ -76,6 +78,13 @@ function routeUrl(view: WorkspaceView, week: WeekWindow): string {
   return `${url.pathname}${url.search}`;
 }
 
+function buildTimestamp(value: string | null): string {
+  if (!value) return 'unknown';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
+}
+
 export function App() {
   const view = useWorkspaceStore((state) => state.view);
   const week = useWorkspaceStore((state) => state.week);
@@ -97,6 +106,7 @@ export function App() {
   const setSelectedPositions = useWorkspaceStore((state) => state.setSelectedPositions);
 
   const [identity, setIdentity] = useState(savedLeagueIdentity);
+  const [build, setBuild] = useState<BuildInfo | null>(null);
   const [setupOpen, setSetupOpen] = useState(() => !(identity.leagueId && identity.rosterId));
   const [leagueContext, setLeagueContext] = useState<string | null>(null);
   const [report, setReport] = useState<ProjectionResponse | null>(null);
@@ -161,6 +171,16 @@ export function App() {
     },
     [dataMode, identityKey, identityReady, week],
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchHealth(controller.signal)
+      .then((payload) => setBuild(payload.build))
+      .catch(() => {
+        if (!controller.signal.aborted) setBuild(null);
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const syncRoute = () => {
@@ -549,7 +569,7 @@ export function App() {
         ? {
             challenger: pressure.name,
             starter: pressure.displaces,
-            lineupDelta: pressure.delta_to_lineup,
+            starterGap: pressure.direct_fp_gap ?? pressure.delta_to_lineup,
             week: 'this',
           }
         : null,
@@ -747,7 +767,7 @@ export function App() {
           challengerDetails={activeComparison.challengerDetails}
           starterDetails={activeComparison.starterDetails}
           detailsLoading={activeComparison.detailsLoading}
-          lineupDelta={activeComparison.context.lineupDelta}
+          starterGap={activeComparison.context.starterGap}
           target={target}
           metric={metric}
           onMetricChange={setMetric}
@@ -858,6 +878,18 @@ export function App() {
           error={lineupError}
           onTargetChange={setLineupTarget}
         />
+      ) : null}
+
+      {build?.image_tag === 'test' ? (
+        <aside
+          className="test-build-stamp"
+          aria-label="Test build"
+          title={`Commit ${build.commit} · Commit updated ${build.commit_at ?? 'unknown'} · Image built ${build.built_at ?? 'unknown'}`}
+        >
+          <strong>TEST</strong>
+          <code>{build.commit_short}</code>
+          <span>Updated {buildTimestamp(build.commit_at)}</span>
+        </aside>
       ) : null}
 
       <LeagueSetup

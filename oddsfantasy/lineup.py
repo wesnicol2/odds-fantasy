@@ -121,6 +121,30 @@ def build_best_lineup(
             ]
         )
 
+    def canonicalize(choices: tuple[int | None, ...]) -> tuple[int | None, ...]:
+        """Place strongest selected players in native slots before flexible slots.
+
+        Only movable same-position players can swap; locks, eligibility,
+        selected players, and the total optimization score stay unchanged.
+        """
+        result = list(choices)
+        for position in ("QB", "RB", "WR", "TE", "K", "DEF"):
+            indices = [
+                i
+                for i, choice in enumerate(choices)
+                if choice is not None
+                and i not in locked_by_slot
+                and candidates[choice].get("pos") == position
+            ]
+            indices.sort(key=lambda i: (modeled_slots[i] != position, i))
+            ranked = sorted(
+                (choices[i] for i in indices),
+                key=lambda choice: (-float(_score(candidates[choice], target)), choice),
+            )
+            for i, choice in zip(indices, ranked, strict=True):
+                result[i] = choice
+        return tuple(result)
+
     def optimize(required_candidate: int | None = None) -> tuple[float, tuple[int | None, ...]]:
         required_bit = 1 << required_candidate if required_candidate is not None else 0
 
@@ -164,7 +188,8 @@ def build_best_lineup(
                 return rest_total, (None, *rest_choices)
             return best_total, best_choices
 
-        return solve(0, 0)
+        total, choices = solve(0, 0)
+        return total, canonicalize(choices) if total != float("-inf") else choices
 
     def lineup_rows(choices: tuple[int | None, ...]) -> tuple[list[dict], list[str]]:
         rows: list[dict] = []
@@ -178,7 +203,7 @@ def build_best_lineup(
             lock = locked[1] if locked is not None else None
             if lock is not None:
                 actual = lock.get("actual_points")
-                selected_points = float(actual) if isinstance(actual, (int, float)) else 0.0
+                selected_points = float(actual) if isinstance(actual, (int, float)) else None
             else:
                 selected_points = float(_score(candidate, target) or 0.0)
             rows.append(
@@ -188,13 +213,22 @@ def build_best_lineup(
                     "name": candidate.get("name"),
                     "pos": candidate.get("pos"),
                     "team": candidate.get("team"),
-                    "points": round(selected_points, 2),
-                    "floor": candidate.get("floor"),
-                    "mid": candidate.get("mid"),
-                    "ceiling": candidate.get("ceiling"),
-                    "projection_note": candidate.get("projection_note"),
+                    "points": round(selected_points, 2) if selected_points is not None else None,
+                    "floor": candidate.get("floor") if lock is None else None,
+                    "mid": candidate.get("mid") if lock is None else None,
+                    "ceiling": candidate.get("ceiling") if lock is None else None,
+                    "projection_note": candidate.get("projection_note") if lock is None else None,
+                    "coverage_status": candidate.get("coverage_status") if lock is None else None,
+                    "missing_markets": (
+                        list(candidate.get("missing_markets") or []) if lock is None else []
+                    ),
+                    "data_status": candidate.get("data_status") if lock is None else None,
                     "locked": lock is not None,
-                    "actual_points": round(selected_points, 2) if lock is not None else None,
+                    "actual_points": (
+                        round(selected_points, 2)
+                        if lock is not None and selected_points is not None
+                        else None
+                    ),
                 }
             )
         return rows, unfilled_slots
@@ -251,6 +285,10 @@ def build_best_lineup(
         )
         forced_slot = modeled_slots[forced_slot_index] if forced_slot_index is not None else None
         displaced = candidates[displaced_index] if displaced_index is not None else None
+        displaced_score = _score(displaced, target) if displaced is not None else None
+        direct_gap = (
+            round(displaced_score - candidate_score, 2) if displaced_score is not None else None
+        )
         bench_pressure.append(
             {
                 "name": candidate.get("name"),
@@ -258,7 +296,14 @@ def build_best_lineup(
                 "team": candidate.get("team"),
                 "points": round(candidate_score, 2),
                 "projection_note": candidate.get("projection_note"),
+                "coverage_status": candidate.get("coverage_status"),
+                "missing_markets": list(candidate.get("missing_markets") or []),
+                "data_status": candidate.get("data_status"),
                 "delta_to_lineup": round(max(0.0, baseline_total - forced_total), 2),
+                "direct_fp_gap": direct_gap,
+                "displaced_points": round(displaced_score, 2)
+                if displaced_score is not None
+                else None,
                 "slot": forced_slot,
                 "slot_index": forced_slot_index,
                 "displaces": displaced.get("name") if displaced else None,
@@ -277,24 +322,66 @@ def build_best_lineup(
 
     bench_pressure.sort(
         key=lambda row: (
+            row["direct_fp_gap"] if row["direct_fp_gap"] is not None else float("inf"),
             row["delta_to_lineup"],
             -row["points"],
             str(row.get("name") or ""),
         )
     )
 
+    # Coverage is never an optimizer eligibility gate. Keep a lightweight watch
+    # for every still-actionable non-starter whose market evidence is incomplete,
+    # including players with zero usable lines who cannot receive a numeric score.
+    coverage_watch: list[dict] = []
+    for candidate_index, candidate in enumerate(candidates[:player_count]):
+        if candidate_index in baseline_indices:
+            continue
+        if candidate.get("name") in unavailable:
+            continue
+        if candidate.get("pos") not in modeled_player_positions:
+            continue
+        coverage_status = candidate.get("coverage_status")
+        if coverage_status not in {"partial", "missing"}:
+            continue
+        coverage_watch.append(
+            {
+                "name": candidate.get("name"),
+                "pos": candidate.get("pos"),
+                "team": candidate.get("team"),
+                "coverage_status": coverage_status,
+                "missing_markets": list(candidate.get("missing_markets") or []),
+                "has_projection": _score(candidate, target) is not None,
+                "data_status": candidate.get("data_status"),
+            }
+        )
+
+    coverage_watch.sort(
+        key=lambda row: (
+            row["coverage_status"] == "missing",
+            str(row.get("name") or ""),
+        )
+    )
+
     actual_points = sum(
-        float(lock.get("actual_points") or 0.0) for _, lock in locked_by_slot.values()
+        float(lock["actual_points"])
+        for _, lock in locked_by_slot.values()
+        if isinstance(lock.get("actual_points"), (int, float))
+    )
+    pending_actual_count = sum(
+        not isinstance(lock.get("actual_points"), (int, float))
+        for _, lock in locked_by_slot.values()
     )
     return {
         "target": target,
         "lineup": rows,
-        "total_points": round(baseline_total, 2),
+        "total_points": round(baseline_total, 2) if not pending_actual_count else None,
         "actual_points": round(actual_points, 2),
         "remaining_projected_points": round(baseline_total - actual_points, 2),
         "locked_count": len(locked_by_slot),
+        "pending_actual_count": pending_actual_count,
         "decisions_remaining": len(modeled_slots) - len(locked_by_slot),
         "bench_pressure": bench_pressure,
+        "coverage_watch": coverage_watch,
         "unmodeled_slots": unmodeled_slots,
         "unfilled_slots": unfilled_slots,
     }

@@ -51,6 +51,45 @@ input:focus-visible {
 .app-frame {
   min-height: 100vh;
 }
+
+.test-build-stamp {
+  position: fixed;
+  right: 10px;
+  bottom: 8px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100vw - 20px);
+  padding: 5px 8px;
+  border: 1px solid #3a4654;
+  border-radius: 5px;
+  background: rgb(10 13 17 / 94%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 28%);
+  color: #8e99a7;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.test-build-stamp strong {
+  color: #f0b36a;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+.test-build-stamp code {
+  color: #c4ced9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9px;
+}
+
+.test-build-stamp span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .topbar {
   min-height: 64px;
   display: flex;

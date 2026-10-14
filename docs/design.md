@@ -104,9 +104,9 @@ Floor / Mid / Ceiling, target probabilities, and probability distributions are c
 
 Users should be able to move naturally from:
 
-**projection → distribution → consensus market evidence → individual sportsbook lines**
+**projection → source/book coverage → distribution → consensus market evidence → individual sportsbook lines**
 
-The evidence should be available without permanently consuming the primary comparison area.
+Selecting a player reveals book/source coverage immediately in the inspector. Each source is one collapsed row by default and expands into every available market/line for that player; source failures are shown as semantic warnings and are never presented as proof that no lines exist. The evidence should be available without permanently consuming the primary comparison area.
 
 Visualizations are presentations of canonical backend model data. The frontend must not invent a second probability or lineup model.
 
@@ -237,9 +237,9 @@ The authoritative measure is backend optimizer opportunity cost:
 3. re-optimize the remaining slots;
 4. report the total projected value lost relative to the unconstrained ideal.
 
-The displayed **FP back** value is that loss.
+The backend preserves that full-lineup loss as `delta_to_lineup`, but the UI shows the **direct difference in projected points between the challenger and the baseline starter displaced** (`direct_fp_gap`), calculated in the backend. The comparison is attached to the displaced starter's slot, which need not equal the challenger's forced destination after a FLEX reshuffle.
 
-This is preferable to simply subtracting one player's raw projection from another because FLEX/SUPER_FLEX eligibility and global slot interactions can change the correct comparison.
+The optimizer still determines the displaced player and evaluates the full lineup, preserving FLEX/SUPER_FLEX eligibility and all locked slots. A direct gap is a pairwise display, not the full-lineup opportunity cost. Among equal-optimum assignments, stronger RBs, WRs, and TEs fill their dedicated positions ahead of FLEX; this cannot change the selected player set or total.
 
 When available, identify which current starter the bench player would displace. For example:
 
@@ -247,11 +247,11 @@ When available, identify which current starter the bench player would displace. 
 
 The browser must not recreate optimizer eligibility logic to derive this value.
 
-Selecting a bench-pressure row drills into Players for **This week** and opens a focused start/sit comparison between the bench player and the optimizer-identified starter they would displace. Preserve `FP back` as the optimizer's whole-lineup opportunity cost; do not relabel it as a raw difference between the two player projections.
+Selecting a bench-pressure row drills into Players for **This week** and opens a focused start/sit comparison against the optimizer-identified displaced starter. Show the *direct* median-projection difference there; do not call the full-lineup opportunity cost a player-to-player difference.
 
 The comparison inspector should show:
 
-- the optimizer's current recommendation and lineup-level `FP back` context;
+- the optimizer's current recommendation and the direct points gap to the displaced starter;
 - a weekly tie-breaker matrix with aligned Floor / Mid / Ceiling / Mean values for both players;
 - this game's opponent, kickoff, spread, total and team implied total when the market supplies them;
 - an aligned union of this week's modeled props with each stat's signed expected fantasy-point contribution;

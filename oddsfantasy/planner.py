@@ -21,6 +21,8 @@ class PlannedGame:
     commence_time: str
     players: list[dict]
     markets: list[str]
+    regions: str = "us"
+    cache_mode: str = "auto"
 
 
 def player_alias(full_name: str) -> str:
@@ -72,7 +74,9 @@ def plan_relevant_games_and_markets(
     """Plan the minimum event-odds calls needed for the roster.
 
     ``events`` lets a caller that already fetched the schedule avoid immediately
-    fetching it a second time.
+    fetching it a second time. Provider operational context is retained on each
+    plan so normalization can fan out to all enabled providers without changing
+    the service-layer call shape.
     """
     (this_start, this_end), (next_start, next_end) = week_windows
     event_rows = (
@@ -112,6 +116,8 @@ def plan_relevant_games_and_markets(
                         commence_time=event["commence_time"],
                         players=[],
                         markets=[],
+                        regions=regions,
+                        cache_mode=cache_mode,
                     ),
                 )
                 game.players.append(

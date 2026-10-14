@@ -3,6 +3,7 @@ import { formatOdds } from '../analysis/odds';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
 import { useWorkspaceStore } from '../state/workspace';
 import type { PlayerOddsDetails, ProjectionPlayer } from '../types';
+import { PlayerBookEvidence } from './PlayerBookEvidence';
 
 interface PlayerInspectorProps {
   player: ProjectionPlayer | null;
@@ -70,7 +71,17 @@ export function PlayerInspector({
 
       {projectionNote ? <div className="status-note">{projectionNote}</div> : null}
 
-      {player.has_projection ? (
+      <PlayerBookEvidence details={details} detailsLoading={detailsLoading} />
+
+      {player.locked ? (
+        <div className="status-note">
+          <strong>{formatPoints(player.actual_points ?? null)} actual FP</strong> ·{' '}
+          {player.lineup_status === 'bench' ? 'On bench' : 'Starter'} · Locked after kickoff.
+          {player.actual_points === null || player.actual_points === undefined
+            ? ' Sleeper score unavailable; not treated as zero.'
+            : ' No remaining projection.'}
+        </div>
+      ) : player.has_projection ? (
         <>
           <dl className="projection-summary">
             <div>
@@ -291,9 +302,11 @@ export function PlayerInspector({
         </>
       ) : (
         <div className="empty-state">
-          {player.coverage_status === 'partial'
-            ? 'Projection withheld because core betting-line coverage is incomplete.'
-            : 'No complete core betting-line coverage is available for this player.'}
+          {player.data_status === 'fetch_failed'
+            ? 'Projection unavailable because the sportsbook fetch failed for this game.'
+            : player.coverage_status === 'partial'
+              ? 'Projection withheld because core betting-line coverage is incomplete.'
+              : 'No complete core betting-line coverage is available for this player.'}
           {player.missing_markets?.length ? (
             <span> Missing: {player.missing_markets.map(metricLabel).join(', ')}.</span>
           ) : null}

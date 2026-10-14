@@ -156,6 +156,17 @@ class PlayerDetailsTest(TestCase):
         self.assertTrue(all(probability >= 0 for probability in probabilities))
         self.assertGreater(max(probabilities), 0)
 
+        books = {book["book"]: book for book in result["books"]}
+        self.assertEqual(set(books), {"draftkings", "fanduel"})
+        self.assertEqual(len(books["draftkings"]["lines"]), 4)
+        self.assertEqual(len(books["fanduel"]["lines"]), 3)
+        self.assertEqual(
+            books["draftkings"]["lines"][0]["market_key"],
+            "player_anytime_td",
+        )
+        self.assertEqual(result["data_status"], "ok")
+        self.assertEqual(result["data_issues"], [])
+
     @mock.patch("oddsfantasy.odds_details._load_week_context", return_value=KICKER_CONTEXT)
     def test_kicker_detail_keeps_market_proxy_label_and_full_pmf(self, _mock_context):
         result = get_player_odds_details(

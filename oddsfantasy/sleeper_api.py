@@ -15,7 +15,8 @@ REQ_TIMEOUT = (_conn_to, _read_to)  # (connect, read) seconds
 _PLAYERS_CACHE = None
 _PLAYERS_CACHE_FILE = os.path.join(DATA_DIR, "sleeper_players.json")
 _PLAYERS_TTL = int(os.getenv("SLEEPER_PLAYERS_TTL", "86400"))  # 24h
-_SCHEDULE_CACHE: dict[tuple[str, str], list[dict]] = {}
+_SCHEDULE_CACHE: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+_SCHEDULE_TTL = 60  # NFL game statuses can change between requests.
 
 
 def get_player_enhanced_info(player_id):
@@ -122,14 +123,21 @@ def get_nfl_schedule(season, season_type="regular"):
     for deciding whether a fantasy lineup slot has crossed kickoff.
     """
     key = (str(season), str(season_type))
-    if key in _SCHEDULE_CACHE:
-        return _SCHEDULE_CACHE[key]
+    now = time.monotonic()
+    cached = _SCHEDULE_CACHE.get(key)
+    if cached and now - cached[0] < _SCHEDULE_TTL:
+        return cached[1]
     url = f"{SLEEPER_ROOT_URL}/schedule/nfl/{season_type}/{season}"
-    response = requests.get(url, timeout=REQ_TIMEOUT)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.get(url, timeout=REQ_TIMEOUT)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException:
+        if cached:
+            return cached[1]
+        raise
     rows = data if isinstance(data, list) else []
-    _SCHEDULE_CACHE[key] = rows
+    _SCHEDULE_CACHE[key] = (now, rows)
     return rows
 
 

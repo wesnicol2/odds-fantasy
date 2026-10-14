@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { CacheInspector } from './components/CacheInspector';
 import './styles.css';
 import './evidence.css';
 import './decision.css';
@@ -11,8 +12,6 @@ if (!root) {
   throw new Error('Missing #root element');
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+const content = window.location.pathname === '/settings/cache' ? <CacheInspector /> : <App />;
+
+createRoot(root).render(<StrictMode>{content}</StrictMode>);

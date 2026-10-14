@@ -16,7 +16,12 @@ from .projection import (
     project_player,
     survival_curve,
 )
-from .services import NO_GAMES_SCHEDULED_MESSAGE, _load_week_context
+from .services import (
+    NO_GAMES_SCHEDULED_MESSAGE,
+    _load_week_context,
+    _player_data_issues,
+    _player_data_status,
+)
 
 
 def _norm_name(value: str) -> str:
@@ -72,6 +77,84 @@ def _line_rows(by_book: dict, market_key: str) -> list[dict]:
             rows.extend(by_point.values())
     rows.sort(key=lambda row: (float(row.get("point") or 0), str(row.get("book") or "")))
     return rows
+
+
+def _book_rows(by_book: dict) -> list[dict]:
+    """Group every normalized source line for a player by book/source."""
+    books: list[dict] = []
+    for book_key, markets in (by_book or {}).items():
+        lines: list[dict] = []
+        providers: set[str] = set()
+        for raw_key, entry in (markets or {}).items():
+            if str(raw_key).startswith("__") or not isinstance(entry, dict):
+                continue
+            alternate = str(raw_key).endswith("_alternate")
+            market_key = str(raw_key)[: -len("_alternate")] if alternate else str(raw_key)
+
+            if alternate:
+                alts = entry.get("alts")
+                if not isinstance(alts, dict):
+                    continue
+                by_point: dict[float, dict] = {}
+                for side in ("over", "under"):
+                    for item in alts.get(side) or []:
+                        try:
+                            point = float(item.get("point"))
+                        except (TypeError, ValueError):
+                            continue
+                        provider = item.get("provider")
+                        if provider:
+                            providers.add(str(provider))
+                        row = by_point.setdefault(
+                            point,
+                            {
+                                "market_key": market_key,
+                                "source": "alternate",
+                                "point": point,
+                                "over_odds": None,
+                                "under_odds": None,
+                            },
+                        )
+                        row[f"{side}_odds"] = item.get("odds")
+                lines.extend(by_point.values())
+                continue
+
+            over = entry.get("over") or {}
+            under = entry.get("under") or {}
+            if not over and not under:
+                continue
+            for record in (over, under):
+                provider = record.get("provider") if isinstance(record, dict) else None
+                if provider:
+                    providers.add(str(provider))
+            point = over.get("point") if over.get("point") is not None else under.get("point")
+            lines.append(
+                {
+                    "market_key": market_key,
+                    "source": "main",
+                    "point": point,
+                    "over_odds": over.get("odds"),
+                    "under_odds": under.get("odds"),
+                }
+            )
+
+        lines.sort(
+            key=lambda row: (
+                str(row.get("market_key") or ""),
+                row.get("source") != "main",
+                float(row.get("point") or 0),
+            )
+        )
+        if lines:
+            books.append(
+                {
+                    "book": str(book_key),
+                    "provider": next(iter(providers)) if len(providers) == 1 else None,
+                    "lines": lines,
+                }
+            )
+    books.sort(key=lambda row: str(row.get("book") or "").lower())
+    return books
 
 
 def _game_line_context(event_odds: object, team: str) -> dict:
@@ -212,6 +295,9 @@ def get_player_odds_details(
             "projection_note": None,
             "markets": {},
             "combined_markets": {},
+            "books": [],
+            "data_status": "ok",
+            "data_issues": [],
             "message": NO_GAMES_SCHEDULED_MESSAGE,
             "ratelimit": ratelimit.format_status(),
             "ratelimit_info": ratelimit.get_details(),
@@ -233,12 +319,17 @@ def get_player_odds_details(
             "projection_note": None,
             "markets": {},
             "combined_markets": {},
+            "books": [],
+            "data_status": "ok",
+            "data_issues": [],
             "ratelimit": ratelimit.format_status(),
             "ratelimit_info": ratelimit.get_details(),
         }
 
     info = info_by_alias[target_alias]
     by_book = (context.get("players_odds") or {}).get(target_alias, {})
+    data_issues = _player_data_issues(context, target_alias)
+    data_status = _player_data_status(data_issues)
     projection = project_player(
         by_book,
         context.get("scoring_rules") or {},
@@ -309,6 +400,9 @@ def get_player_odds_details(
         "matchup": matchup,
         "markets": markets,
         "combined_markets": combined_markets,
+        "books": _book_rows(by_book),
+        "data_status": data_status,
+        "data_issues": data_issues,
         "ratelimit": ratelimit.format_status(),
         "ratelimit_info": ratelimit.get_details(),
     }

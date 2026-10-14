@@ -10,7 +10,7 @@ interface PlayerComparisonInspectorProps {
   challengerDetails: PlayerOddsDetails | null;
   starterDetails: PlayerOddsDetails | null;
   detailsLoading: boolean;
-  lineupDelta: number;
+  starterGap: number;
   target: number | null;
   metric: string;
   onMetricChange: (metric: string) => void;
@@ -362,7 +362,7 @@ export function PlayerComparisonInspector({
   challengerDetails,
   starterDetails,
   detailsLoading,
-  lineupDelta,
+  starterGap,
   target,
   metric,
   onMetricChange,
@@ -589,8 +589,8 @@ export function PlayerComparisonInspector({
       <div className="comparison-recommendation">
         <strong>Start {starter.name}</strong>
         <span className="comparison-recommendation-copy">
-          {challenger.name} is {lineupDelta.toFixed(1)} {usesProxy ? 'modeled points' : 'lineup FP'}{' '}
-          back after re-optimizing every eligible slot.
+          {challenger.name} is {starterGap.toFixed(1)} {usesProxy ? 'modeled points' : 'FP'} behind{' '}
+          {starter.name} on their median projections.
         </span>
         <span className="comparison-signal-score">{pointLead}</span>
         <span className="comparison-signal-score">{statLead}</span>
