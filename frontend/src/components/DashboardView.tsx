@@ -72,13 +72,19 @@ function decisionSlotKey(
   decision: IndexedBenchPressureRow,
   lineupRows: IndexedLineupRow[],
 ): number | null {
-  if (decision.slot_index !== null && decision.slot_index !== undefined) {
-    return decision.slot_index;
+  // The challenger may enter FLEX while the strongest remaining RB/WR/TE
+  // shifts to a dedicated slot. Show the call under the actual displaced starter.
+  if (decision.displaces_slot_index !== null && decision.displaces_slot_index !== undefined) {
+    return decision.displaces_slot_index;
   }
 
   const displacedIndex = lineupRows.findIndex((row) => row.name === decision.displaces);
   if (displacedIndex >= 0) {
     return lineupRows[displacedIndex]?.slot_index ?? displacedIndex;
+  }
+
+  if (decision.slot_index !== null && decision.slot_index !== undefined) {
+    return decision.slot_index;
   }
 
   const matchingSlotIndex = lineupRows.findIndex(
@@ -299,9 +305,9 @@ export function DashboardView({
                                 <small>{decision.projection_note ? 'proxy' : 'proj.'}</small>
                               </span>
                               <span className="dashboard-slot-decision-gap">
-                                <strong>{decision.delta_to_lineup.toFixed(1)}</strong>
+                                <strong>{(decision.direct_fp_gap ?? decision.delta_to_lineup).toFixed(1)}</strong>
                                 <small>
-                                  {decision.projection_note ? 'modeled pts back' : 'FP back'}
+                                  {decision.projection_note ? 'modeled pts behind' : 'FP behind starter'}
                                 </small>
                               </span>
                               <span className="dashboard-slot-decision-cta">Compare →</span>

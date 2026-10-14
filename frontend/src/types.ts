@@ -251,6 +251,8 @@ export interface BenchPressureRow {
   missing_markets?: string[];
   data_status?: 'ok' | 'degraded' | 'fetch_failed';
   delta_to_lineup: number;
+  direct_fp_gap?: number | null;
+  displaced_points?: number | null;
   slot: string | null;
   displaces: string | null;
   displaces_slot: string | null;

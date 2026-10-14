@@ -491,6 +491,8 @@ def api_fixture(route: Route) -> None:
                         "coverage_status": "partial",
                         "missing_markets": ["player_receptions"],
                         "delta_to_lineup": 2,
+                        "direct_fp_gap": 2,
+                        "displaced_points": 17,
                         "slot": "WR",
                         "displaces": "Alpha Runner",
                         "displaces_slot": "RB",
@@ -594,7 +596,7 @@ def main() -> None:
         assert pane_order() == ["Player inspector", "Probability analysis", "Player ranking"]
         inspector.get_by_text("Start Alpha Runner", exact=True).wait_for()
         inspector.get_by_text(
-            "Beta Receiver is 2.0 lineup FP back after re-optimizing every eligible slot.",
+            "Beta Receiver is 2.0 FP behind Alpha Runner on their median projections.",
             exact=True,
         ).wait_for()
         # Fantasy-point and stat-value signals are tallied separately, never merged.

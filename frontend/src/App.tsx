@@ -42,7 +42,7 @@ const views: ReadonlyArray<readonly [WorkspaceView, string]> = [
 interface StartSitComparison {
   challenger: string;
   starter: string;
-  lineupDelta: number;
+  starterGap: number;
   week: WeekWindow;
 }
 
@@ -569,7 +569,7 @@ export function App() {
         ? {
             challenger: pressure.name,
             starter: pressure.displaces,
-            lineupDelta: pressure.delta_to_lineup,
+            starterGap: pressure.direct_fp_gap ?? pressure.delta_to_lineup,
             week: 'this',
           }
         : null,
@@ -767,7 +767,7 @@ export function App() {
           challengerDetails={activeComparison.challengerDetails}
           starterDetails={activeComparison.starterDetails}
           detailsLoading={activeComparison.detailsLoading}
-          lineupDelta={activeComparison.context.lineupDelta}
+          starterGap={activeComparison.context.starterGap}
           target={target}
           metric={metric}
           onMetricChange={setMetric}
