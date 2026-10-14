@@ -69,14 +69,22 @@ class LockedLineupOptimizerTest(unittest.TestCase):
             {"name": "Active Low RB", "pos": "RB", "mid": 4},
         ]
         result = build_best_lineup(
-            players, target="mid", roster_positions=["RB", "RB", "FLEX"],
-            locked_starters=[{"slot_index": 2, "name": "Locked High RB",
-                              "pos": "RB", "actual_points": 6.5}],
+            players,
+            target="mid",
+            roster_positions=["RB", "RB", "FLEX"],
+            locked_starters=[
+                {"slot_index": 2, "name": "Locked High RB", "pos": "RB", "actual_points": 6.5}
+            ],
             unavailable_names={"Locked High RB"},
         )
-        self.assertEqual([row["name"] for row in result["lineup"]], [
-            "Active Mid RB", "Active Low RB", "Locked High RB",
-        ])
+        self.assertEqual(
+            [row["name"] for row in result["lineup"]],
+            [
+                "Active Mid RB",
+                "Active Low RB",
+                "Locked High RB",
+            ],
+        )
         self.assertTrue(result["lineup"][2]["locked"])
         self.assertEqual(result["lineup"][2]["points"], 6.5)
 

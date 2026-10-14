@@ -130,7 +130,8 @@ def build_best_lineup(
         result = list(choices)
         for position in ("QB", "RB", "WR", "TE", "K", "DEF"):
             indices = [
-                i for i, choice in enumerate(choices)
+                i
+                for i, choice in enumerate(choices)
                 if choice is not None
                 and i not in locked_by_slot
                 and candidates[choice].get("pos") == position
@@ -286,9 +287,7 @@ def build_best_lineup(
         displaced = candidates[displaced_index] if displaced_index is not None else None
         displaced_score = _score(displaced, target) if displaced is not None else None
         direct_gap = (
-            round(displaced_score - candidate_score, 2)
-            if displaced_score is not None
-            else None
+            round(displaced_score - candidate_score, 2) if displaced_score is not None else None
         )
         bench_pressure.append(
             {
@@ -302,7 +301,9 @@ def build_best_lineup(
                 "data_status": candidate.get("data_status"),
                 "delta_to_lineup": round(max(0.0, baseline_total - forced_total), 2),
                 "direct_fp_gap": direct_gap,
-                "displaced_points": round(displaced_score, 2) if displaced_score is not None else None,
+                "displaced_points": round(displaced_score, 2)
+                if displaced_score is not None
+                else None,
                 "slot": forced_slot,
                 "slot_index": forced_slot_index,
                 "displaces": displaced.get("name") if displaced else None,

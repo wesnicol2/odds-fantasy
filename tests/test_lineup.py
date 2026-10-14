@@ -192,14 +192,23 @@ class BestLineupTest(unittest.TestCase):
             {"name": "TE High", "pos": "TE", "mid": 12},
         ]
         result = build_best_lineup(
-            players, target="mid",
+            players,
+            target="mid",
             roster_positions=["RB", "RB", "WR", "WR", "TE", "FLEX", "FLEX", "FLEX"],
         )
-        self.assertEqual([row["name"] for row in result["lineup"][:5]], [
-            "RB High", "RB Mid", "WR High", "WR Mid", "TE High",
-        ])
-        self.assertEqual({row["name"] for row in result["lineup"][5:]},
-                         {"RB Low", "WR Low", "TE Low"})
+        self.assertEqual(
+            [row["name"] for row in result["lineup"][:5]],
+            [
+                "RB High",
+                "RB Mid",
+                "WR High",
+                "WR Mid",
+                "TE High",
+            ],
+        )
+        self.assertEqual(
+            {row["name"] for row in result["lineup"][5:]}, {"RB Low", "WR Low", "TE Low"}
+        )
         self.assertEqual(result["total_points"], 88)
 
     def test_bench_pressure_tracks_destination_slot_through_reshuffle(self):
