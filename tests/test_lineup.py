@@ -160,6 +160,48 @@ class BestLineupTest(unittest.TestCase):
         self.assertFalse(watch["Unknown Bench"]["has_projection"])
         self.assertEqual(watch["Partial Bench"]["missing_markets"], ["player_receptions"])
 
+    def test_woody_marks_at_rb2_and_washington_at_flex(self):
+        players = [
+            {"name": "Derrick Henry", "pos": "RB", "mid": 14.5},
+            {"name": "Mike Washington", "pos": "RB", "mid": 2.3},
+            {"name": "Woody Marks", "pos": "RB", "mid": 10.6},
+            {"name": "Braelon Allen", "pos": "RB", "mid": 0.0},
+        ]
+        result = build_best_lineup(players, target="mid", roster_positions=["RB", "RB", "FLEX"])
+        self.assertEqual(
+            [(row["slot"], row["name"]) for row in result["lineup"]],
+            [("RB", "Derrick Henry"), ("RB", "Woody Marks"), ("FLEX", "Mike Washington")],
+        )
+        self.assertEqual(result["total_points"], 27.4)
+        allen = next(row for row in result["bench_pressure"] if row["name"] == "Braelon Allen")
+        self.assertEqual(allen["displaces"], "Mike Washington")
+        self.assertEqual(allen["displaces_slot_index"], 2)
+        self.assertEqual(allen["displaced_points"], 2.3)
+        self.assertEqual(allen["direct_fp_gap"], 2.3)
+        self.assertEqual(allen["delta_to_lineup"], 2.3)
+
+    def test_native_rb_wr_te_take_highest_scoring_members(self):
+        players = [
+            {"name": "RB Low", "pos": "RB", "mid": 3},
+            {"name": "RB High", "pos": "RB", "mid": 20},
+            {"name": "RB Mid", "pos": "RB", "mid": 11},
+            {"name": "WR Low", "pos": "WR", "mid": 8},
+            {"name": "WR High", "pos": "WR", "mid": 18},
+            {"name": "WR Mid", "pos": "WR", "mid": 9},
+            {"name": "TE Low", "pos": "TE", "mid": 7},
+            {"name": "TE High", "pos": "TE", "mid": 12},
+        ]
+        result = build_best_lineup(
+            players, target="mid",
+            roster_positions=["RB", "RB", "WR", "WR", "TE", "FLEX", "FLEX", "FLEX"],
+        )
+        self.assertEqual([row["name"] for row in result["lineup"][:5]], [
+            "RB High", "RB Mid", "WR High", "WR Mid", "TE High",
+        ])
+        self.assertEqual({row["name"] for row in result["lineup"][5:]},
+                         {"RB Low", "WR Low", "TE Low"})
+        self.assertEqual(result["total_points"], 88)
+
     def test_bench_pressure_tracks_destination_slot_through_reshuffle(self):
         players = [
             {"name": "Alpha RB", "pos": "RB", "floor": 10, "mid": 17, "ceiling": 22},
@@ -174,8 +216,10 @@ class BestLineupTest(unittest.TestCase):
         )
         beta = next(row for row in result["bench_pressure"] if row["name"] == "Beta WR")
 
-        self.assertEqual(beta["slot"], "WR")
-        self.assertEqual(beta["slot_index"], 1)
+        self.assertEqual(beta["slot"], "FLEX")
+        self.assertEqual(beta["slot_index"], 2)
+        self.assertEqual(beta["direct_fp_gap"], 1.0)
+        self.assertEqual(beta["displaced_points"], 16.0)
         self.assertEqual(beta["displaces"], "Gamma RB")
         self.assertEqual(beta["displaces_slot"], "FLEX")
         self.assertEqual(beta["displaces_slot_index"], 2)

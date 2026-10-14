@@ -62,6 +62,24 @@ class LockedLineupOptimizerTest(unittest.TestCase):
         self.assertEqual(result["total_points"], 23.0)
         self.assertEqual(result["decisions_remaining"], 1)
 
+    def test_locked_flex_remains_fixed_after_canonicalization(self):
+        players = [
+            {"name": "Locked High RB", "pos": "RB", "mid": 20},
+            {"name": "Active Mid RB", "pos": "RB", "mid": 12},
+            {"name": "Active Low RB", "pos": "RB", "mid": 4},
+        ]
+        result = build_best_lineup(
+            players, target="mid", roster_positions=["RB", "RB", "FLEX"],
+            locked_starters=[{"slot_index": 2, "name": "Locked High RB",
+                              "pos": "RB", "actual_points": 6.5}],
+            unavailable_names={"Locked High RB"},
+        )
+        self.assertEqual([row["name"] for row in result["lineup"]], [
+            "Active Mid RB", "Active Low RB", "Locked High RB",
+        ])
+        self.assertTrue(result["lineup"][2]["locked"])
+        self.assertEqual(result["lineup"][2]["points"], 6.5)
+
     def test_locked_player_without_sleeper_score_does_not_create_fake_zero(self):
         result = build_best_lineup(
             [{"name": "Monday QB", "pos": "QB", "team": "A", "floor": 8, "mid": 12, "ceiling": 22}],

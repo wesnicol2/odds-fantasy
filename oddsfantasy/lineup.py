@@ -121,6 +121,29 @@ def build_best_lineup(
             ]
         )
 
+    def canonicalize(choices: tuple[int | None, ...]) -> tuple[int | None, ...]:
+        """Place strongest selected players in native slots before flexible slots.
+
+        Only movable same-position players can swap; locks, eligibility,
+        selected players, and the total optimization score stay unchanged.
+        """
+        result = list(choices)
+        for position in ("QB", "RB", "WR", "TE", "K", "DEF"):
+            indices = [
+                i for i, choice in enumerate(choices)
+                if choice is not None
+                and i not in locked_by_slot
+                and candidates[choice].get("pos") == position
+            ]
+            indices.sort(key=lambda i: (modeled_slots[i] != position, i))
+            ranked = sorted(
+                (choices[i] for i in indices),
+                key=lambda choice: (-float(_score(candidates[choice], target)), choice),
+            )
+            for i, choice in zip(indices, ranked, strict=True):
+                result[i] = choice
+        return tuple(result)
+
     def optimize(required_candidate: int | None = None) -> tuple[float, tuple[int | None, ...]]:
         required_bit = 1 << required_candidate if required_candidate is not None else 0
 
@@ -164,7 +187,8 @@ def build_best_lineup(
                 return rest_total, (None, *rest_choices)
             return best_total, best_choices
 
-        return solve(0, 0)
+        total, choices = solve(0, 0)
+        return total, canonicalize(choices) if total != float("-inf") else choices
 
     def lineup_rows(choices: tuple[int | None, ...]) -> tuple[list[dict], list[str]]:
         rows: list[dict] = []
@@ -260,6 +284,12 @@ def build_best_lineup(
         )
         forced_slot = modeled_slots[forced_slot_index] if forced_slot_index is not None else None
         displaced = candidates[displaced_index] if displaced_index is not None else None
+        displaced_score = _score(displaced, target) if displaced is not None else None
+        direct_gap = (
+            round(displaced_score - candidate_score, 2)
+            if displaced_score is not None
+            else None
+        )
         bench_pressure.append(
             {
                 "name": candidate.get("name"),
@@ -271,6 +301,8 @@ def build_best_lineup(
                 "missing_markets": list(candidate.get("missing_markets") or []),
                 "data_status": candidate.get("data_status"),
                 "delta_to_lineup": round(max(0.0, baseline_total - forced_total), 2),
+                "direct_fp_gap": direct_gap,
+                "displaced_points": round(displaced_score, 2) if displaced_score is not None else None,
                 "slot": forced_slot,
                 "slot_index": forced_slot_index,
                 "displaces": displaced.get("name") if displaced else None,
@@ -289,6 +321,7 @@ def build_best_lineup(
 
     bench_pressure.sort(
         key=lambda row: (
+            row["direct_fp_gap"] if row["direct_fp_gap"] is not None else float("inf"),
             row["delta_to_lineup"],
             -row["points"],
             str(row.get("name") or ""),
