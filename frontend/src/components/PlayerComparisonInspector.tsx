@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { metricLabel } from '../analysis/metrics';
+import { ComparisonPlayerPicker } from './ComparisonPlayerPicker';
 import { formatOdds } from '../analysis/odds';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
 import { useWorkspaceStore } from '../state/workspace';
-import type { MarketDetail, PlayerOddsDetails, ProjectionPlayer } from '../types';
+import type { MarketDetail, PlayerOddsDetails, PlayerSearchCandidate, ProjectionPlayer } from '../types';
 
 interface PlayerComparisonInspectorProps {
   challenger: ProjectionPlayer;
@@ -11,6 +13,9 @@ interface PlayerComparisonInspectorProps {
   starterDetails: PlayerOddsDetails | null;
   detailsLoading: boolean;
   starterGap: number;
+  manualComparison: boolean;
+  rosterPlayers: ProjectionPlayer[];
+  onReplacePlayer: (side: MatrixSide, player: PlayerSearchCandidate) => void;
   target: number | null;
   metric: string;
   onMetricChange: (metric: string) => void;
@@ -230,15 +235,19 @@ function PlayerHeading({
   player,
   details,
   label,
+  onChoose,
 }: {
   player: ProjectionPlayer;
   details: PlayerOddsDetails | null;
   label: string;
+  onChoose: () => void;
 }) {
   const matchup = details?.matchup;
   return (
     <span className="comparison-player-heading">
-      <strong>{player.name}</strong>
+      <button type="button" className="comparison-player-name" onClick={onChoose} aria-label={`Replace ${player.name} in comparison`}>
+        <strong>{player.name}</strong>
+      </button>
       <small>
         {label} · {player.pos}
         {player.projection_note ? ' · MARKET PROXY' : ''}
@@ -363,11 +372,15 @@ export function PlayerComparisonInspector({
   starterDetails,
   detailsLoading,
   starterGap,
+  manualComparison,
+  rosterPlayers,
+  onReplacePlayer,
   target,
   metric,
   onMetricChange,
   onExit,
 }: PlayerComparisonInspectorProps) {
+  const [editingSide, setEditingSide] = useState<MatrixSide | null>(null);
   const projectionNotes = [
     ...new Set(
       [
@@ -571,6 +584,13 @@ export function PlayerComparisonInspector({
     usesProxy ? 'modeled-point' : 'fantasy-point',
   );
   const statLead = leadSentence(statValueRows, challenger.name, starter.name, 'stat-value');
+  const canCompareMedians = challenger.mid !== null && starter.mid !== null;
+  const medianLeader = !canCompareMedians || challenger.mid === starter.mid
+    ? null
+    : challenger.mid > starter.mid ? challenger : starter;
+  const medianGap = canCompareMedians
+    ? Math.abs((challenger.mid ?? 0) - (starter.mid ?? 0))
+    : null;
 
   return (
     <div className="start-sit-comparison">
@@ -578,20 +598,50 @@ export function PlayerComparisonInspector({
         <div>
           <div className="section-label">This week’s tie-breaker matrix</div>
           <h2>
-            {challenger.name} <span>vs</span> {starter.name}
+            <button type="button" className="comparison-player-name" onClick={() => setEditingSide('challenger')} aria-label={`Replace ${challenger.name} in comparison`}>
+              {challenger.name}
+            </button>
+            <span>vs</span>
+            <button type="button" className="comparison-player-name" onClick={() => setEditingSide('starter')} aria-label={`Replace ${starter.name} in comparison`}>
+              {starter.name}
+            </button>
           </h2>
         </div>
         <button type="button" onClick={onExit}>
           Exit comparison
         </button>
       </header>
+      {editingSide ? (
+        <ComparisonPlayerPicker
+          key={editingSide}
+          side={editingSide}
+          roster={rosterPlayers}
+          otherPlayer={editingSide === 'challenger' ? starter.name : challenger.name}
+          onPick={(player) => {
+            onReplacePlayer(editingSide, player);
+            setEditingSide(null);
+          }}
+          onClose={() => setEditingSide(null)}
+        />
+      ) : null}
 
       <div className="comparison-recommendation">
-        <strong>Start {starter.name}</strong>
-        <span className="comparison-recommendation-copy">
-          {challenger.name} is {starterGap.toFixed(1)} {usesProxy ? 'modeled points' : 'FP'} behind{' '}
-          {starter.name} on their median projections.
-        </span>
+        {manualComparison ? (
+          <>
+            <strong>{medianLeader ? `${medianLeader.name} leads by ${medianGap?.toFixed(1)} ${pointUnit}` : canCompareMedians ? 'Median projections tied' : 'Median projection unavailable'}</strong>
+            <span className="comparison-recommendation-copy">
+              Manual player comparison · this is not a lineup optimization recommendation.
+            </span>
+          </>
+        ) : (
+          <>
+            <strong>Start {starter.name}</strong>
+            <span className="comparison-recommendation-copy">
+              {challenger.name} is {starterGap.toFixed(1)} {usesProxy ? 'modeled points' : 'FP'} behind{' '}
+              {starter.name} on their median projections.
+            </span>
+          </>
+        )}
         <span className="comparison-signal-score">{pointLead}</span>
         <span className="comparison-signal-score">{statLead}</span>
       </div>
@@ -631,14 +681,16 @@ export function PlayerComparisonInspector({
                     <PlayerHeading
                       player={challenger}
                       details={challengerDetails}
-                      label="Bench option"
+                      label={manualComparison ? 'Left player' : 'Bench option'}
+                      onChoose={() => setEditingSide('challenger')}
                     />
                   </th>
                   <th>
                     <PlayerHeading
                       player={starter}
                       details={starterDetails}
-                      label="Ideal starter"
+                      label={manualComparison ? 'Right player' : 'Ideal starter'}
+                      onChoose={() => setEditingSide('starter')}
                     />
                   </th>
                 </tr>
@@ -680,9 +732,12 @@ export function PlayerComparisonInspector({
               : ''}
             Row wins are a transparent scan aid, not independent evidence or a confidence score.
             Point and stat-value signals are counted separately because a stat and the points it
-            produces are the same underlying market. The start recommendation remains the
-            optimizer’s lineup result; when K is involved, the kicker portion is the disclosed
-            market proxy rather than exact distance-aware Sleeper scoring.
+            produces are the same underlying market.
+            {manualComparison
+              ? ' This is a manual head-to-head comparison, not an optimizer-generated lineup recommendation.'
+              : ' The start recommendation remains the optimizer’s lineup result.'}
+            {' '}When K is involved, the kicker portion is the disclosed market proxy rather than
+            exact distance-aware Sleeper scoring.
           </p>
         </section>
       ) : (
