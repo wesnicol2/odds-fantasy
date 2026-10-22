@@ -234,7 +234,12 @@ def api_fixture(route: Route) -> None:
             route,
             {
                 "players": [
-                    {"id": "external-9", "name": "Gamma Receiver", "pos": "WR", "team": "New York Jets"}
+                    {
+                        "id": "external-9",
+                        "name": "Gamma Receiver",
+                        "pos": "WR",
+                        "team": "New York Jets",
+                    }
                 ]
                 if "gamma" in query.get("q", [""])[0].lower()
                 else []
@@ -247,9 +252,13 @@ def api_fixture(route: Route) -> None:
         is_receiver = name == "Beta Receiver"
         is_external = name == "Gamma Receiver"
         pos = "WR" if is_receiver or is_external else "RB"
-        team = "New York Jets" if is_external else "Miami Dolphins" if is_receiver else "Buffalo Bills"
+        team = (
+            "New York Jets" if is_external else "Miami Dolphins" if is_receiver else "Buffalo Bills"
+        )
         curve = CURVE_B if is_receiver or is_external else CURVE_A
-        floor, mid, ceiling = (12, 19, 27) if is_external else (8, 15, 24) if is_receiver else (10, 17, 25)
+        floor, mid, ceiling = (
+            (12, 19, 27) if is_external else (8, 15, 24) if is_receiver else (10, 17, 25)
+        )
         mean = mid + 0.5
         fulfill_json(
             route,
@@ -701,9 +710,7 @@ def main() -> None:
         chooser = inspector.get_by_role("dialog", name="Replace left comparison player")
         chooser.get_by_role("searchbox", name="Search replacement players").fill("Gamma")
         chooser.get_by_role("button", name="Gamma Receiver").click()
-        inspector.get_by_text(
-            "Gamma Receiver leads by 2.0 FP", exact=True
-        ).wait_for()
+        inspector.get_by_text("Gamma Receiver leads by 2.0 FP", exact=True).wait_for()
         inspector.get_by_text(
             "Manual player comparison · this is not a lineup optimization recommendation.",
             exact=True,
