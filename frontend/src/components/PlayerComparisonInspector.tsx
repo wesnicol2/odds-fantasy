@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { metricLabel } from '../analysis/metrics';
-import { ComparisonPlayerPicker } from './ComparisonPlayerPicker';
 import { formatOdds } from '../analysis/odds';
 import { formatProbability, probabilityAtTarget } from '../analysis/probability';
 import { useWorkspaceStore } from '../state/workspace';
-import type { MarketDetail, PlayerOddsDetails, PlayerSearchCandidate, ProjectionPlayer } from '../types';
+import type {
+  MarketDetail,
+  PlayerOddsDetails,
+  PlayerSearchCandidate,
+  ProjectionPlayer,
+} from '../types';
+import { ComparisonPlayerPicker } from './ComparisonPlayerPicker';
 
 interface PlayerComparisonInspectorProps {
   challenger: ProjectionPlayer;
@@ -245,7 +250,12 @@ function PlayerHeading({
   const matchup = details?.matchup;
   return (
     <span className="comparison-player-heading">
-      <button type="button" className="comparison-player-name" onClick={onChoose} aria-label={`Replace ${player.name} in comparison`}>
+      <button
+        type="button"
+        className="comparison-player-name"
+        onClick={onChoose}
+        aria-label={`Replace ${player.name} in comparison`}
+      >
         <strong>{player.name}</strong>
       </button>
       <small>
@@ -585,12 +595,13 @@ export function PlayerComparisonInspector({
   );
   const statLead = leadSentence(statValueRows, challenger.name, starter.name, 'stat-value');
   const canCompareMedians = challenger.mid !== null && starter.mid !== null;
-  const medianLeader = !canCompareMedians || challenger.mid === starter.mid
-    ? null
-    : challenger.mid > starter.mid ? challenger : starter;
-  const medianGap = canCompareMedians
-    ? Math.abs((challenger.mid ?? 0) - (starter.mid ?? 0))
-    : null;
+  const medianLeader =
+    !canCompareMedians || challenger.mid === starter.mid
+      ? null
+      : challenger.mid > starter.mid
+        ? challenger
+        : starter;
+  const medianGap = canCompareMedians ? Math.abs((challenger.mid ?? 0) - (starter.mid ?? 0)) : null;
 
   return (
     <div className="start-sit-comparison">
@@ -598,11 +609,21 @@ export function PlayerComparisonInspector({
         <div>
           <div className="section-label">This week’s tie-breaker matrix</div>
           <h2>
-            <button type="button" className="comparison-player-name" onClick={() => setEditingSide('challenger')} aria-label={`Replace ${challenger.name} in comparison`}>
+            <button
+              type="button"
+              className="comparison-player-name"
+              onClick={() => setEditingSide('challenger')}
+              aria-label={`Replace ${challenger.name} in comparison`}
+            >
               {challenger.name}
             </button>
             <span>vs</span>
-            <button type="button" className="comparison-player-name" onClick={() => setEditingSide('starter')} aria-label={`Replace ${starter.name} in comparison`}>
+            <button
+              type="button"
+              className="comparison-player-name"
+              onClick={() => setEditingSide('starter')}
+              aria-label={`Replace ${starter.name} in comparison`}
+            >
               {starter.name}
             </button>
           </h2>
@@ -628,7 +649,13 @@ export function PlayerComparisonInspector({
       <div className="comparison-recommendation">
         {manualComparison ? (
           <>
-            <strong>{medianLeader ? `${medianLeader.name} leads by ${medianGap?.toFixed(1)} ${pointUnit}` : canCompareMedians ? 'Median projections tied' : 'Median projection unavailable'}</strong>
+            <strong>
+              {medianLeader
+                ? `${medianLeader.name} leads by ${medianGap?.toFixed(1)} ${pointUnit}`
+                : canCompareMedians
+                  ? 'Median projections tied'
+                  : 'Median projection unavailable'}
+            </strong>
             <span className="comparison-recommendation-copy">
               Manual player comparison · this is not a lineup optimization recommendation.
             </span>
@@ -637,8 +664,8 @@ export function PlayerComparisonInspector({
           <>
             <strong>Start {starter.name}</strong>
             <span className="comparison-recommendation-copy">
-              {challenger.name} is {starterGap.toFixed(1)} {usesProxy ? 'modeled points' : 'FP'} behind{' '}
-              {starter.name} on their median projections.
+              {challenger.name} is {starterGap.toFixed(1)} {usesProxy ? 'modeled points' : 'FP'}{' '}
+              behind {starter.name} on their median projections.
             </span>
           </>
         )}
@@ -735,9 +762,9 @@ export function PlayerComparisonInspector({
             produces are the same underlying market.
             {manualComparison
               ? ' This is a manual head-to-head comparison, not an optimizer-generated lineup recommendation.'
-              : ' The start recommendation remains the optimizer’s lineup result.'}
-            {' '}When K is involved, the kicker portion is the disclosed market proxy rather than
-            exact distance-aware Sleeper scoring.
+              : ' The start recommendation remains the optimizer’s lineup result.'}{' '}
+            When K is involved, the kicker portion is the disclosed market proxy rather than exact
+            distance-aware Sleeper scoring.
           </p>
         </section>
       ) : (
