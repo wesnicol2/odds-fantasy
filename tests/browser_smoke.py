@@ -229,13 +229,36 @@ def api_fixture(route: Route) -> None:
         )
         return
 
+    if parsed.path == "/player/search":
+        fulfill_json(
+            route,
+            {
+                "players": [
+                    {
+                        "id": "external-9",
+                        "name": "Gamma Receiver",
+                        "pos": "WR",
+                        "team": "New York Jets",
+                    }
+                ]
+                if "gamma" in query.get("q", [""])[0].lower()
+                else []
+            },
+        )
+        return
+
     if parsed.path == "/player/odds":
         name = query.get("name", ["Alpha Runner"])[0]
         is_receiver = name == "Beta Receiver"
-        pos = "WR" if is_receiver else "RB"
-        team = "Miami Dolphins" if is_receiver else "Buffalo Bills"
-        curve = CURVE_B if is_receiver else CURVE_A
-        floor, mid, ceiling = (8, 15, 24) if is_receiver else (10, 17, 25)
+        is_external = name == "Gamma Receiver"
+        pos = "WR" if is_receiver or is_external else "RB"
+        team = (
+            "New York Jets" if is_external else "Miami Dolphins" if is_receiver else "Buffalo Bills"
+        )
+        curve = CURVE_B if is_receiver or is_external else CURVE_A
+        floor, mid, ceiling = (
+            (12, 19, 27) if is_external else (8, 15, 24) if is_receiver else (10, 17, 25)
+        )
         mean = mid + 0.5
         fulfill_json(
             route,
@@ -681,10 +704,37 @@ def main() -> None:
         matrix.get_by_role("button", name="Compare Receptions distributions", exact=True).click()
         receptions_comparison.get_by_text("Receptions comparison", exact=True).wait_for()
         inspector.get_by_role("button", name="Full matrix", exact=True).click()
+
+        # The header name opens an arbitrary-NFL-player search, not just owned roster rows.
+        inspector.get_by_role("button", name="Replace Beta Receiver in comparison").first.click()
+        chooser = inspector.get_by_role("dialog", name="Replace left comparison player")
+        chooser.get_by_role("searchbox", name="Search replacement players").fill("Gamma")
+        chooser.get_by_role("button", name="Gamma Receiver").click()
+        inspector.get_by_text("Gamma Receiver leads by 2.0 FP", exact=True).wait_for()
+        inspector.get_by_text(
+            "Manual player comparison · this is not a lineup optimization recommendation.",
+            exact=True,
+        ).wait_for()
+        assert "Gamma Receiver" in matrix.inner_text()
+        assert "Gamma Receiver" in page.locator(".chart-shell").inner_text() or (
+            page.locator(".probability-chart").count() > 0
+        )
+        # Swapping the other side is independent; duplicate picks are unavailable.
+        inspector.get_by_role("button", name="Replace Alpha Runner in comparison").first.click()
+        chooser = inspector.get_by_role("dialog", name="Replace right comparison player")
+        assert chooser.get_by_role("button", name="Gamma Receiver").count() == 0
+        chooser.get_by_role("button", name="Close player search").click()
         inspector.get_by_role("button", name="Exit comparison", exact=True).click()
 
         # Exiting restores the normal ranking/chart/inspector workstation order.
         assert pane_order() == ["Player ranking", "Probability analysis", "Player inspector"]
+        ranking = page.get_by_role("complementary", name="Player ranking")
+        ranking.get_by_role("button", name="Compare two players").click()
+        inspector.get_by_text(
+            "Manual player comparison · this is not a lineup optimization recommendation.",
+            exact=True,
+        ).wait_for()
+        inspector.get_by_role("button", name="Exit comparison", exact=True).click()
 
         primary_nav = page.get_by_role("navigation", name="Primary navigation")
 
