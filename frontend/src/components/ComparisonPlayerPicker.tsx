@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { searchPlayers } from '../api/client';
 import type { PlayerSearchCandidate, ProjectionPlayer } from '../types';
 
@@ -21,6 +21,11 @@ export function ComparisonPlayerPicker({
   const [results, setResults] = useState<PlayerSearchCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
   const searched = query.trim().length >= 2;
 
   useEffect(() => {
@@ -69,7 +74,7 @@ export function ComparisonPlayerPicker({
         </button>
       </div>
       <input
-        autoFocus
+        ref={searchRef}
         className="player-search"
         type="search"
         value={query}
@@ -78,7 +83,9 @@ export function ComparisonPlayerPicker({
         aria-label="Search replacement players"
       />
       <div className="comparison-picker-results">
-        {!searched ? <span className="subtle">Your roster · type to search all NFL players</span> : null}
+        {!searched ? (
+          <span className="subtle">Your roster · type to search all NFL players</span>
+        ) : null}
         {searched && loading ? <span className="subtle">Searching…</span> : null}
         {searched && error ? <span className="error-state">Player search unavailable.</span> : null}
         {searched && !loading && !error && choices.length === 0 ? (
