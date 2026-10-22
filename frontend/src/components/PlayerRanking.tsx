@@ -11,6 +11,7 @@ interface PlayerRankingProps {
   selectedPositions: string[];
   hoveredPlayer: string | null;
   onSelectPlayer: (name: string) => void;
+  onStartComparison: () => void;
   onToggleComparedPlayer: (name: string) => void;
   onTogglePosition: (position: string) => void;
   onSelectAll: () => void;
@@ -57,6 +58,7 @@ export function PlayerRanking({
   selectedPositions,
   hoveredPlayer,
   onSelectPlayer,
+  onStartComparison,
   onToggleComparedPlayer,
   onTogglePosition,
   onSelectAll,
@@ -132,6 +134,9 @@ export function PlayerRanking({
           ))}
         </fieldset>
         <div className="compare-actions">
+          <button type="button" className="compare-two-button" onClick={onStartComparison} disabled={players.length < 2}>
+            Compare two players
+          </button>
           <span>{comparedPlayers.length} graphed</span>
           <button type="button" onClick={onSelectAll}>
             All
