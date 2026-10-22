@@ -174,13 +174,14 @@ def _load_week_context(
     cache_mode: str = "auto",
     league_id: str | None = None,
     roster_id: int | None = None,
+    extra_player_id: str | None = None,
 ) -> dict:
     """Load and cache the normalized source data shared by report and drill-down."""
     ttl = int(os.getenv("SERVICE_CACHE_TTL", "120"))
     # Operational cache modes must not satisfy one another. In particular, a
     # cache-only miss/partial response should not be reused by a subsequent auto
     # request just because both happened inside this short service TTL.
-    key = (username, season, week, region, cache_mode, league_id, roster_id)
+    key = (username, season, week, region, cache_mode, league_id, roster_id, extra_player_id)
     now = time.time()
     cache = _context_cache()
     if not fresh and key in cache:
@@ -200,6 +201,20 @@ def _load_week_context(
         }
     if not roster:
         return {"roster": {}, "players_odds": {}, "planned": {}}
+
+    # A manually selected player outside the user's roster is planned only for
+    # this request. The normal roster context and cache are never modified.
+    if extra_player_id:
+        candidate = sleeper_api.get_players().get(str(extra_player_id))
+        if not candidate or candidate.get("position") not in SUPPORTED_POSITIONS:
+            return {"error": "player_not_found", "roster": {}, "players_odds": {}, "planned": {}}
+        roster = {
+            **roster,
+            "players": {
+                **(roster.get("players") or {}),
+                str(extra_player_id): sleeper_api.get_player_enhanced_info(str(extra_player_id)),
+            },
+        }
 
     effective_mode = "fresh" if fresh else cache_mode
     events = odds_client.get_nfl_events(regions=region, mode=effective_mode)
@@ -644,3 +659,34 @@ def compute_best_lineup(
         }
     )
     return result
+
+def search_players(query: str, limit: int = 25) -> dict:
+    """Search the cached Sleeper player directory; never fetch sportsbook odds."""
+    term = query.strip().casefold()
+    if len(term) < 2:
+        return {"players": []}
+
+    matches = []
+    for player_id, player in sleeper_api.get_players().items():
+        name = str(player.get("full_name") or "").strip()
+        position = player.get("position")
+        if not name or position not in SUPPORTED_POSITIONS or term not in name.casefold():
+            continue
+        team = player.get("team")
+        matches.append(
+            {
+                "id": str(player_id),
+                "name": name,
+                "pos": position,
+                "team": SLEEPER_TO_ODDSAPI_TEAM.get(team),
+            }
+        )
+
+    matches.sort(
+        key=lambda row: (
+            not row["name"].casefold().startswith(term),
+            row["name"].casefold(),
+            row["id"],
+        )
+    )
+    return {"players": matches[: max(1, min(limit, 30))]}
