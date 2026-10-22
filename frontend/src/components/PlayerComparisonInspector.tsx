@@ -598,7 +598,7 @@ export function PlayerComparisonInspector({
   const medianLeader =
     !canCompareMedians || challenger.mid === starter.mid
       ? null
-      : challenger.mid > starter.mid
+      : (challenger.mid ?? 0) > (starter.mid ?? 0)
         ? challenger
         : starter;
   const medianGap = canCompareMedians ? Math.abs((challenger.mid ?? 0) - (starter.mid ?? 0)) : null;
