@@ -587,3 +587,96 @@
 .source-issues li strong {
   color: #c2cad4;
 }
+
+/* Search controls appear only after the user chooses to replace a player. */
+.comparison-player-name {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed #658fbc;
+  background: transparent;
+  color: #d6e8ff;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.comparison-player-name:hover,
+.comparison-player-name:focus-visible {
+  color: #fff;
+  border-bottom-color: #eef6ff;
+}
+
+.comparison-heading h2 .comparison-player-name {
+  font-size: inherit;
+}
+
+.comparison-player-heading .comparison-player-name {
+  justify-self: end;
+  text-align: right;
+  font-size: 10px;
+}
+
+.comparison-player-picker {
+  width: min(100%, 410px);
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #3d5268;
+  background: #101820;
+}
+
+.comparison-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.comparison-picker-header button {
+  border: none;
+  padding: 3px 4px;
+  background: transparent;
+  color: #a8cfff;
+  cursor: pointer;
+}
+
+.comparison-picker-results {
+  display: grid;
+  gap: 1px;
+  margin-top: 7px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.comparison-picker-results > .subtle {
+  padding: 5px 3px;
+  font-size: 10px;
+}
+
+.comparison-picker-results button {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 0;
+  border-bottom: 1px solid #263341;
+  background: transparent;
+  color: #eaf0f6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.comparison-picker-results button span {
+  color: #90a0b2;
+  font-size: 10px;
+}
+
+.comparison-picker-results button:hover,
+.comparison-picker-results button:focus-visible {
+  background: #1a2b3b;
+}
+
+.comparison-picker-results button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -29,6 +29,8 @@ import type {
   DefenseResponse,
   LineupResponse,
   PlayerOddsDetails,
+  PlayerSearchCandidate,
+  ProjectionPlayer,
   ProjectionResponse,
 } from './types';
 
@@ -43,6 +45,7 @@ interface StartSitComparison {
   challenger: string;
   starter: string;
   starterGap: number;
+  manual?: boolean;
   week: WeekWindow;
 }
 
@@ -114,6 +117,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
   const [comparisonContext, setComparisonContext] = useState<StartSitComparison | null>(null);
+  const [comparisonOptions, setComparisonOptions] = useState<Record<string, PlayerSearchCandidate>>(
+    {},
+  );
   const [detailsByKey, setDetailsByKey] = useState<Record<string, PlayerOddsDetails>>({});
   const [loadingDetailKeys, setLoadingDetailKeys] = useState<string[]>([]);
   const [defensePayload, setDefensePayload] = useState<DefenseResponse | null>(null);
@@ -159,7 +165,12 @@ export function App() {
       detailInflightRef.current.add(key);
       setLoadingDetailKeys((current) => [...current, key]);
       try {
-        const payload = await fetchPlayerDetails(name, week, dataMode);
+        const payload = await fetchPlayerDetails(
+          name,
+          week,
+          dataMode,
+          comparisonOptions[name]?.id || undefined,
+        );
         detailsRef.current = { ...detailsRef.current, [key]: payload };
         setDetailsByKey(detailsRef.current);
       } catch (reason) {
@@ -169,7 +180,7 @@ export function App() {
         setLoadingDetailKeys((current) => current.filter((value) => value !== key));
       }
     },
-    [dataMode, identityKey, identityReady, week],
+    [comparisonOptions, dataMode, identityKey, identityReady, week],
   );
 
   useEffect(() => {
@@ -440,7 +451,38 @@ export function App() {
     return () => controller.abort();
   }, [dataMode, identityKey, identityReady, view]);
 
-  const players = report?.players ?? [];
+  const rosterPlayers = report?.players ?? [];
+  // On-demand comparisons can use a player outside the owned Sleeper roster.
+  // The server supplies the projection; React only presents its already-fitted curve.
+  const players = useMemo<ProjectionPlayer[]>(() => {
+    const owned = report?.players ?? [];
+    return [
+      ...owned,
+      ...Object.values(comparisonOptions)
+        .filter((candidate) => !owned.some((player) => player.name === candidate.name))
+        .map((candidate) => {
+          const detail = detailsByKey[detailsKey(identityKey, dataMode, week, candidate.name)];
+          const projection = detail?.projection;
+          return {
+            name: candidate.name,
+            alias: candidate.name,
+            pos: candidate.pos,
+            team: candidate.team,
+            floor: projection?.floor ?? null,
+            mid: projection?.mid ?? null,
+            ceiling: projection?.ceiling ?? null,
+            mean: projection?.mean ?? null,
+            curve: projection?.curve ?? [],
+            books_used: detail?.books?.length ?? 0,
+            markets_used: Object.keys(detail?.markets ?? {}).length,
+            has_projection: Boolean(projection),
+            projection_note: detail?.projection_note ?? null,
+            ...(detail?.data_status ? { data_status: detail.data_status } : {}),
+            ...(detail?.data_issues ? { data_issues: detail.data_issues } : {}),
+          };
+        }),
+    ];
+  }, [report, comparisonOptions, detailsByKey, identityKey, dataMode, week]);
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
   const selectedDetails = selectedPlayer
     ? (detailsByKey[detailsKey(identityKey, dataMode, week, selectedPlayer)] ?? null)
@@ -547,6 +589,50 @@ export function App() {
     );
   };
 
+  const startManualComparison = () => {
+    const left = rosterPlayers.find((player) => player.name === selectedPlayer) ?? rosterPlayers[0];
+    const right = rosterPlayers.find((player) => player.name !== left?.name);
+    if (!left || !right) return;
+    setComparisonContext({
+      challenger: left.name,
+      starter: right.name,
+      starterGap: 0,
+      manual: true,
+      week,
+    });
+    setSelectedPlayers([left.name, right.name]);
+    setSelectedPositions([...new Set([left.pos, right.pos])]);
+    setMetric('fantasy_points');
+    selectPlayer(left.name);
+  };
+
+  const replaceComparisonPlayer = (
+    side: 'challenger' | 'starter',
+    candidate: PlayerSearchCandidate,
+  ) => {
+    if (!comparisonContext) return;
+    const other = side === 'challenger' ? comparisonContext.starter : comparisonContext.challenger;
+    if (candidate.name === other) return;
+    const rosterMatch = rosterPlayers.some((player) => player.name === candidate.name);
+    setComparisonOptions((current) => ({
+      ...current,
+      [candidate.name]: { ...candidate, id: rosterMatch ? '' : candidate.id },
+    }));
+    setComparisonContext({
+      ...comparisonContext,
+      [side]: candidate.name,
+      starterGap: 0,
+      manual: true,
+    });
+    setSelectedPlayers(side === 'challenger' ? [candidate.name, other] : [other, candidate.name]);
+    const otherPosition = players.find((player) => player.name === other)?.pos;
+    setSelectedPositions([
+      ...new Set([candidate.pos, otherPosition].filter((value): value is string => Boolean(value))),
+    ]);
+    selectPlayer(candidate.name);
+    setMetric('fantasy_points');
+  };
+
   const togglePosition = (position: string) => {
     setSelectedPositions(
       selectedPositions.includes(position)
@@ -586,6 +672,7 @@ export function App() {
     initializedWeekRef.current = null;
     pendingComparisonRef.current = null;
     setComparisonContext(null);
+    setComparisonOptions({});
     setDetailsByKey({});
     setLoadingDetailKeys([]);
     setDefensePayload(null);
@@ -637,18 +724,19 @@ export function App() {
       ) : null}
       {!error && !loading && identityReady ? (
         <PlayerRanking
-          players={players}
+          players={rosterPlayers}
           target={fantasyPointsMetric ? target : null}
           selectedPlayer={selectedPlayer}
           comparedPlayers={selectedPlayers}
           selectedPositions={selectedPositions}
           hoveredPlayer={hoveredPlayer}
           onSelectPlayer={selectPlayer}
+          onStartComparison={startManualComparison}
           onToggleComparedPlayer={toggleComparedPlayer}
           onTogglePosition={togglePosition}
           onSelectAll={() =>
             setSelectedPlayers(
-              players.filter((player) => player.curve.length).map((player) => player.name),
+              rosterPlayers.filter((player) => player.curve.length).map((player) => player.name),
             )
           }
           onSelectNone={() => setSelectedPlayers([])}
@@ -768,6 +856,9 @@ export function App() {
           starterDetails={activeComparison.starterDetails}
           detailsLoading={activeComparison.detailsLoading}
           starterGap={activeComparison.context.starterGap}
+          manualComparison={Boolean(activeComparison.context.manual)}
+          rosterPlayers={rosterPlayers}
+          onReplacePlayer={replaceComparisonPlayer}
           target={target}
           metric={metric}
           onMetricChange={setMetric}
