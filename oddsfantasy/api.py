@@ -14,7 +14,7 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
-from . import cache_browser, live_lineup, odds_client, odds_details, ratelimit
+from . import cache_browser, live_lineup, odds_client, odds_details, ratelimit, services
 from .build_info import build_info
 from .config import DEFAULT_SEASON
 from .services import list_defenses, resolve_league, resolve_user_leagues
