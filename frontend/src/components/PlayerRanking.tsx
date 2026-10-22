@@ -134,7 +134,12 @@ export function PlayerRanking({
           ))}
         </fieldset>
         <div className="compare-actions">
-          <button type="button" className="compare-two-button" onClick={onStartComparison} disabled={players.length < 2}>
+          <button
+            type="button"
+            className="compare-two-button"
+            onClick={onStartComparison}
+            disabled={players.length < 2}
+          >
             Compare two players
           </button>
           <span>{comparedPlayers.length} graphed</span>
