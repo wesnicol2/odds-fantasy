@@ -476,9 +476,9 @@ export function App() {
             books_used: detail?.books?.length ?? 0,
             markets_used: Object.keys(detail?.markets ?? {}).length,
             has_projection: Boolean(projection),
-            projection_note: detail?.projection_note,
-            data_status: detail?.data_status,
-            data_issues: detail?.data_issues,
+            projection_note: detail?.projection_note ?? null,
+            ...(detail?.data_status ? { data_status: detail.data_status } : {}),
+            ...(detail?.data_issues ? { data_issues: detail.data_issues } : {}),
           };
         }),
     ];
