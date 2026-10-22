@@ -660,6 +660,7 @@ def compute_best_lineup(
     )
     return result
 
+
 def search_players(query: str, limit: int = 25) -> dict:
     """Search the cached Sleeper player directory; never fetch sportsbook odds."""
     term = query.strip().casefold()
