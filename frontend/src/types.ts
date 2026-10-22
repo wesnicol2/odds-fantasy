@@ -136,6 +136,7 @@ export interface PlayerSearchCandidate {
 
 export interface PlayerSearchResponse {
   players: PlayerSearchCandidate[];
+  error?: string;
 }
 
 export interface PlayerOddsDetails {
