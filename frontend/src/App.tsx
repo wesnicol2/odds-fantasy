@@ -117,7 +117,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
   const [comparisonContext, setComparisonContext] = useState<StartSitComparison | null>(null);
-  const [comparisonOptions, setComparisonOptions] = useState<Record<string, PlayerSearchCandidate>>({});
+  const [comparisonOptions, setComparisonOptions] = useState<Record<string, PlayerSearchCandidate>>(
+    {},
+  );
   const [detailsByKey, setDetailsByKey] = useState<Record<string, PlayerOddsDetails>>({});
   const [loadingDetailKeys, setLoadingDetailKeys] = useState<string[]>([]);
   const [defensePayload, setDefensePayload] = useState<DefenseResponse | null>(null);
@@ -163,7 +165,12 @@ export function App() {
       detailInflightRef.current.add(key);
       setLoadingDetailKeys((current) => [...current, key]);
       try {
-        const payload = await fetchPlayerDetails(name, week, dataMode, comparisonOptions[name]?.id || undefined);
+        const payload = await fetchPlayerDetails(
+          name,
+          week,
+          dataMode,
+          comparisonOptions[name]?.id || undefined,
+        );
         detailsRef.current = { ...detailsRef.current, [key]: payload };
         setDetailsByKey(detailsRef.current);
       } catch (reason) {
@@ -447,32 +454,35 @@ export function App() {
   const rosterPlayers = report?.players ?? [];
   // On-demand comparisons can use a player outside the owned Sleeper roster.
   // The server supplies the projection; React only presents its already-fitted curve.
-  const players: ProjectionPlayer[] = [
-    ...rosterPlayers,
-    ...Object.values(comparisonOptions)
-      .filter((candidate) => !rosterPlayers.some((player) => player.name === candidate.name))
-      .map((candidate) => {
-        const detail = detailsByKey[detailsKey(identityKey, dataMode, week, candidate.name)];
-        const projection = detail?.projection;
-        return {
-          name: candidate.name,
-          alias: candidate.name,
-          pos: candidate.pos,
-          team: candidate.team,
-          floor: projection?.floor ?? null,
-          mid: projection?.mid ?? null,
-          ceiling: projection?.ceiling ?? null,
-          mean: projection?.mean ?? null,
-          curve: projection?.curve ?? [],
-          books_used: detail?.books?.length ?? 0,
-          markets_used: Object.keys(detail?.markets ?? {}).length,
-          has_projection: Boolean(projection),
-          projection_note: detail?.projection_note,
-          data_status: detail?.data_status,
-          data_issues: detail?.data_issues,
-        };
-      }),
-  ];
+  const players = useMemo<ProjectionPlayer[]>(() => {
+    const owned = report?.players ?? [];
+    return [
+      ...owned,
+      ...Object.values(comparisonOptions)
+        .filter((candidate) => !owned.some((player) => player.name === candidate.name))
+        .map((candidate) => {
+          const detail = detailsByKey[detailsKey(identityKey, dataMode, week, candidate.name)];
+          const projection = detail?.projection;
+          return {
+            name: candidate.name,
+            alias: candidate.name,
+            pos: candidate.pos,
+            team: candidate.team,
+            floor: projection?.floor ?? null,
+            mid: projection?.mid ?? null,
+            ceiling: projection?.ceiling ?? null,
+            mean: projection?.mean ?? null,
+            curve: projection?.curve ?? [],
+            books_used: detail?.books?.length ?? 0,
+            markets_used: Object.keys(detail?.markets ?? {}).length,
+            has_projection: Boolean(projection),
+            projection_note: detail?.projection_note,
+            data_status: detail?.data_status,
+            data_issues: detail?.data_issues,
+          };
+        }),
+    ];
+  }, [report, comparisonOptions, detailsByKey, identityKey, dataMode, week]);
   const selected = players.find((player) => player.name === selectedPlayer) ?? null;
   const selectedDetails = selectedPlayer
     ? (detailsByKey[detailsKey(identityKey, dataMode, week, selectedPlayer)] ?? null)
@@ -596,7 +606,10 @@ export function App() {
     selectPlayer(left.name);
   };
 
-  const replaceComparisonPlayer = (side: 'challenger' | 'starter', candidate: PlayerSearchCandidate) => {
+  const replaceComparisonPlayer = (
+    side: 'challenger' | 'starter',
+    candidate: PlayerSearchCandidate,
+  ) => {
     if (!comparisonContext) return;
     const other = side === 'challenger' ? comparisonContext.starter : comparisonContext.challenger;
     if (candidate.name === other) return;
@@ -613,7 +626,9 @@ export function App() {
     });
     setSelectedPlayers(side === 'challenger' ? [candidate.name, other] : [other, candidate.name]);
     const otherPosition = players.find((player) => player.name === other)?.pos;
-    setSelectedPositions([...new Set([candidate.pos, otherPosition].filter((value): value is string => Boolean(value)))]);
+    setSelectedPositions([
+      ...new Set([candidate.pos, otherPosition].filter((value): value is string => Boolean(value))),
+    ]);
     selectPlayer(candidate.name);
     setMetric('fantasy_points');
   };
