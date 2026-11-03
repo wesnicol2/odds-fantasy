@@ -8,18 +8,15 @@ interface OddsLoadingDialogProps {
   onCancel: () => void;
 }
 
-export function OddsLoadingDialog({
-  label,
-  completed,
-  total,
-  onCancel,
-}: OddsLoadingDialogProps) {
+export function OddsLoadingDialog({ label, completed, total, onCancel }: OddsLoadingDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     dialog.showModal();
+    cancelRef.current?.focus();
     return () => {
       if (dialog.open) dialog.close();
     };
@@ -39,14 +36,16 @@ export function OddsLoadingDialog({
       <span className="eyebrow">Odds Fantasy</span>
       <h2 id="odds-loading-title">{label}</h2>
       <p id="odds-loading-description">
-        Gathering odds and updating projections. Other controls are unavailable until this
-        completes or you cancel.
+        Gathering odds and updating projections. Other controls are unavailable until this completes
+        or you cancel.
       </p>
       <div
         className="odds-loading-track"
         role="progressbar"
         aria-label="Odds refresh progress"
-        aria-valuetext={total ? `${completed} of ${total} sections ready` : 'Waiting for sportsbook data'}
+        aria-valuetext={
+          total ? `${completed} of ${total} sections ready` : 'Waiting for sportsbook data'
+        }
       >
         <span className="odds-loading-indicator" />
       </div>
@@ -54,7 +53,7 @@ export function OddsLoadingDialog({
         <span className="odds-loading-detail" role="status">
           {total ? `${completed} of ${total} sections ready` : 'Waiting for sportsbook response…'}
         </span>
-        <button type="button" className="odds-loading-cancel" onClick={onCancel} autoFocus>
+        <button ref={cancelRef} type="button" className="odds-loading-cancel" onClick={onCancel}>
           Cancel
         </button>
       </div>
