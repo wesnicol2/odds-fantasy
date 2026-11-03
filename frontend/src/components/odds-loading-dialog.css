@@ -91,3 +91,30 @@
     animation: none;
   }
 }
+
+.odds-canceled-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #334356;
+  background: #13202d;
+  color: #bdc9d7;
+  font-size: 12px;
+}
+
+.odds-canceled-note button {
+  padding: 5px 11px;
+  border: 1px solid #4b769f;
+  border-radius: 6px;
+  background: #1c354e;
+  color: #e6f2ff;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.odds-canceled-note button:hover {
+  background: #2b4a68;
+}
