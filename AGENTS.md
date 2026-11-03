@@ -17,6 +17,8 @@ Live scoring uses Sleeper's current-week matchups and per-game schedule status. 
 
 Dashboard is synthesis, not a second analytical engine. It consumes the same backend optimizer and defense ranking used by the detailed Lineup and Defenses destinations. Player evidence remains progressive disclosure inside the Players workstation. There is no separate Graphs product surface and no alternate browser-side projection engine.
 
+Main-view fetches (Dashboard, Players, Defenses, Lineup) share a cancellable, single-owner loading session in `App.tsx` and an accessible native modal dialog. The modal appears only after a 250ms delay to avoid flicker for cache hits. Its bar stays indeterminate rather than fabricating completion from a network request, while Dashboard may show genuinely completed sections. Every session passes its `AbortController` signal to the existing browser API and is token-guarded so stale requests cannot dismiss new sessions. Cancel aborts the browser requests, clears the matching loading state, preserves existing responses, and offers Retry; server-side processing may not stop. Passive player-detail preloads remain nonblocking.
+
 The product-level simplicity rule is **decision first, detail on demand**. Default surfaces should contain only information needed for the next decision; raw evidence, additional metrics and configuration belong one level deeper. Prefer selection/reveal over adding permanent cards or controls.
 
 Pre-draft boards, model-comparison tools, book-coverage dashboards and alternate client-side projection engines remain removed.
