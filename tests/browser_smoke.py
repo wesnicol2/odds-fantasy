@@ -892,6 +892,31 @@ def main() -> None:
         page.go_back()
         defense_view.get_by_text("LAC", exact=True).wait_for()
 
+        # Pending odds requests show a real modal that blocks the app until Cancel.
+        held_projections: list[Route] = []
+
+        def hold_projections(route: Route) -> None:
+            held_projections.append(route)
+
+        projection_pattern = re.compile(r"/projections\\?")
+        page.route(projection_pattern, hold_projections)
+        primary_nav.get_by_role("button", name="Players", exact=True).click()
+        loading_dialog = page.get_by_role("dialog", name="Loading this week player odds")
+        loading_dialog.wait_for()
+        assert page.evaluate(
+            "document.querySelector('dialog.odds-loading-dialog')?.matches(':modal')"
+        )
+        loading_dialog.get_by_role("progressbar", name="Odds refresh progress").wait_for()
+        assert held_projections
+        page.unroute(projection_pattern, hold_projections)
+        loading_dialog.get_by_role("button", name="Cancel", exact=True).click()
+        loading_dialog.wait_for(state="hidden")
+        page.get_by_text("Odds refresh canceled.", exact=False).wait_for()
+        page.get_by_role("button", name="Retry", exact=True).click()
+        page.get_by_role("complementary", name="Player ranking").get_by_text(
+            "Alpha Runner", exact=True
+        ).wait_for()
+
         browser.close()
 
 
