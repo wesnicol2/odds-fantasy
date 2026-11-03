@@ -55,6 +55,8 @@ The lock boundary is kickoff. Sleeper's submitted starter order supplies the act
 
 **Settings** contains operational odds-data controls: Auto (cached), Cache only, and Force fresh. Changing modes changes subsequent API requests and does not change projection mathematics.
 
+When a main Dashboard, Players, Defenses, or Lineup odds request takes longer than a brief cache hit, a centered progress dialog blocks other app actions until loading completes. The animated bar is intentionally indeterminate because the server does not expose a reliable percentage; Dashboard also counts how many of its three sections are ready. **Cancel** stops waiting for the active browser requests, closes the dialog, and leaves already-loaded results intact; **Retry** starts a new attempt. A request already accepted by the server may continue processing after browser cancellation. Background player evidence preloads do not block navigation.
+
 Kickers are modeled from `player_kicking_points` plus its alternate ladder when available. The market is useful for ranking and start/sit comparison because it directly prices made-kick scoring, but it is intentionally **not** converted into exact Sleeper fantasy points: field-goal distance bonuses/per-yard scoring and miss penalties are unknowable from that market. Missing kicker lines remain unknown and leave K unfilled rather than creating a zero score.
 
 Defense Floor/Mid/Ceiling used by Lineup is intentionally partial: it prices the points-allowed component from the opponent implied total. Sacks, turnovers and defensive touchdowns are not modeled.

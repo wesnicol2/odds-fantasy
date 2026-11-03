@@ -14,6 +14,7 @@ import { DashboardView } from './components/DashboardView';
 import { DefenseView } from './components/DefenseView';
 import { type LeagueSelectionSummary, LeagueSetup } from './components/LeagueSetup';
 import { LineupView } from './components/LineupView';
+import { OddsLoadingDialog } from './components/OddsLoadingDialog';
 import { PlayerComparisonInspector } from './components/PlayerComparisonInspector';
 import { PlayerInspector } from './components/PlayerInspector';
 import { PlayerRanking } from './components/PlayerRanking';
@@ -40,6 +41,13 @@ const views: ReadonlyArray<readonly [WorkspaceView, string]> = [
   ['defenses', 'Defenses'],
   ['lineup', 'Lineup'],
 ];
+
+interface OddsLoadingState {
+  token: number;
+  label: string;
+  completed: number;
+  total: number;
+}
 
 interface StartSitComparison {
   challenger: string;
@@ -133,6 +141,12 @@ export function App() {
   const [dashboardDefensesNext, setDashboardDefensesNext] = useState<DefenseResponse | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [oddsLoading, setOddsLoading] = useState<OddsLoadingState | null>(null);
+  const [oddsDialogVisible, setOddsDialogVisible] = useState(false);
+  const [canceledLoadView, setCanceledLoadView] = useState<WorkspaceView | null>(null);
+  const [refreshAttempt, setRefreshAttempt] = useState(0);
+  const loadSequenceRef = useRef(0);
+  const activeOddsLoadRef = useRef<{ token: number; controller: AbortController } | null>(null);
   const detailsRef = useRef<Record<string, PlayerOddsDetails>>({});
   const detailInflightRef = useRef(new Set<string>());
   const defensesRef = useRef<Record<string, DefenseResponse>>({});
@@ -147,8 +161,55 @@ export function App() {
   const identityReady = Boolean(identity.leagueId && identity.rosterId);
   const identityKey = `${identity.leagueId ?? ''}:${identity.rosterId ?? ''}`;
 
+  // Only the active, primary page fetch owns the modal. Player evidence preloads
+  // stay nonblocking, and a stale request cannot close a newer loading session.
+  const beginOddsLoad = useCallback((controller: AbortController, label: string, total = 0) => {
+    const token = ++loadSequenceRef.current;
+    activeOddsLoadRef.current = { token, controller };
+    setCanceledLoadView(null);
+    setOddsLoading({ token, label, completed: 0, total });
+    return {
+      advance: () => {
+        if (controller.signal.aborted) return;
+        setOddsLoading((current) =>
+          current?.token === token ? { ...current, completed: current.completed + 1 } : current,
+        );
+      },
+      finish: () => {
+        if (activeOddsLoadRef.current?.token !== token) return;
+        activeOddsLoadRef.current = null;
+        setOddsLoading(null);
+      },
+    };
+  }, []);
+
+  const cancelOddsLoad = useCallback(() => {
+    const active = activeOddsLoadRef.current;
+    if (!active) return;
+    active.controller.abort();
+    activeOddsLoadRef.current = null;
+    setOddsLoading(null);
+    setLoading(false);
+    setDefenseLoading(false);
+    setLineupLoading(false);
+    setDashboardLoading(false);
+    setCanceledLoadView(view);
+  }, [view]);
+
+  // Short cache hits should never flash a modal.
+  const loadingToken = oddsLoading?.token;
+  useEffect(() => {
+    if (loadingToken === undefined) {
+      setOddsDialogVisible(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => setOddsDialogVisible(true), 250);
+    return () => window.clearTimeout(timeout);
+  }, [loadingToken]);
+
   const navigateTo = useCallback(
     (nextView: WorkspaceView, nextWeek: WeekWindow = week) => {
+      setCanceledLoadView(null);
       setView(nextView);
       if (nextView !== 'dashboard') setWeek(nextWeek);
       window.history.pushState({}, '', routeUrl(nextView, nextWeek));
@@ -227,6 +288,8 @@ export function App() {
   }, [identity.leagueId, identity.rosterId]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'players') {
       setLoading(false);
       return;
@@ -239,6 +302,10 @@ export function App() {
     }
 
     const controller = new AbortController();
+    const progress = beginOddsLoad(
+      controller,
+      `Loading ${week === 'this' ? 'this week' : 'next week'} player odds`,
+    );
     setLoading(true);
     setError(null);
 
@@ -292,11 +359,17 @@ export function App() {
         }
       })
       .finally(() => {
+        progress.finish();
         if (!controller.signal.aborted) setLoading(false);
       });
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      progress.finish();
+    };
   }, [
+    beginOddsLoad,
+    refreshAttempt,
     dataMode,
     identityKey,
     identityReady,
@@ -332,6 +405,8 @@ export function App() {
   }, [metric, selectedPlayers, loadPlayerDetails, view]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'defenses' || !identityReady) return;
     const key = defenseKey(identityKey, dataMode, week);
     const cached = defensesRef.current[key];
@@ -343,6 +418,10 @@ export function App() {
     }
 
     const controller = new AbortController();
+    const progress = beginOddsLoad(
+      controller,
+      `Loading ${week === 'this' ? 'this week' : 'next week'} defense odds`,
+    );
     setDefenseLoading(true);
     setDefenseError(null);
     fetchDefenses(week, dataMode, controller.signal)
@@ -356,12 +435,18 @@ export function App() {
         }
       })
       .finally(() => {
+        progress.finish();
         if (!controller.signal.aborted) setDefenseLoading(false);
       });
-    return () => controller.abort();
-  }, [dataMode, identityKey, identityReady, view, week]);
+    return () => {
+      controller.abort();
+      progress.finish();
+    };
+  }, [beginOddsLoad, dataMode, identityKey, identityReady, refreshAttempt, view, week]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'lineup' || !identityReady) return;
     const key = lineupKey(identityKey, dataMode, week, lineupTarget);
     const cached = lineupsRef.current[key];
@@ -373,6 +458,7 @@ export function App() {
     }
 
     const controller = new AbortController();
+    const progress = beginOddsLoad(controller, 'Building lineup from sportsbook odds');
     setLineupLoading(true);
     setLineupError(null);
     fetchBestLineup(week, lineupTarget, dataMode, controller.signal)
@@ -386,18 +472,34 @@ export function App() {
         }
       })
       .finally(() => {
+        progress.finish();
         if (!controller.signal.aborted) setLineupLoading(false);
       });
-    return () => controller.abort();
-  }, [dataMode, identityKey, identityReady, lineupTarget, view, week]);
+    return () => {
+      controller.abort();
+      progress.finish();
+    };
+  }, [
+    beginOddsLoad,
+    dataMode,
+    identityKey,
+    identityReady,
+    lineupTarget,
+    refreshAttempt,
+    view,
+    week,
+  ]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'dashboard' || !identityReady) {
       setDashboardLoading(false);
       return;
     }
 
     const controller = new AbortController();
+    const progress = beginOddsLoad(controller, 'Refreshing dashboard odds', 3);
     setDashboardLoading(true);
     setDashboardError(null);
 
@@ -420,9 +522,14 @@ export function App() {
     };
 
     const loadDashboard = async () => {
-      const nextDefensePromise = loadDefense('next');
+      const nextDefensePromise = loadDefense('next').then((payload) => {
+        progress.advance();
+        return payload;
+      });
       const lineup = await loadMidLineup();
+      progress.advance();
       const thisDefense = await loadDefense('this');
+      progress.advance();
       const nextDefense = await nextDefensePromise;
       return { lineup, thisDefense, nextDefense };
     };
@@ -445,11 +552,15 @@ export function App() {
         }
       })
       .finally(() => {
+        progress.finish();
         if (!controller.signal.aborted) setDashboardLoading(false);
       });
 
-    return () => controller.abort();
-  }, [dataMode, identityKey, identityReady, view]);
+    return () => {
+      controller.abort();
+      progress.finish();
+    };
+  }, [beginOddsLoad, dataMode, identityKey, identityReady, refreshAttempt, view]);
 
   const rosterPlayers = report?.players ?? [];
   // On-demand comparisons can use a player outside the owned Sleeper roster.
@@ -933,6 +1044,21 @@ export function App() {
         </div>
       ) : null}
 
+      {canceledLoadView === view ? (
+        <div className="odds-canceled-note" role="status">
+          Odds refresh canceled. Existing results remain available.
+          <button
+            type="button"
+            onClick={() => {
+              setCanceledLoadView(null);
+              setRefreshAttempt((value) => value + 1);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
       {view === 'dashboard' ? (
         <DashboardView
           lineup={dashboardLineup}
@@ -981,6 +1107,15 @@ export function App() {
           <code>{build.commit_short}</code>
           <span>Updated {buildTimestamp(build.commit_at)}</span>
         </aside>
+      ) : null}
+
+      {oddsLoading && oddsDialogVisible && !setupOpen ? (
+        <OddsLoadingDialog
+          label={oddsLoading.label}
+          completed={oddsLoading.completed}
+          total={oddsLoading.total}
+          onCancel={cancelOddsLoad}
+        />
       ) : null}
 
       <LeagueSetup

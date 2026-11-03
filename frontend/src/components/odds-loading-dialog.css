@@ -1,0 +1,120 @@
+.odds-loading-dialog {
+  width: min(420px, calc(100% - 28px));
+  max-width: none;
+  padding: 23px 22px 19px;
+  border: 1px solid #334356;
+  border-radius: 14px;
+  background: #111820;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 62%);
+  color: #f1f4f7;
+}
+
+.odds-loading-dialog::backdrop {
+  background: rgb(4 8 12 / 76%);
+  backdrop-filter: blur(3px);
+}
+
+.odds-loading-dialog h2 {
+  margin: 9px 0 8px;
+  font-size: 20px;
+  font-weight: 690;
+  letter-spacing: -0.025em;
+}
+
+.odds-loading-dialog p {
+  margin: 0 0 20px;
+  color: #a4b0bf;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.odds-loading-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #283647;
+}
+
+.odds-loading-indicator {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 32%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #386faf, #8fcbff);
+  animation: odds-loading-scan 1.35s ease-in-out infinite;
+}
+
+.odds-loading-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 19px;
+}
+
+.odds-loading-detail {
+  color: #a4b0bf;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.odds-loading-cancel {
+  min-width: 85px;
+  padding: 8px 15px;
+  border: 1px solid #4b5e73;
+  border-radius: 7px;
+  background: #1b2938;
+  color: #e6edf5;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.odds-loading-cancel:hover {
+  background: #2a3c50;
+}
+
+@keyframes odds-loading-scan {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(330%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odds-loading-indicator {
+    width: 100%;
+    animation: none;
+  }
+}
+
+.odds-canceled-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #334356;
+  background: #13202d;
+  color: #bdc9d7;
+  font-size: 12px;
+}
+
+.odds-canceled-note button {
+  padding: 5px 11px;
+  border: 1px solid #4b769f;
+  border-radius: 6px;
+  background: #1c354e;
+  color: #e6f2ff;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.odds-canceled-note button:hover {
+  background: #2b4a68;
+}
