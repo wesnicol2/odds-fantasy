@@ -288,6 +288,8 @@ export function App() {
   }, [identity.leagueId, identity.rosterId]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'players') {
       setLoading(false);
       return;
@@ -403,6 +405,8 @@ export function App() {
   }, [metric, selectedPlayers, loadPlayerDetails, view]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'defenses' || !identityReady) return;
     const key = defenseKey(identityKey, dataMode, week);
     const cached = defensesRef.current[key];
@@ -441,6 +445,8 @@ export function App() {
   }, [beginOddsLoad, dataMode, identityKey, identityReady, refreshAttempt, view, week]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'lineup' || !identityReady) return;
     const key = lineupKey(identityKey, dataMode, week, lineupTarget);
     const cached = lineupsRef.current[key];
@@ -473,9 +479,20 @@ export function App() {
       controller.abort();
       progress.finish();
     };
-  }, [beginOddsLoad, dataMode, identityKey, identityReady, lineupTarget, refreshAttempt, view, week]);
+  }, [
+    beginOddsLoad,
+    dataMode,
+    identityKey,
+    identityReady,
+    lineupTarget,
+    refreshAttempt,
+    view,
+    week,
+  ]);
 
   useEffect(() => {
+    // Retry intentionally invalidates this request without changing its API parameters.
+    void refreshAttempt;
     if (view !== 'dashboard' || !identityReady) {
       setDashboardLoading(false);
       return;
