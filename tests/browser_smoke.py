@@ -898,7 +898,7 @@ def main() -> None:
         def hold_projections(route: Route) -> None:
             held_projections.append(route)
 
-        projection_pattern = re.compile(r"/projections\\?")
+        projection_pattern = re.compile(r"/projections\?")
         page.route(projection_pattern, hold_projections)
         primary_nav.get_by_role("button", name="Players", exact=True).click()
         loading_dialog = page.get_by_role("dialog", name="Loading this week player odds")
