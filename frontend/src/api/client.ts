@@ -6,6 +6,7 @@ import type {
   LeagueResolution,
   LineupResponse,
   PlayerOddsDetails,
+  PlayerSearchResponse,
   ProjectionResponse,
   UserLeaguesResponse,
 } from '../types';
@@ -89,14 +90,27 @@ export async function fetchProjections(
   return fetchJson<ProjectionResponse>('/projections', commonParams(week, mode), signal);
 }
 
+export async function searchPlayers(
+  query: string,
+  signal?: AbortSignal,
+): Promise<PlayerSearchResponse> {
+  return fetchJson<PlayerSearchResponse>(
+    '/player/search',
+    new URLSearchParams({ q: query }),
+    signal,
+  );
+}
+
 export async function fetchPlayerDetails(
   name: string,
   week: WeekWindow,
   mode: DataMode,
+  playerId?: string,
   signal?: AbortSignal,
 ): Promise<PlayerOddsDetails> {
   const params = commonParams(week, mode);
   params.set('name', name);
+  if (playerId) params.set('player_id', playerId);
   return fetchJson<PlayerOddsDetails>('/player/odds', params, signal);
 }
 

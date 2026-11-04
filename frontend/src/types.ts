@@ -127,6 +127,18 @@ export interface CombinedMarketDetail {
   expected_points: number;
 }
 
+export interface PlayerSearchCandidate {
+  id: string;
+  name: string;
+  pos: string;
+  team: string | null;
+}
+
+export interface PlayerSearchResponse {
+  players: PlayerSearchCandidate[];
+  error?: string;
+}
+
 export interface PlayerOddsDetails {
   player: {
     name: string;

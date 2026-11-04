@@ -688,3 +688,16 @@ input:focus-visible {
 .comparison-workspace .ranking-scroll {
   max-height: 460px;
 }
+
+.compare-actions .compare-two-button {
+  margin-right: auto;
+  padding: 6px 9px;
+  border: 1px solid #456484;
+  color: #dceaff;
+  font-size: 11px;
+}
+
+.compare-actions .compare-two-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

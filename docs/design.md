@@ -146,6 +146,10 @@ Do not create separate top-level destinations such as “This Week Players” an
 
 Dashboard is intentionally different: it synthesizes the current lineup decision and a two-week defense-planning horizon, so it does **not** have a global week switch.
 
+### Blocking odds refresh
+
+Main-view odds refreshes that are not immediately satisfied by cache display a compact modal with a visible animated progress bar and **Cancel**. Only the dialog may be interacted with while it is visible. The browser cannot determine a percentage from the current API, so the bar must remain indeterminate; genuinely finished Dashboard sections may be counted separately. Cancellation restores access to the page, preserves already-loaded data and offers a Retry action. Passive player-inspector evidence prefetches remain nonblocking. Never claim a canceled browser request necessarily stopped remote provider work.
+
 ### Persistent shell
 
 The application identity, league/team context, primary navigation, and operational settings should remain stable while the central destination changes.

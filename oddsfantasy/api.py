@@ -14,7 +14,7 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
-from . import cache_browser, live_lineup, odds_client, odds_details, ratelimit
+from . import cache_browser, live_lineup, odds_client, odds_details, ratelimit, services
 from .build_info import build_info
 from .config import DEFAULT_SEASON
 from .services import list_defenses, resolve_league, resolve_user_leagues
@@ -230,9 +230,17 @@ def application(environ, start_response):
             data = compute_best_lineup(**params)
             return _json_response(start_response, "200 OK", _attach_quota(data))
 
+        if path == "/player/search":
+            return _json_response(
+                start_response,
+                "200 OK",
+                services.search_players(q("q")),
+            )
+
         if path == "/player/odds":
             params = common()
             params["name"] = q("name")
+            params["player_id"] = q("player_id") or None
             _refresh_quota_snapshot()
             data = odds_details.get_player_odds_details(**params)
             return _json_response(start_response, "200 OK", _attach_quota(data))

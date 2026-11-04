@@ -276,6 +276,7 @@ def get_player_odds_details(
     fresh: bool = False,
     league_id: str | None = None,
     roster_id: int | None = None,
+    player_id: str | None = None,
 ) -> dict:
     """Return one player's projection plus only the lines that feed it."""
     context = _load_week_context(
@@ -287,7 +288,10 @@ def get_player_odds_details(
         cache_mode=cache_mode,
         league_id=league_id,
         roster_id=roster_id,
+        extra_player_id=player_id,
     )
+    if context.get("error"):
+        return {"error": context["error"]}
     if context.get("message"):
         return {
             "player": {"name": name},
